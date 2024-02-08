@@ -1,4 +1,4 @@
-function [FilenamePreset, PathPreset] = CreatePresetNOF(FilenameVideo, PathVideo, PathOut)
+function [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo, PathVideo, PathOut)
 % Creates preset file, file with parameters of arena, objects and spatial ROI
 % for behavior analysis.
 % 22.09.23 Download preset mode added
@@ -19,8 +19,8 @@ function [FilenamePreset, PathPreset] = CreatePresetNOF(FilenameVideo, PathVideo
 % Created by VVP. 14.02.23
 
 if nargin<3
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','H:\Нейроны-миски\data\BowlsOpenField\BehaviorData\HM_BOF_1T\');
-     PathOut = uigetdir('H:\Нейроны-миски\data\BowlsOpenField\Presets\');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','H:\�?ейроны-ми�?ки\data\BowlsOpenField\BehaviorData\HM_BOF_1T\');
+     PathOut = uigetdir('H:\�?ейроны-ми�?ки\data\BowlsOpenField\Presets\');
 end
 
 % some local parameters
@@ -42,7 +42,7 @@ PathOut = sprintf('%s\\%s_zones',PathOut, FilenameOut);
 question = questdlg('Do you want dowload Preset?', 'Important question', 'Yes','No','Yes');
 switch question
     case 'Yes'
-        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','H:\Нейроны-миски\data\BowlsOpenField\Presets\');
+        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','H:\�?ейроны-ми�?ки\data\BowlsOpenField\Presets\');
         load(sprintf('%s//%s', PathPresetDownload, FilenamePresetDownload), 'Options','ArenaAndObjects');
 end
 
@@ -150,53 +150,53 @@ if strcmp(question, 'Yes')
     while key ~= 's'
         waitforbuttonpress;
         key = get(gcf, 'CurrentCharacter');
-        if key == 28  % клавиша влево
+        if key == 28  
             for line = 1:length(ArenaAndObjects)
                 ArenaAndObjects(line).border_x = ArenaAndObjects(line).border_x - StepDefault;
-                if line==1
+                if line==1 && ~isempty(ArenaAndObjects(1).border_separate_x)
                     for separateline = 1:4
                         ArenaAndObjects(line).border_separate_x{separateline} = ArenaAndObjects(line).border_separate_x{separateline} - StepDefault;
                     end
                 end
             end
-        elseif key == 29  % клавиша вправо
+        elseif key == 29  
             for line = 1:length(ArenaAndObjects)
                 ArenaAndObjects(line).border_x = ArenaAndObjects(line).border_x + StepDefault;
-                if line==1
+                if line==1 && ~isempty(ArenaAndObjects(1).border_separate_x)
                     for separateline = 1:4
                         ArenaAndObjects(line).border_separate_x{separateline} = ArenaAndObjects(line).border_separate_x{separateline} + StepDefault;
                     end
                 end
             end
-        elseif key == 30  % клавиша вверх
+        elseif key == 30  
             for line = 1:length(ArenaAndObjects)
                 ArenaAndObjects(line).border_y = ArenaAndObjects(line).border_y - StepDefault;
-                if line==1
+                if line==1 && ~isempty(ArenaAndObjects(1).border_separate_x)
                     for separateline = 1:4
                         ArenaAndObjects(line).border_separate_y{separateline} = ArenaAndObjects(line).border_separate_y{separateline} - StepDefault;
                     end
                 end
             end
-        elseif key == 31  % клавиша вниз
+        elseif key == 31  
             for line = 1:length(ArenaAndObjects)
                 ArenaAndObjects(line).border_y = ArenaAndObjects(line).border_y + StepDefault;
-                if line==1
-                    for separateline = 1:4
+                if line==1 && ~isempty(ArenaAndObjects(1).border_separate_x)
+                    for separateline = 1:4 
                         ArenaAndObjects(line).border_separate_y{separateline} = ArenaAndObjects(line).border_separate_y{separateline} + StepDefault;
                     end
                 end
             end
-        elseif key == '-'  % клавиша вниз
+        elseif key == '-'  
             StepDefault = round(StepDefault/2);
             if StepDefault < 1
                 StepDefault = 1;
             end
-        elseif key == '+'  % клавиша вниз
+        elseif key == '+'  
             StepDefault = round(StepDefault*2);
         elseif key == '['
-            rotationAngle = rotationAngle + StepDefault; % увеличиваем угол вращения на StepDefault градусов по часовой стрелке
+            rotationAngle = rotationAngle + StepDefault; % увеличиваем угол вращени�? на StepDefault граду�?ов по ча�?овой �?трелке
         elseif key == ']'
-            rotationAngle = rotationAngle - StepDefault; % уменьшаем угол вращения на StepDefault градусов против часовой стрелки
+            rotationAngle = rotationAngle - StepDefault; % уменьшаем угол вращени�? на StepDefault граду�?ов против ча�?овой �?трелки
         elseif key == 13
             delete(gcf);
         end
@@ -259,13 +259,13 @@ while prmt==0
     imshow(Options.GoodVideoFrame);hold on;
     switch Options.ArenaGeometry
         case 'Polygon'
-            uiwait(msgbox('Indicate all points of the corners of the polygon arena','Message for you','modal'));
+%             uiwait(msgbox('Indicate all points of the corners of the polygon arena','Message for you','modal'));
             [x_ar, y_ar] = ginput;
             if length(x_ar)>=3
                 [x_arena, y_arena, ArenaAndObjects(1).border_separate_x, ArenaAndObjects(1).border_separate_y] = PolygonFit(x_ar,y_ar);
             end
         case 'Circle'
-            uiwait(msgbox('Indicate at least 3 points of the circle arena','Message for you','modal'));
+%             uiwait(msgbox('Indicate at least 3 points of the circle arena','Message for you','modal'));
             [x_ar, y_ar] = ginput;
             if length(x_ar)>=3
                 [xc,yc,R,~] = circfit(x_ar,y_ar);
@@ -273,7 +273,7 @@ while prmt==0
                 y_arena = yc + R*sin(th);
             end
         case 'Ellipse'
-            uiwait(msgbox('Indicate at least 5 points of the ellipse arena','Message for you','modal'));
+%             uiwait(msgbox('Indicate at least 5 points of the ellipse arena','Message for you','modal'));
             [x_ar, y_ar] = ginput;
             if length(x_ar)>=5
                 ellipse = my_fit_ellipse(x_ar,y_ar);
@@ -281,14 +281,14 @@ while prmt==0
                 x_arena = ellipse.X0_in+(ellipse.b)*cos(th)*sin(ellipse.phi)+(ellipse.a)*sin(th)*cos(ellipse.phi);
             end
         case 'O-maze'
-            uiwait(msgbox('Indicate at least 3 points of OUTER border of the o-maze arena','Message for you','modal'));
+%             uiwait(msgbox('Indicate at least 3 points of OUTER border of the o-maze arena','Message for you','modal'));
             [x_ar, y_ar] = ginput;
             if length(x_ar)>=3
                 [xc,yc,R,~] = circfit(x_ar,y_ar);
                 x_arena(:,1) = xc + R*cos(th);
                 y_arena(:,1) = yc + R*sin(th);
             end
-            uiwait(msgbox('Indicate at least 3 points of INNER border of the o-maze arena','Message for you','modal'));
+%             uiwait(msgbox('Indicate at least 3 points of INNER border of the o-maze arena','Message for you','modal'));
             [x_ar, y_ar] = ginput;
             if length(x_ar)>=3
                 [xc,yc,R,~] = circfit(x_ar,y_ar);
@@ -342,13 +342,13 @@ for object=1:Options.ObjectsNumber
         imshow(Options.GoodVideoFrame);hold on;
         switch ObjectGeometry
             case 'Polygon'
-                uiwait(msgbox('Indicate all points of the corners of the polygon object','Message for you','modal'));
+%                 uiwait(msgbox('Indicate all points of the corners of the polygon object','Message for you','modal'));
                 [x_ob, y_ob] = ginput;
                 if length(x_ob)>=3
                     [x_object, y_object,~,~] = PolygonFit(x_ob,y_ob);
                 end
             case 'Circle'
-                uiwait(msgbox('Indicate at least 3 points of the circle object','Message for you','modal'));
+%                 uiwait(msgbox('Indicate at least 3 points of the circle object','Message for you','modal'));
                 [x_ob, y_ob] = ginput;
                 if length(x_ob)>=3
                     [xc,yc,R,~] = circfit(x_ob,y_ob);
@@ -356,7 +356,7 @@ for object=1:Options.ObjectsNumber
                     y_object = yc + R*sin(th);
                 end
             case 'Ellipse'
-                uiwait(msgbox('Indicate at least 5 points of the ellipse object','Message for you','modal'));
+%                 uiwait(msgbox('Indicate at least 5 points of the ellipse object','Message for you','modal'));
                 [x_ob, y_ob] = ginput;
                 if length(x_ob)>=5
                     ellipse = my_fit_ellipse(x_ob,y_ob);
@@ -395,7 +395,7 @@ switch Options.ExperimentType
         ArenaAndObjects(1).point_y = y_ar;
         save(sprintf('%s\\%s',Options.PathPreset, Options.FilenamePreset),'Options','ArenaAndObjects');
 
-    case {'Round Track', 'Holes Track', 'Odor Track', 'Novelty OF', 'New Track', 'Complex Context', 'NOL','OF_Obj'}
+    case {'BowlsOpenField', 'Round Track', 'Holes Track', 'Odor Track', 'Novelty OF', 'New Track', 'Complex Context', 'NOL','OF_Obj'}
         Zones = struct('name',[],'type',[], 'maskfilled', []);
         prmt = 0;
         while prmt == 0
