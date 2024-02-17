@@ -19,8 +19,8 @@ function [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo, PathVideo, P
 % Created by VVP. 14.02.23
 
 if nargin<3
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','H:\�?ейроны-ми�?ки\data\BowlsOpenField\BehaviorData\HM_BOF_1T\');
-     PathOut = uigetdir('H:\�?ейроны-ми�?ки\data\BowlsOpenField\Presets\');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','H:\BOF\data\BowlsOpenField\BehaviorData\HM_BOF_1T\');
+     PathOut = uigetdir('H:\BOF\data\BowlsOpenField\Presets\');
 end
 
 % some local parameters
@@ -42,7 +42,7 @@ PathOut = sprintf('%s\\%s_zones',PathOut, FilenameOut);
 question = questdlg('Do you want dowload Preset?', 'Important question', 'Yes','No','Yes');
 switch question
     case 'Yes'
-        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','H:\�?ейроны-ми�?ки\data\BowlsOpenField\Presets\');
+        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','H:\BOF\data\BowlsOpenField\Presets\');
         load(sprintf('%s//%s', PathPresetDownload, FilenamePresetDownload), 'Options','ArenaAndObjects');
 end
 
@@ -87,7 +87,7 @@ switch Options.ExperimentType
 end
 
 %% reading a video file
-
+fprintf('Loading video: %s started\n',FilenameVideo);
 VideoObj = VideoReader(sprintf('%s%s', PathVideo, FilenameVideo));
 Options.FrameRate = get(VideoObj, 'FrameRate');
 Options.NumFrames = get(VideoObj, 'NumFrames');
@@ -106,7 +106,7 @@ Options.PathPreset = PathOut;
 Options.FilenamePreset = sprintf('%s_Preset.mat', FilenameOut);
 PathPreset = Options.PathPreset;
 FilenamePreset = Options.FilenamePreset;
-
+fprintf('Loading video: %s finished\n',FilenameVideo);
 
 %% searching of a good frame
 % good frame is a good when you can observe the boundaries of the arena and
@@ -194,9 +194,9 @@ if strcmp(question, 'Yes')
         elseif key == '+'  
             StepDefault = round(StepDefault*2);
         elseif key == '['
-            rotationAngle = rotationAngle + StepDefault; % увеличиваем угол вращени�? на StepDefault граду�?ов по ча�?овой �?трелке
+            rotationAngle = rotationAngle + StepDefault; % увеличиваем угол вращени�? на StepDefault граду�?ов по ча�?овой �?трелке
         elseif key == ']'
-            rotationAngle = rotationAngle - StepDefault; % уменьшаем угол вращени�? на StepDefault граду�?ов против ча�?овой �?трелки
+            rotationAngle = rotationAngle - StepDefault; % уменьшаем угол вращени�? на StepDefault граду�?ов против ча�?овой �?трелки
         elseif key == 13
             delete(gcf);
         end
@@ -262,36 +262,39 @@ while prmt==0
 %             uiwait(msgbox('Indicate all points of the corners of the polygon arena','Message for you','modal'));
             [x_ar, y_ar] = ginput;
             if length(x_ar)>=3
-                [x_arena, y_arena, ArenaAndObjects(1).border_separate_x, ArenaAndObjects(1).border_separate_y] = PolygonFit(x_ar,y_ar);
+                [x_arena, y_arena, ArenaAndObjects(1).border_separate_x, ArenaAndObjects(1).border_separate_y] = PolygonFit(x_ar*Options.x_kcorr,y_ar);
+            end
+            for border = 1:4
+                ArenaAndObjects(1).border_separate_x{border} = ArenaAndObjects(1).border_separate_x{border}/Options.x_kcorr;
             end
         case 'Circle'
-%             uiwait(msgbox('Indicate at least 3 points of the circle arena','Message for you','modal'));
+            uiwait(msgbox('Indicate at least 3 points of the circle arena','Message for you','modal'));
             [x_ar, y_ar] = ginput;
             if length(x_ar)>=3
-                [xc,yc,R,~] = circfit(x_ar,y_ar);
+                [xc,yc,R,~] = circfit(x_ar*Options.x_kcorr,y_ar);
                 x_arena = xc + R*cos(th);
                 y_arena = yc + R*sin(th);
             end
         case 'Ellipse'
-%             uiwait(msgbox('Indicate at least 5 points of the ellipse arena','Message for you','modal'));
+            uiwait(msgbox('Indicate at least 5 points of the ellipse arena','Message for you','modal'));
             [x_ar, y_ar] = ginput;
             if length(x_ar)>=5
-                ellipse = my_fit_ellipse(x_ar,y_ar);
+                ellipse = my_fit_ellipse(x_ar*Options.x_kcorr,y_ar);
                 y_arena = ellipse.Y0_in+(ellipse.b)*cos(th)*cos(ellipse.phi)-(ellipse.a)*sin(th)*sin(ellipse.phi);
                 x_arena = ellipse.X0_in+(ellipse.b)*cos(th)*sin(ellipse.phi)+(ellipse.a)*sin(th)*cos(ellipse.phi);
             end
         case 'O-maze'
-%             uiwait(msgbox('Indicate at least 3 points of OUTER border of the o-maze arena','Message for you','modal'));
+            uiwait(msgbox('Indicate at least 3 points of OUTER border of the o-maze arena','Message for you','modal'));
             [x_ar, y_ar] = ginput;
             if length(x_ar)>=3
-                [xc,yc,R,~] = circfit(x_ar,y_ar);
+                [xc,yc,R,~] = circfit(x_ar*Options.x_kcorr,y_ar);
                 x_arena(:,1) = xc + R*cos(th);
                 y_arena(:,1) = yc + R*sin(th);
             end
-%             uiwait(msgbox('Indicate at least 3 points of INNER border of the o-maze arena','Message for you','modal'));
+            uiwait(msgbox('Indicate at least 3 points of INNER border of the o-maze arena','Message for you','modal'));
             [x_ar, y_ar] = ginput;
             if length(x_ar)>=3
-                [xc,yc,R,~] = circfit(x_ar,y_ar);
+                [xc,yc,R,~] = circfit(x_ar*Options.x_kcorr,y_ar);
                 x_arena(:,2) = xc + R*cos(th);
                 y_arena(:,2) = yc + R*sin(th);
             end
@@ -300,9 +303,9 @@ while prmt==0
         answer = 0;
         uiwait(msgbox('Not enough points! Try again','Message for you','modal'));
     else
-        plot(x_arena(:,1),y_arena(:,1), Color.Arena,'LineWidth',LineWidth.Arena);hold on;
+        plot(x_arena(:,1)/Options.x_kcorr,y_arena(:,1), Color.Arena,'LineWidth',LineWidth.Arena);hold on;
         if size(x_arena,2) == 2
-            plot(x_arena(:,2),y_arena(:,2), Color.Arena,'LineWidth',LineWidth.Arena);hold on;
+            plot(x_arena(:,2)/Options.x_kcorr,y_arena(:,2), Color.Arena,'LineWidth',LineWidth.Arena);hold on;
         end
         answer = questdlg('Is it correct?', 'Arena with borders', 'Yes','No','Yes');
     end
@@ -319,14 +322,14 @@ ArenaAndObjects(1).type = 'Arena';
 ArenaAndObjects(1).geometry = Options.ArenaGeometry;
 
 if ~strcmp(ArenaAndObjects(1).geometry, 'O-maze')
-    ArenaAndObjects(1).maskborder = {MaskCreator(zeros(Options.Height,Options.Width), x_arena, y_arena)};
+    ArenaAndObjects(1).maskborder = {MaskCreator(zeros(Options.Height,Options.Width), x_arena/Options.x_kcorr, y_arena)};
     ArenaAndObjects(1).maskfilled = imfill(ArenaAndObjects(1).maskborder{1});
 else
-    ArenaAndObjects(1).maskborder = {MaskCreator(zeros(Options.Height,Options.Width), x_arena(:,1), y_arena(:,1))...
-    MaskCreator(zeros(Options.Height,Options.Width), x_arena(:,2), y_arena(:,2))};
+    ArenaAndObjects(1).maskborder = {MaskCreator(zeros(Options.Height,Options.Width), x_arena(:,1)/Options.x_kcorr, y_arena(:,1))...
+    MaskCreator(zeros(Options.Height,Options.Width), x_arena(:,2)/Options.x_kcorr, y_arena(:,2))};
     ArenaAndObjects(1).maskfilled = imfill(ArenaAndObjects(1).maskborder{1}) - imfill(ArenaAndObjects(1).maskborder{2});
 end
-ArenaAndObjects(1).border_x = x_arena;
+ArenaAndObjects(1).border_x = x_arena/Options.x_kcorr;
 ArenaAndObjects(1).border_y = y_arena;
 
 %% reading objects coordinates
@@ -345,13 +348,13 @@ for object=1:Options.ObjectsNumber
 %                 uiwait(msgbox('Indicate all points of the corners of the polygon object','Message for you','modal'));
                 [x_ob, y_ob] = ginput;
                 if length(x_ob)>=3
-                    [x_object, y_object,~,~] = PolygonFit(x_ob,y_ob);
+                    [x_object, y_object,~,~] = PolygonFit(x_ob*Options.x_kcorr,y_ob);
                 end
             case 'Circle'
 %                 uiwait(msgbox('Indicate at least 3 points of the circle object','Message for you','modal'));
                 [x_ob, y_ob] = ginput;
                 if length(x_ob)>=3
-                    [xc,yc,R,~] = circfit(x_ob,y_ob);
+                    [xc,yc,R,~] = circfit(x_ob*Options.x_kcorr,y_ob);
                     x_object = xc + R*cos(th);
                     y_object = yc + R*sin(th);
                 end
@@ -359,7 +362,7 @@ for object=1:Options.ObjectsNumber
 %                 uiwait(msgbox('Indicate at least 5 points of the ellipse object','Message for you','modal'));
                 [x_ob, y_ob] = ginput;
                 if length(x_ob)>=5
-                    ellipse = my_fit_ellipse(x_ob,y_ob);
+                    ellipse = my_fit_ellipse(x_ob*Options.x_kcorr,y_ob);
                     y_object = ellipse.Y0_in+(ellipse.b)*cos(th)*cos(ellipse.phi)-(ellipse.a)*sin(th)*sin(ellipse.phi);
                     x_object = ellipse.X0_in+(ellipse.b)*cos(th)*sin(ellipse.phi)+(ellipse.a)*sin(th)*cos(ellipse.phi);
                 end
@@ -368,7 +371,7 @@ for object=1:Options.ObjectsNumber
             answer = 0;
             uiwait(msgbox('Not enough points! Try again','Message for you','modal'));
         else
-            plot(x_object, y_object, Color.Objects,'LineWidth',LineWidth.Objects);hold on;
+            plot(x_object/Options.x_kcorr, y_object, Color.Objects,'LineWidth',LineWidth.Objects);hold on;
             answer = questdlg('Is it correct?', 'Arena with border',	'Yes','No','Yes');
         end
         switch answer
@@ -381,7 +384,7 @@ for object=1:Options.ObjectsNumber
     end
     ArenaAndObjects(1+object).type = ['Object' num2str(object)];
     ArenaAndObjects(1+object).geometry = ObjectGeometry;
-    ArenaAndObjects(1+object).maskborder = MaskCreator(zeros(Options.Height,Options.Width), x_object, y_object);
+    ArenaAndObjects(1+object).maskborder = MaskCreator(zeros(Options.Height,Options.Width), x_object/Options.x_kcorr, y_object);
     ArenaAndObjects(1+object).maskfilled = imfill(ArenaAndObjects(1+object).maskborder);
     ArenaAndObjects(1+object).border_x = x_object;
     ArenaAndObjects(1+object).border_y = y_object;
@@ -786,4 +789,5 @@ switch Options.ExperimentType
         fprintf('Saving preset file\n');
         save(sprintf('%s\\%s',Options.PathPreset, Options.FilenamePreset),'Options','ArenaAndObjects','Zones');
         fprintf('Analyze finished\n')
+end
 end
