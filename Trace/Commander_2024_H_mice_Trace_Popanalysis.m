@@ -269,6 +269,7 @@ save(sprintf('%sNeuronSpecData_MADDiff.mat',PathOut));
 %% additional plot tools
 % HeatMap([NeuronSpecData.BaseLineData' NeuronSpecData.NeuronSpecData'],'Colormap','cool');
 
+% average Ca2+ signal baseline-feature
 for group = 1:3
     for feature = 1:size(TraceData(group).NeuronSpecData,2)
         
@@ -293,21 +294,143 @@ for group = 1:3
 end
 
 
-%% show traces
+%% show all traces from group
+
+FillColor = {};
+FillColor{1} = [0.8, 0.8, 0.8];  % gray Baseline
+FillColor{2} = [1, 1, 0];        % yellow sound
+FillColor{3} = [0, 0.5, 0.5];    % cyan 1 trace1
+FillColor{4} = [0, 0.8, 0.8];    % cyan 2 trace2
+FillColor{5} = [0, 1, 1];        % cyan 3 trace3
+FillColor{6} = [1, 0, 0];        % red shock
+Transparency = 0.3;
+FeaturePlotList = {'baseline','sound','trace1','trace2','trace3','shock'};
 
 for group = 1:6
+    HH = 0;
+    
     h=figure;
-    for cell=1:TraceData(group).NeuronNum
-        if cell==1
-            HH = 0;
-        else
-            HH = HH + max(TraceData(group).NeuronDataNorm(:,cell-1));
-        end
+    for cell=1:TraceData(group).NeuronNum        
         plot(1:1294, TraceData(group).NeuronDataNorm(:,cell)+HH); hold on;
+        HH = HH + max(TraceData(group).NeuronDataNorm(:,cell));
     end
+    
+    % filling fearue area
+    for trial=1:7
+        for feature = 1:length(FeaturePlotList)-1
+            switch feature
+                case {1,2}
+                    Plot.Index = find(strcmp(FeaturesHeaders, sprintf('%s%d',FeaturePlotList{feature}, trial)));
+                    lineIndices = [min(find(table2array(TraceData(group).Features(:,Plot.Index)))), max(find(table2array(TraceData(group).Features(:,Plot.Index))))]; %#ok<MXFND>
+                case {3,4,5}
+                    Plot.Index = find(strcmp(FeaturesHeaders, sprintf('%s%d%s',FeaturePlotList{feature}(1:end-1), trial,FeaturePlotList{feature}(end))));
+                    lineIndices = [min(find(table2array(TraceData(group).Features(:,Plot.Index)))), max(find(table2array(TraceData(group).Features(:,Plot.Index))))]; %#ok<MXFND>
+            end
+            
+            for i = 1:length(lineIndices)-1
+                fill([lineIndices(i)-0.5, lineIndices(i+1)+0.5, lineIndices(i+1)+0.5, lineIndices(i)-0.5],...
+                    [0, 0, HH, HH], FillColor{feature}, 'FaceAlpha', Transparency);
+            end
+        end
+    end
+    
+    % for shock
+    feature = 6;
+    Plot.Index = find(strcmp(FeaturesHeaders, sprintf('%s',FeaturePlotList{feature})));
+    [~, ~, lineIndices] = findSeriesOfOnes(table2array(TraceData(group).Features(:,Plot.Index)));
+    for i = 1:2:length(lineIndices)-1
+        fill([lineIndices(i)-0.5, lineIndices(i+1)+0.5, lineIndices(i+1)+0.5, lineIndices(i)-0.5],...
+            [0, 0, HH, HH], FillColor{feature}, 'FaceAlpha', Transparency);
+    end
+    
+    xlabel('Time, s');
+    ylabel('Norm Ca2+ (Mad method)');
+    title(sprintf('Group: %s',TraceData(group).GroupName));
+    saveas(h, sprintf('%sAllTraces\\%s_traces.fig', PathPlot, TraceData(group).GroupName));
+    delete(h);
 end
 
+%% show spec populations from group
 
+FillColor = {};
+FillColor{1} = [0.8, 0.8, 0.8];  % gray Baseline
+FillColor{2} = [1, 1, 0];        % yellow sound
+FillColor{3} = [0, 0.5, 0.5];    % cyan 1 trace1
+FillColor{4} = [0, 0.8, 0.8];    % cyan 2 trace2
+FillColor{5} = [0, 1, 1];        % cyan 3 trace3
+FillColor{6} = [1, 0, 0];        % red shock
+Transparency = 0.3;
+FeaturePlotList = {'baseline','sound','trace1','trace2','trace3','shock'};
+
+for group = 1:6
+    
+    for spec = 1:size(TraceData(group).NeuronSpecData,2)
+        HH = 0;
+        h=figure;
+        IndSpec = TraceData(group).NeuronSpecData(spec).NeuronSpecInd;
+        indTemp = 1;
+        for cell = IndSpec
+            plot(1:1294, TraceData(group).NeuronDataNorm(:,cell)+HH); hold on;
+            
+            % text z-score and diff
+            if spec == 43
+                IndTextPlot = 4;
+            else
+                IndTextPlot = find(strcmp(FeaturesHeaders, sprintf('baseline%d',str2num(TraceData(1).NeuronSpecData(spec).Trial(end)))));
+            end
+            textPositionX = min(find(table2array(TraceData(group).Features(:,IndTextPlot)))) - 20; %#ok<MXFND>
+            textPositionY = HH+5;
+            if ~isempty(TraceData(group).NeuronSpecData(spec).NeuronDiff)
+                textString = sprintf('Z: %2.2f. Diff: %2.2f',TraceData(group).NeuronSpecData(spec).NeuronSpecZscore(indTemp),TraceData(group).NeuronSpecData(spec).NeuronDiff(indTemp));
+            else
+                textString = sprintf('Z: %2.2f. Diff: ??',TraceData(group).NeuronSpecData(spec).NeuronSpecZscore(indTemp));
+            end
+            text(textPositionX, textPositionY, textString, 'FontSize', 8, 'FontWeight', 'bold', 'Color', 'red');
+                        
+            HH = HH + max(TraceData(group).NeuronDataNorm(:,cell));
+            indTemp = indTemp + 1;
+        end
+        
+        % filling feature area
+        if spec == 43
+            trials  = 1;
+        else
+            trials = str2num(TraceData(1).NeuronSpecData(spec).Trial(end));%#ok<ST2NM>
+        end
+        for trial = trials 
+            for feature = 1:length(FeaturePlotList)-1
+                switch feature
+                    case {1,2}
+                        Plot.Index = find(strcmp(FeaturesHeaders, sprintf('%s%d',FeaturePlotList{feature}, trial)));
+                        lineIndices = [min(find(table2array(TraceData(group).Features(:,Plot.Index)))), max(find(table2array(TraceData(group).Features(:,Plot.Index))))]; %#ok<MXFND>
+                    case {3,4,5}
+                        Plot.Index = find(strcmp(FeaturesHeaders, sprintf('%s%d%s',FeaturePlotList{feature}(1:end-1), trial,FeaturePlotList{feature}(end))));
+                        lineIndices = [min(find(table2array(TraceData(group).Features(:,Plot.Index)))), max(find(table2array(TraceData(group).Features(:,Plot.Index))))]; %#ok<MXFND>
+                end
+                
+                for i = 1:length(lineIndices)-1
+                    fill([lineIndices(i)-0.5, lineIndices(i+1)+0.5, lineIndices(i+1)+0.5, lineIndices(i)-0.5],...
+                        [0, 0, HH, HH], FillColor{feature}, 'FaceAlpha', Transparency);
+                end
+            end
+        end
+        
+        % for shock
+        feature = 6;
+        Plot.Index = find(strcmp(FeaturesHeaders, sprintf('%s',FeaturePlotList{feature})));
+        [~, ~, lineIndices] = findSeriesOfOnes(table2array(TraceData(group).Features(:,Plot.Index)));
+        for i = 1:2:length(lineIndices)-1
+            fill([lineIndices(i)-0.5, lineIndices(i+1)+0.5, lineIndices(i+1)+0.5, lineIndices(i)-0.5],...
+                [0, 0, HH, HH], FillColor{feature}, 'FaceAlpha', Transparency);
+        end
+        
+        title(sprintf('Group: %s. Feature: %s. NumNeurons: %d',TraceData(group).GroupName, TraceData(group).NeuronSpecData(spec).Feature,TraceData(group).NeuronSpecData(spec).NeuronSpecNum));
+        xlabel('Time, s');
+        ylabel('Norm Ca2+ (Mad method)');
+        saveas(h, sprintf('%sAllSpecNeurons\\%s_%s_traces.fig', PathPlot, TraceData(group).GroupName,TraceData(group).NeuronSpecData(spec).Feature));
+        delete(h);
+    end
+end
 %% plot for spec data
 
 group = 1;
@@ -328,6 +451,8 @@ end
 for line = [71 91 111 113 131 151 170]
     xline(line, 'r'); hold on;
 end
+
+
 %% searching of CS-Trace and *-only populations
 
 for group = 1:size(TraceData,2)
