@@ -1,4 +1,4 @@
-function [CellStatus, CellZscore] =  Bootstrap(BaseLine, TargetLine, NumIter, SigmaValue)
+function [CellStatus, CellZscore, OrigCellStat] =  Bootstrap(BaseLine, TargetLine, NumIter, SigmaValue)
 % 17.02.24 vvp
 % Calculation mean difference between BaseLine and TargetLine and
 % calculation of p-value of difference significant by bootstrap analysis
@@ -24,9 +24,10 @@ for iter = 1:NumIter+1
 end
 
 [~,MU,SIGMA] = zscore(CellStat(2:end));
-CellZscore = (CellStat(1)-MU)/SIGMA;
+OrigCellStat = CellStat(1);
+CellZscore = (OrigCellStat-MU)/SIGMA;
 
-if CellStat(1) > MU + SigmaValue*SIGMA
+if OrigCellStat > MU + SigmaValue*SIGMA
     CellStatus = true;
 else
     CellStatus = false;
