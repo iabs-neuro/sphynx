@@ -566,21 +566,44 @@ end
 [Acts(5).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(5).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
 Acts(5).ActArrayRefine = Acts(5).ActArrayRefine';
 
-% rears_human = [248:286 960:993 1190:1263 1500:1563 1700:1758];
-% rears_human_s = rears_human./30;
-% % plot(time, TempArray, 'b');hold on;
-% plot(time, TempArraySmooth, 'g');hold on;
-% plot(time, Acts(5).ActArray*(mean(TempArray)-10), 'r.');
-% plot(time(rears_human), TempArraySmooth(rears_human), 'k.');hold on;
-% % plot(time(rears_human), TempArray(rears_human), 'r.');hold on;
-% plot(rears_human_s, ones(1,length(rears_human))*mean(TempArray), 'k.');
+
+%% middle-area defining
+Options.MiddleCenterCm = 20;
+Options.MiddleCenterPxl = Options.MiddleCenterCm*Options.pxl2sm;
+
+TempMask = single(~Zones(strcmp({Zones.name}, 'Center')).maskfilled);
+TempMask = bwdist(TempMask);
+TempMask(TempMask >= Options.MiddleCenterPxl) = 0;
+TempMask(TempMask>0) = 1;
+
+Zones(end+1).name = 'CenterMiddle';
+Zones(end).type = 'area';
+Zones(end).maskfilled = TempMask;
+
+Zones(end+1).name = 'CenterTrue';
+Zones(end).type = 'area';
+Zones(end).maskfilled = single(Zones(strcmp({Zones.name}, 'Center')).maskfilled) - single(Zones(strcmp({Zones.name}, 'CenterMiddle')).maskfilled);
 
 %% Acts defining by space zones
 
-ZonesOption.NameZone = {'ArenaCornersAllRealOut' 'ArenaWallsAllRealOut' 'Center' 'Object1RealOut' 'Object2RealOut' 'Object3RealOut' 'Object4RealOut' 'ObjectAllRealOut'};
-ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'nose' 'nose' 'nose' 'nose' 'nose'};
-ZonesOption.NameAct = {'corners' 'walls' 'center' 'object1' 'object2' 'object3' 'object4' 'objects'};
-ZonesOption.NumBodyPart = [13 13 13 2 2 2 2 2];
+% for 1T
+ZonesOption.NameZone = {'WallsAndCornersRealOut' 'CenterMiddle' 'CenterTrue' 'Object1Real' 'Object1RealOut'};
+ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'headcenter'};
+ZonesOption.NameAct = {'walls' 'centermiddle' 'centertrue' 'bowlinside' 'bowlinteraction'};
+ZonesOption.NumBodyPart = [13 13 13 13 5];
+
+% % for {2,3,5}T
+% ZonesOption.NameZone = {'WallsAndCornersRealOut' 'CenterMiddle' 'CenterTrue' 'Object1Real' 'Object1RealOut' 'Object2Real' 'Object2RealOut'};
+% ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'headcenter' 'bodycenter' 'headcenter'};
+% ZonesOption.NameAct = {'walls' 'centermiddle' 'centertrue' 'bowlinside' 'bowlinteraction' 'objectinside' 'objectinteraction'};
+% ZonesOption.NumBodyPart = [13 13 13 13 5 13 5];
+% 
+% % for 4T
+% ZonesOption.NameZone = {'ArenaCornersAllRealOut' 'ArenaWallsAllRealOut' 'Center' 'Object1Real' 'Object1RealOut' 'Object2Real' 'Object2RealOut'};
+% ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'headcenter' 'bodycenter' 'headcenter'};
+% ZonesOption.NameAct = {'corners' 'walls' 'center' 'bowlinside' 'bowlinteraction' 'objectinside' 'objectinteraction'};
+% ZonesOption.NumBodyPart = [13 13 13 13 5 13 5];
+
 
 ZonesOption.NumZone = zeros(1,length(ZonesOption.NameZone));
 for zone = 1:length(ZonesOption.NameZone)
@@ -596,22 +619,195 @@ for zone = 1:length(ZonesOption.NameZone)
             Acts(end).ActArray(i,1) = 1;
         end
     end
-    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
+    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.FrameRate);
     Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
 end
 
-% % Support rears by ears
-% Acts(end+1).ActName = 'RearSupportEars';
-% Acts(end).Zone = ZonesOption.NumZone(1);
-% Acts(end).ActArray = zeros(n_frames,1);
-% for i=1:n_frames
-%     if Zones(ZonesOption.NumZone(1)).maskfilled(round(BodyPartsTracesMainY(Point.LeftEar,i)), round(BodyPartsTracesMainX(Point.LeftEar,i))) || ...
-%             Zones(ZonesOption.NumZone(1)).maskfilled(round(BodyPartsTracesMainY(Point.RightEar,i)), round(BodyPartsTracesMainX(Point.RightEar,i)))
-%         Acts(end).ActArray(i,1) = 1;
-%     end
-% end
-% [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
-% Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
+% refining object interaction act
+IndexInteract = find(strcmp({Acts.ActName}, 'bowlinteraction'), 1);
+IndexInside = find(strcmp({Acts.ActName}, 'bowlinside'), 1);
+if ~isempty(IndexInteract)
+    Acts(end+1).ActName = 'bowlinteractreal';    
+    Acts(end).ActArray = Acts(IndexInteract).ActArrayRefine - Acts(IndexInside).ActArrayRefine;
+    Acts(end).ActArray(Acts(end).ActArrayRefine == -1) = 0;
+    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
+    Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
+    Acts(end).Zone = Acts(find(strcmp({Acts.ActName}, 'bowlinteraction'), 1)).Zone;
+end
+
+IndexInteract = find(strcmp({Acts.ActName}, 'objectinteraction'), 1);
+IndexInside = find(strcmp({Acts.ActName}, 'objectinside'), 1);
+if ~isempty(IndexInteract)
+    Acts(end+1).ActName = 'objectinteractreal';    
+    Acts(end).ActArray = Acts(IndexInteract).ActArrayRefine - Acts(IndexInside).ActArrayRefine;
+    Acts(end).ActArray(Acts(end).ActArrayRefine == -1) = 0;
+    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
+    Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
+    Acts(end).Zone = Acts(find(strcmp({Acts.ActName}, 'objectinteraction'), 1)).Zone;
+end
+
+%% Acts distance object-nose 
+VelocityThreshold = 10;
+FramesNumAdd = 15; % for 30 fps
+FramesNumEntry = 30; % for 30 fps
+for object  = 1:size(ArenaAndObjects,2)-1
+    
+    IndexHead = find(strcmp(BodyPartsNames, "headcenter"),1);
+    TempMask = single(~Zones(strcmp({Zones.name}, sprintf('Object%dReal', object))).maskfilled);
+    TempMask = bwdist(TempMask);
+    [~, linearIndex] = max(TempMask(:));
+    [YCenter, XCenter] = ind2sub(size(TempMask), linearIndex);
+    switch object
+        case 1
+            DistanceBowl = sqrt((BodyPartsTracesMainX(IndexHead,:)- XCenter).^2+(BodyPartsTracesMainY(IndexHead,:)-YCenter).^2);
+        case 2
+            DistanceObject = sqrt((BodyPartsTracesMainX(IndexHead,:)- XCenter).^2+(BodyPartsTracesMainY(IndexHead,:)-YCenter).^2);
+    end
+end
+
+for object  = 1:size(ArenaAndObjects,2)-1
+    switch object
+        case 1
+            TargetDistance = DistanceBowl;
+            IndexInside = find(strcmp({Acts.ActName}, 'bowlinside'), 1);
+            IndexInteract = find(strcmp({Acts.ActName}, 'bowlinteractreal'), 1);
+        case 2
+            TargetDistance = DistanceObject;
+            IndexInside = find(strcmp({Acts.ActName}, 'objectinside'), 1);
+            IndexInteract = find(strcmp({Acts.ActName}, 'objectinteractreal'), 1);
+    end
+    
+    TempArrayX = [0 diff(TargetDistance)];
+    TempArrayY = [0 diff(TargetDistance)];
+%     SmoothWindow = Options.SmoothWindowBigInFrames;
+    SmoothWindow = round(Options.FrameRate);
+    DegreeSmoothSGolay = min(SmoothWindow-1, DegreeSmoothSGolayDefault);
+    DistanceVelocity = sqrt((TempArrayX).^2+(TempArrayY).^2)*Options.FrameRate./Options.pxl2sm;
+    DistanceVelocity  = [interp1(2:n_frames, DistanceVelocity(2:end), 1, 'linear', 'extrap') DistanceVelocity(2:end)];
+    DistanceVelocitySmoothed = smooth(DistanceVelocity,SmoothWindow,'sgolay',DegreeSmoothSGolay);
+    
+    % entry calculation
+    CombineInteraction = Acts(IndexInside).ActArrayRefine + Acts(IndexInteract).ActArrayRefine;
+    CombineInteraction(CombineInteraction>1) = 1;
+    
+    DistanceVelocitySmoothedThreshold = single(DistanceVelocitySmoothed > VelocityThreshold);
+    DistanceVelocitySmoothedThreshold = DistanceVelocitySmoothedThreshold - CombineInteraction;
+    DistanceVelocitySmoothedThreshold(DistanceVelocitySmoothedThreshold < 0) = 0;
+    
+    [~,~,~,count_time,frame_in, frame_out] = RefineLine(DistanceVelocitySmoothedThreshold, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
+    
+    EntryInAllV = zeros(1,n_frames);
+    EntryOutAllV = zeros(1,n_frames);
+    for entry = 1:length(frame_in)
+        % for EntryIn
+        frame_out_this = min(frame_out(entry)+FramesNumAdd, n_frames);
+        if CombineInteraction(frame_out_this) == 1
+            EntryInAllV(frame_in(entry):frame_out(entry)) = ones(1,count_time(entry));
+        end
+        % for EntryOut
+        frame_in_this = max(frame_in(entry)-FramesNumAdd, 1);
+        if CombineInteraction(frame_in_this) == 1
+            EntryOutAllV(frame_in(entry):frame_out(entry)) = ones(1,count_time(entry));
+        end
+    end
+    
+    [~,~,~,~,frame_in, frame_out] = RefineLine(CombineInteraction, 0, 0);
+    
+    EntryInAll = EntryInAllV;
+    EntryOutAll = EntryOutAllV;
+    for entry = 1:length(frame_in)
+        
+        frame_out_this = min(frame_out(entry)+FramesNumAdd, n_frames);        
+        if sum(EntryOutAllV(frame_out(entry):frame_out_this)) == 0
+            frame_out_this_entry = min(frame_out(entry)+FramesNumEntry, n_frames);
+            EntryOutAll(frame_out(entry):frame_out_this_entry) = ones(1,frame_out_this_entry-frame_out(entry)+1);
+        end
+        
+        frame_in_this = min(frame_in(entry)-FramesNumAdd, n_frames);
+        if sum(EntryInAllV(frame_in_this:frame_out(entry))) == 0
+            frame_in_this_entry = max(frame_in(entry)-FramesNumEntry, 1);
+            EntryInAll(frame_in_this_entry:frame_in(entry)) = ones(1,frame_in(entry)-frame_in_this_entry+1);
+        end
+    end
+    
+        
+    
+    switch object
+        case 1
+            VelocityBowl = DistanceVelocitySmoothed;
+        case 2
+            VelocityObject = DistanceVelocitySmoothed;
+    end    
+end
+
+
+
+
+entryInBowl.Inside= zeros(n_frames,1);
+entryInBowl.Interact = zeros(n_frames,1);
+entryInBowl.InsideAll = zeros(n_frames,1);
+entryInBowl.InteractAll = zeros(n_frames,1);
+entryOutBowl.Inside = zeros(n_frames,1);
+entryOutBowl.Interact = zeros(n_frames,1);
+entryOutBowl.InsideAll = zeros(n_frames,1);
+entryOutBowl.InteractAll = zeros(n_frames,1);
+
+
+[~,~,~,~,frame_in_entry_in, frame_out_entry_in] = RefineLine(EntryInAll, 0, 0);
+[~,~,~,~,frame_in_entry_out, frame_out_entry_out] = RefineLine(EntryOutAll, 0, 0);
+[~,~,~,~,frame_in_entry_inV, frame_out_entry_inV] = RefineLine(EntryInAllV, 0, 0);
+[~,~,~,~,frame_in_entry_outV, frame_out_entry_outV] = RefineLine(EntryOutAllV, 0, 0);
+
+for entry = 1:length(frame_in_entry_in)
+    if sum(Acts(IndexInside).ActArrayRefine(frame_out_entry_in(entry):frame_in_entry_out(entry))) > 0
+        entryInBowl.Inside
+        
+    else
+        
+        
+        
+    end  
+end
+
+Acts(end+1).Name = 'entryInBowlInside';
+Acts(end).ActArray = 
+Acts(end).ActArrayRefine = Acts(end).ActArray;
+Acts(end+1).Name = 'entryInBowlInteract';
+Acts(end).ActArray = 
+Acts(end).ActArrayRefine = Acts(end).ActArray;
+Acts(end+1).Name = 'entryInBowlInsideAll';
+Acts(end).ActArray = 
+Acts(end).ActArrayRefine = Acts(end).ActArray;
+Acts(end+1).Name = 'entryInBowlInteractAll';
+Acts(end).ActArray = 
+Acts(end).ActArrayRefine = Acts(end).ActArray;
+Acts(end+1).Name = 'entryOutBowlInside';
+Acts(end).ActArray = 
+Acts(end).ActArrayRefine = Acts(end).ActArray;
+Acts(end+1).Name = 'entryOutBowlInteract';
+Acts(end).ActArray = 
+Acts(end).ActArrayRefine = Acts(end).ActArray;
+Acts(end+1).Name = 'entryOutBowlInsideAll';
+Acts(end).ActArray = 
+Acts(end).ActArrayRefine = Acts(end).ActArray;
+Acts(end+1).Name = 'entryOutBowlInteractAll';
+Acts(end).ActArray = 
+Acts(end).ActArrayRefine = Acts(end).ActArray;
+
+h = figure;
+plot(time, VelocityBowl, 'k'); hold on;
+plot(time, Acts(9).ActArrayRefine*mean(VelocityBowl) , 'r'); hold on; % bowl inside
+plot(time, CombineInteraction*(mean(VelocityBowl)+1) , 'b'); hold on; % bowl combined
+% plot(time, Acts(11).ActArrayRefine*mean(VelocityBowl)+2 , 'g'); hold on; % bowl interaction real
+
+plot(time, EntryInAllV*(mean(VelocityBowl)+2) , 'g'); hold on; 
+plot(time, EntryOutAllV*(mean(VelocityBowl)+2) , 'y'); hold on; 
+plot(time, EntryInAll*(mean(VelocityBowl)+3) , 'm'); hold on; 
+plot(time, EntryOutAll*(mean(VelocityBowl)+3) , 'c'); hold on; 
+legend('velocity','inside','combined','InV', 'OutV','InALL','OutALL');
+
+%% entry bowl and oblect
+
 
 %% acts space plus speed
 % for act_speed = 1:3
