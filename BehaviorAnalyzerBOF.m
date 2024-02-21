@@ -646,10 +646,11 @@ if ~isempty(IndexInteract)
     Acts(end).Zone = Acts(find(strcmp({Acts.ActName}, 'objectinteraction'), 1)).Zone;
 end
 
-%% Acts distance object-nose 
+%% Acts entryIn entryOut object
 VelocityThreshold = 10;
 FramesNumAdd = 15; % for 30 fps
 FramesNumEntry = 30; % for 30 fps
+DistanceObject = [];
 for object  = 1:size(ArenaAndObjects,2)-1
     
     IndexHead = find(strcmp(BodyPartsNames, "headcenter"),1);
@@ -699,11 +700,13 @@ for object  = 1:size(ArenaAndObjects,2)-1
     EntryInAllV = zeros(1,n_frames);
     EntryOutAllV = zeros(1,n_frames);
     for entry = 1:length(frame_in)
+        
         % for EntryIn
         frame_out_this = min(frame_out(entry)+FramesNumAdd, n_frames);
         if CombineInteraction(frame_out_this) == 1
             EntryInAllV(frame_in(entry):frame_out(entry)) = ones(1,count_time(entry));
         end
+        
         % for EntryOut
         frame_in_this = max(frame_in(entry)-FramesNumAdd, 1);
         if CombineInteraction(frame_in_this) == 1
@@ -729,84 +732,128 @@ for object  = 1:size(ArenaAndObjects,2)-1
             EntryInAll(frame_in_this_entry:frame_in(entry)) = ones(1,frame_in(entry)-frame_in_this_entry+1);
         end
     end
-    
         
+    entryInBowl.Inside = zeros(n_frames,1);
+    entryInBowl.Interact = zeros(n_frames,1);
+    entryInBowl.InsideAll = zeros(n_frames,1);
+    entryInBowl.InteractAll = zeros(n_frames,1);
+    entryOutBowl.Inside = zeros(n_frames,1);
+    entryOutBowl.Interact = zeros(n_frames,1);
+    entryOutBowl.InsideAll = zeros(n_frames,1);
+    entryOutBowl.InteractAll = zeros(n_frames,1);
+    
+    
+    [~,~,~,~,frame_in_entry_in, frame_out_entry_in] = RefineLine(EntryInAll, 0, 0);
+    [~,~,~,~,frame_in_entry_out, frame_out_entry_out] = RefineLine(EntryOutAll, 0, 0);
+    % [~,~,~,~,frame_in_entry_inV, frame_out_entry_inV] = RefineLine(EntryInAllV, 0, 0);
+    % [~,~,~,~,frame_in_entry_outV, frame_out_entry_outV] = RefineLine(EntryOutAllV, 0, 0);
+    %%
+    for entry = 1:length(frame_in_entry_in)
+        if sum(Acts(IndexInside).ActArrayRefine(frame_out_entry_in(entry):frame_in_entry_out(entry))) > 0
+            entryInBowl.InsideAll(frame_in_entry_in(entry):frame_out_entry_in(entry)) = ones(frame_out_entry_in(entry)-frame_in_entry_in(entry)+1,1);
+            entryOutBowl.InsideAll(frame_in_entry_out(entry):frame_out_entry_out(entry)) = ones(frame_out_entry_out(entry)-frame_in_entry_out(entry)+1,1);
+            
+            if sum(EntryInAllV(frame_in_entry_in(entry):frame_out_entry_in(entry))) > 0
+                entryInBowl.Inside(frame_in_entry_in(entry):frame_out_entry_in(entry)) = ones(frame_out_entry_in(entry)-frame_in_entry_in(entry)+1,1);
+            end
+            if sum(EntryOutAllV(frame_in_entry_out(entry):frame_out_entry_out(entry))) > 0
+                entryOutBowl.Inside(frame_in_entry_out(entry):frame_out_entry_out(entry)) = ones(frame_out_entry_out(entry)-frame_in_entry_out(entry)+1,1);
+            end
+        else
+            entryInBowl.InteractAll(frame_in_entry_in(entry):frame_out_entry_in(entry)) = ones(frame_out_entry_in(entry)-frame_in_entry_in(entry)+1,1);
+            entryOutBowl.InteractAll(frame_in_entry_out(entry):frame_out_entry_out(entry)) = ones(frame_out_entry_out(entry)-frame_in_entry_out(entry)+1,1);
+            
+            if sum(EntryInAllV(frame_in_entry_in(entry):frame_out_entry_in(entry))) > 0
+                entryInBowl.Interact(frame_in_entry_in(entry):frame_out_entry_in(entry)) = ones(frame_out_entry_in(entry)-frame_in_entry_in(entry)+1,1);
+            end
+            if sum(EntryOutAllV(frame_in_entry_out(entry):frame_out_entry_out(entry))) > 0
+                entryOutBowl.Interact(frame_in_entry_out(entry):frame_out_entry_out(entry)) = ones(frame_out_entry_out(entry)-frame_in_entry_out(entry)+1,1);
+            end
+        end
+    end
+    %%
     
     switch object
         case 1
-            VelocityBowl = DistanceVelocitySmoothed;
+            Acts(end+1).ActName = 'entryInBowlInside';
+            Acts(end).ActArray = entryInBowl.Inside;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryInBowlInteract';
+            Acts(end).ActArray = entryInBowl.Interact;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryInBowlInsideAll';
+            Acts(end).ActArray = entryInBowl.InsideAll;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryInBowlInteractAll';
+            Acts(end).ActArray = entryInBowl.InteractAll;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryOutBowlInside';
+            Acts(end).ActArray = entryOutBowl.Inside;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryOutBowlInteract';
+            Acts(end).ActArray = entryOutBowl.Interact;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryOutBowlInsideAll';
+            Acts(end).ActArray = entryOutBowl.InsideAll;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryOutBowlInteractAll';
+            Acts(end).ActArray = entryOutBowl.InteractAll;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
         case 2
-            VelocityObject = DistanceVelocitySmoothed;
-    end    
+            Acts(end+1).ActName = 'entryInObjectInside';
+            Acts(end).ActArray = entryInBowl.Inside;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryInObjectInteract';
+            Acts(end).ActArray = entryInBowl.Interact;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryInObjectInsideAll';
+            Acts(end).ActArray = entryInBowl.InsideAll;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryInObjectInteractAll';
+            Acts(end).ActArray = entryInBowl.InteractAll;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryOutObjectInside';
+            Acts(end).ActArray = entryOutBowl.Inside;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryOutObjectInteract';
+            Acts(end).ActArray = entryOutBowl.Interact;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryOutBowlInsideAll';
+            Acts(end).ActArray = entryOutBowl.InsideAll;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+            Acts(end+1).ActName = 'entryOutObjectnteractAll';
+            Acts(end).ActArray = entryOutBowl.InteractAll;
+            Acts(end).ActArrayRefine = Acts(end).ActArray;
+    end
+    
+    
+    %     h = figure;
+    %     plot(time, DistanceVelocitySmoothed, 'k'); hold on;
+    %     plot(time, Acts(9).ActArrayRefine*mean(DistanceVelocitySmoothed) , 'r'); hold on; % bowl inside
+    %     plot(time, CombineInteraction*(mean(DistanceVelocitySmoothed)+1) , 'b'); hold on; % bowl combined
+    %     plot(time, EntryInAllV*(mean(DistanceVelocitySmoothed)+2) , 'g'); hold on;
+%     plot(time, EntryOutAllV*(mean(DistanceVelocitySmoothed)+2) , 'y'); hold on;
+%     plot(time, EntryInAll*(mean(DistanceVelocitySmoothed)+3) , 'm'); hold on;
+%     plot(time, EntryOutAll*(mean(DistanceVelocitySmoothed)+3) , 'c'); hold on;
+%     legend('velocity','inside','combined','InV', 'OutV','InALL','OutALL');
+
+% h = figure;
+% plot(time, DistanceVelocitySmoothed, 'k'); hold on;
+% plot(time, Acts(9).ActArrayRefine*mean(DistanceVelocitySmoothed) , 'r'); hold on; % bowl inside
+% plot(time, CombineInteraction*(mean(DistanceVelocitySmoothed)+1) , 'b'); hold on; % bowl combined
+% plot(time, Acts(12).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'g'); hold on;
+% plot(time, Acts(13).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'g.'); hold on;
+% plot(time, Acts(14).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'm'); hold on;
+% plot(time, Acts(15).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'm.'); hold on;
+% plot(time, Acts(16).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'c'); hold on;
+% plot(time, Acts(17).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'c.'); hold on;
+% plot(time, Acts(18).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'y'); hold on;
+% plot(time, Acts(19).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'y.'); hold on;
+% legend('velocity','inside','combined','entryInBowlInside', 'entryInBowlInteract',...
+%     'entryInBowlInsideAll','entryInBowlInteractAll','entryOutBowlInside', 'entryOutBowlInteract',...
+%     'entryOutBowlInsideAll', 'entryOutBowlInteractAll');
+
 end
-
-
-
-
-entryInBowl.Inside= zeros(n_frames,1);
-entryInBowl.Interact = zeros(n_frames,1);
-entryInBowl.InsideAll = zeros(n_frames,1);
-entryInBowl.InteractAll = zeros(n_frames,1);
-entryOutBowl.Inside = zeros(n_frames,1);
-entryOutBowl.Interact = zeros(n_frames,1);
-entryOutBowl.InsideAll = zeros(n_frames,1);
-entryOutBowl.InteractAll = zeros(n_frames,1);
-
-
-[~,~,~,~,frame_in_entry_in, frame_out_entry_in] = RefineLine(EntryInAll, 0, 0);
-[~,~,~,~,frame_in_entry_out, frame_out_entry_out] = RefineLine(EntryOutAll, 0, 0);
-[~,~,~,~,frame_in_entry_inV, frame_out_entry_inV] = RefineLine(EntryInAllV, 0, 0);
-[~,~,~,~,frame_in_entry_outV, frame_out_entry_outV] = RefineLine(EntryOutAllV, 0, 0);
-
-for entry = 1:length(frame_in_entry_in)
-    if sum(Acts(IndexInside).ActArrayRefine(frame_out_entry_in(entry):frame_in_entry_out(entry))) > 0
-        entryInBowl.Inside
-        
-    else
-        
-        
-        
-    end  
-end
-
-Acts(end+1).Name = 'entryInBowlInside';
-Acts(end).ActArray = 
-Acts(end).ActArrayRefine = Acts(end).ActArray;
-Acts(end+1).Name = 'entryInBowlInteract';
-Acts(end).ActArray = 
-Acts(end).ActArrayRefine = Acts(end).ActArray;
-Acts(end+1).Name = 'entryInBowlInsideAll';
-Acts(end).ActArray = 
-Acts(end).ActArrayRefine = Acts(end).ActArray;
-Acts(end+1).Name = 'entryInBowlInteractAll';
-Acts(end).ActArray = 
-Acts(end).ActArrayRefine = Acts(end).ActArray;
-Acts(end+1).Name = 'entryOutBowlInside';
-Acts(end).ActArray = 
-Acts(end).ActArrayRefine = Acts(end).ActArray;
-Acts(end+1).Name = 'entryOutBowlInteract';
-Acts(end).ActArray = 
-Acts(end).ActArrayRefine = Acts(end).ActArray;
-Acts(end+1).Name = 'entryOutBowlInsideAll';
-Acts(end).ActArray = 
-Acts(end).ActArrayRefine = Acts(end).ActArray;
-Acts(end+1).Name = 'entryOutBowlInteractAll';
-Acts(end).ActArray = 
-Acts(end).ActArrayRefine = Acts(end).ActArray;
-
-h = figure;
-plot(time, VelocityBowl, 'k'); hold on;
-plot(time, Acts(9).ActArrayRefine*mean(VelocityBowl) , 'r'); hold on; % bowl inside
-plot(time, CombineInteraction*(mean(VelocityBowl)+1) , 'b'); hold on; % bowl combined
-% plot(time, Acts(11).ActArrayRefine*mean(VelocityBowl)+2 , 'g'); hold on; % bowl interaction real
-
-plot(time, EntryInAllV*(mean(VelocityBowl)+2) , 'g'); hold on; 
-plot(time, EntryOutAllV*(mean(VelocityBowl)+2) , 'y'); hold on; 
-plot(time, EntryInAll*(mean(VelocityBowl)+3) , 'm'); hold on; 
-plot(time, EntryOutAll*(mean(VelocityBowl)+3) , 'c'); hold on; 
-legend('velocity','inside','combined','InV', 'OutV','InALL','OutALL');
-
-%% entry bowl and oblect
 
 
 %% acts space plus speed
@@ -960,22 +1007,32 @@ end
 
 %% creating outputs table of features
 
-Features.Name = {'x', 'y', 'speed', 'bodydirection', 'headdirection'};
-for act = 1:length(Acts)
-    Features.Name{end+1} = Acts(act).ActName;
-end
+Features.Name = {'x', 'y', 'speed', 'bodydirection', 'headdirection', 'DistanceBowl'};
+
 Features.Data(1:n_frames,1) = MouseCenterX';
 Features.Data(1:n_frames,2) = MouseCenterY';
 Features.Data(1:n_frames,3) = Velocity;
 Features.Data(1:n_frames,4) = AngleRot';
 
+% ToDo: correct search of headdirection
 CenterHead.X = (BodyPartsTracesMainX(Point.LeftEar,:)+BodyPartsTracesMainX(Point.RightEar,:))/2;
 CenterHead.Y = (BodyPartsTracesMainY(Point.LeftEar,:)+BodyPartsTracesMainY(Point.RightEar,:))/2;
 [HeadDirection,~] = cart2pol(BodyPartsTracesMainX(Point.Nose,:)-CenterHead.X,BodyPartsTracesMainY(Point.Nose,:)-CenterHead.Y);
 Features.Data(1:n_frames,5) = HeadDirection';
 
+Features.Data(1:n_frames,6) = DistanceBowl';
+
+if ~isempty(DistanceObject)
+    Features.Data(1:n_frames,end+1) = DistanceObject';
+    Features.Name{end+1} = 'DistanceObject';
+end
+
 for act=1:length(Acts)
-    Features.Data(1:n_frames,5+act) = Acts(act).ActArrayRefine;
+    Features.Data(1:n_frames,end+1) = Acts(act).ActArrayRefine;
+end
+
+for act = 1:length(Acts)
+    Features.Name{end+1} = Acts(act).ActName;
 end
 
 Features.Table = array2table(Features.Data, 'VariableNames', Features.Name);
