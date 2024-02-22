@@ -3,8 +3,10 @@ root = 'f:\_Projects\_2024_Trace\';
 NumIter = 1000;
 SigmaValue = 3;
 p_value = 0.01;
-DiffTrhreshold = 2;
-NormWay = 'zscore'; % {'none' raw signal} {'norm' on interval [0,1]} {'zscore'} {'MADscore'}
+DiffTrhreshold = 1;
+ShockPeriod = 6; % in seconds
+BaseLinePeriod = 20; % in seconds
+NormWay = 'MADscore'; % {'none' raw signal} {'norm' on interval [0,1]} {'zscore'} {'MADscore'}
 
 PathOut = sprintf('%sPopAnalysis\\',root);
 PathPlot = sprintf('%sFigures\\',root);
@@ -69,12 +71,11 @@ for group = 1:length(Groups)
     end
     TraceData(group).NeuronNum = size(TraceData(group).NeuronData,2);
 end
-
+%%
 save(sprintf('%sTraceDataAllGroups.mat',PathOut));
 
 %% recalculation shock period to 6 seconds
 
-ShockPeriod = 6; % in seconds
 ShockTime = 2; % in seconds
 for group=1:3
     ShockFrame = find(table2array(TraceData(group).Features(:,4)) == 1);
@@ -82,6 +83,21 @@ for group=1:3
     for frame = ShockTime:ShockTime:length(ShockFrame)
         TraceData(group).Features(ShockFrame(frame)+1:ShockFrame(frame)+ShockPeriod-ShockTime,4) = array2table(1);
     end
+end
+save(sprintf('%sTraceDataAllGroups.mat',PathOut));
+
+%% recalculation baseline period 
+
+
+BaseLineTime = 2; % in seconds
+for group = 1:size(TraceData,2)
+    for trial = 1:7
+        BaseLineThisIndex = find(strcmp(FeaturesHeaders, sprintf('baseline%d',trial)));
+        BaseLineFrames = find(table2array(TraceData(group).Features(:,BaseLineThisIndex)) == 1);
+        
+        for frame = 1:BaseLinePeriod
+            TraceData(group).Features(ShockFrame(frame)+1:ShockFrame(frame)+ShockPeriod-ShockTime,4) = array2table(1);
+        end
 end
 save(sprintf('%sTraceDataAllGroups.mat',PathOut));
 
