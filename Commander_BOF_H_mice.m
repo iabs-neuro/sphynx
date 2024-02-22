@@ -6,11 +6,11 @@ PathOut = 'd:\Projects\BOF\Behavior\';
 
 PathPreset = 'd:\Projects\BOF\Presets\';
 
-% 1T
-FileNames = {
-    'H02_1T','H03_1T','H04_1T','H07_1T','H08_1T','H10_1T','H11_1T','H12_1T','H13_1T','H14_1T','H15_1T','H16_1T','H17_1T','H19_1T','H22_1T','H23_1T'
-    };
-ArenaType = 'circle';
+% % 1T
+% FileNames = {
+%     'H02_1T','H03_1T','H04_1T','H07_1T','H08_1T','H10_1T','H11_1T','H12_1T','H13_1T','H14_1T','H15_1T','H16_1T','H17_1T','H19_1T','H22_1T','H23_1T'
+%     };
+% ArenaType = 'circle';
 
 % % 2T
 % FileNames = {
@@ -31,11 +31,11 @@ ArenaType = 'circle';
 %     };
 % ArenaType = 'polygon';
 % 
-% % 5T
-% FileNames = {
-%     'H02_5T','H03_5T','H04_5T','H07_5T','H08_5T','H10_5T','H11_5T','H12_5T','H13_5T','H14_5T','H15_5T','H16_5T','H17_5T','H19_5T','H22_5T','H23_5T'
-%     };
-% ArenaType = 'circle';
+% 5T
+FileNames = {
+    'H02_5T','H03_5T','H04_5T','H07_5T','H08_5T','H10_5T','H11_5T','H12_5T','H13_5T','H14_5T','H15_5T','H16_5T','H17_5T','H19_5T','H22_5T','H23_5T'
+    };
+ArenaType = 'circle';
 
 FilesNumber = length(FileNames);
 
@@ -75,19 +75,19 @@ RestOtherLocomotionVelocity = zeros(3,FilesNumber);
 Distance = zeros(1,FilesNumber);
 Velocity = zeros(1,FilesNumber);
 
-% BOF objects 1T
-ObjectNumber = zeros(1,length(FileNames));
-ObjectPercent = zeros(1,length(FileNames));
-ObjectMeanTime = zeros(1,length(FileNames));
-ObjectMeanDistance = zeros(1,length(FileNames));
-ObjectDistance = zeros(1,length(FileNames));
+% % BOF objects 1T
+% ObjectNumber = zeros(3,length(FileNames));
+% ObjectPercent = zeros(3,length(FileNames));
+% ObjectMeanTime = zeros(3,length(FileNames));
+% ObjectMeanDistance = zeros(3,length(FileNames));
+% ObjectDistance = zeros(3,length(FileNames));
 
-% % BOF objects 2-5T
-% ObjectNumber = zeros(2,length(FileNames));
-% ObjectPercent = zeros(2,length(FileNames));
-% ObjectMeanTime = zeros(2,length(FileNames));
-% ObjectMeanDistance = zeros(2,length(FileNames));
-% ObjectDistance = zeros(2,length(FileNames));
+% BOF objects 2-5T
+ObjectNumber = zeros(6,length(FileNames));
+ObjectPercent = zeros(6,length(FileNames));
+ObjectMeanTime = zeros(6,length(FileNames));
+ObjectMeanDistance = zeros(6,length(FileNames));
+ObjectDistance = zeros(6,length(FileNames));
 
 %% main part
 for file = 1:length(FileNames)
@@ -110,8 +110,7 @@ for file = 1:length(FileNames)
     RearsNumber(file) = Acts(5).ActNumber;
     RearsMeanTime(file) = Acts(5).ActMeanTime;
     
-    if ArenaType == "polygon"
-        
+    if ArenaType == "polygon"        
         CornersWallsCenterPercent(1:3,file) = [Acts(6).ActPercent; Acts(7).ActPercent; Acts(8).ActPercent];
         CornersWallsCenterNumber(1:3,file) = [Acts(6).ActNumber; Acts(7).ActNumber; Acts(8).ActNumber];
         CornersWallsCenterMeanTime(1:3,file) = [Acts(6).ActMeanTime; Acts(7).ActMeanTime; Acts(8).ActMeanTime];
@@ -124,7 +123,7 @@ for file = 1:length(FileNames)
         WallsMiddleCenterMeanTime(1:3,file) = [Acts(6).ActMeanTime; Acts(7).ActMeanTime; Acts(8).ActMeanTime];
         WallsMiddleCenterDistance(1:3,file) = [Acts(6).Distance; Acts(7).Distance; Acts(8).Distance];
         WallsMiddleCenterMeanDistance(1:3,file) = [Acts(6).ActMeanDistance; Acts(7).ActMeanDistance; Acts(8).ActMeanDistance];
-        WallsMiddleCenterVelocity(1:3,file) = CornersWallsCenterDistance(1:3,file)./(CornersWallsCenterMeanTime(1:3,file).*CornersWallsCenterNumber(1:3,file))*100;
+        WallsMiddleCenterVelocity(1:3,file) = WallsMiddleCenterDistance(1:3,file)./(WallsMiddleCenterMeanTime(1:3,file).*WallsMiddleCenterNumber(1:3,file))*100;
         
     end
     RestOtherLocomotionPercent(1:3,file) = [Acts(1).ActPercent; Acts(2).ActPercent; Acts(3).ActPercent];
@@ -134,22 +133,22 @@ for file = 1:length(FileNames)
     RestOtherLocomotionMeanDistance(1:3,file) = [Acts(1).ActMeanDistance; Acts(2).ActMeanDistance; Acts(3).ActMeanDistance];
     RestOtherLocomotionVelocity(1:3,file) = RestOtherLocomotionDistance(1:3,file)./(RestOtherLocomotionMeanTime(1:3,file).*RestOtherLocomotionNumber(1:3,file))*100;
    
-    Distance(file) = BodyPartsTraces(12).AverageDistance;
-    Velocity(file) = BodyPartsTraces(12).AverageSpeed;
-    
-    % for 1T
-    ObjectNumber(1,file) = Acts(9).ActNumber;
-    ObjectPercent(1,file) = Acts(9).ActPercent;
-    ObjectMeanTime(1,file) = Acts(9).ActMeanTime;
-    ObjectMeanDistance(1,file) = Acts(9).ActMeanDistance;
-    ObjectDistance = ObjectNumber.*ObjectMeanDistance;
+    Distance(file) = BodyPartsTraces(13).AverageDistance;
+    Velocity(file) = BodyPartsTraces(13).AverageSpeed;
     
     % for 2-5T
-    ObjectNumber(1,file) = [Acts(9).ActNumber; Acts(10).ActNumber];
-    ObjectPercent(1,file) = [Acts(9).ActPercent; Acts(10).ActPercent];
-    ObjectMeanTime(1,file) = [Acts(9).ActMeanTime; Acts(10).ActMeanTime];
-    ObjectMeanDistance(1,file) = [Acts(9).ActMeanDistance; Acts(10).ActMeanDistance];
+    ObjectNumber(1:6,file) = [Acts(9).ActNumber; Acts(10).ActNumber; Acts(11).ActNumber;Acts(12).ActNumber; Acts(13).ActNumber; Acts(14).ActNumber];
+    ObjectPercent(1:6,file) = [Acts(9).ActPercent; Acts(10).ActPercent; Acts(11).ActPercent;Acts(12).ActPercent; Acts(13).ActPercent; Acts(14).ActPercent];
+    ObjectMeanTime(1:6,file) = [Acts(9).ActMeanTime; Acts(10).ActMeanTime; Acts(11).ActMeanTime;Acts(12).ActMeanTime; Acts(13).ActMeanTime; Acts(14).ActMeanTime];
+    ObjectMeanDistance(1:6,file) = [Acts(9).ActMeanDistance; Acts(10).ActMeanDistance; Acts(11).ActMeanDistance;Acts(12).ActMeanDistance; Acts(13).ActMeanDistance; Acts(14).ActMeanDistance];
     ObjectDistance = ObjectNumber.*ObjectMeanDistance;
+    
+%     % for 2-5T
+%     ObjectNumber(1:6,file) = [Acts(9).ActNumber; Acts(10).ActNumber];
+%     ObjectPercent(1:6,file) = [Acts(9).ActPercent; Acts(10).ActPercent];
+%     ObjectMeanTime(1:6,file) = [Acts(9).ActMeanTime; Acts(10).ActMeanTime];
+%     ObjectMeanDistance(1:6,file) = [Acts(9).ActMeanDistance; Acts(10).ActMeanDistance];
+%     ObjectDistance = ObjectNumber.*ObjectMeanDistance;
     
     clear 'Acts' 'BodyPartsTraces';
 end
