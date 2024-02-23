@@ -1,11 +1,14 @@
+%% path and opts
 
 root = 'f:\_Projects\_2024_Trace\';
 NumIter = 1000;
 SigmaValue = 3;
+DiffValue = 1;
+DiffNormValue = 1;
 p_value = 0.01;
-DiffTrhreshold = 1;
-ShockPeriod = 6; % in seconds
-BaseLinePeriod = 20; % in seconds
+
+ShockPeriod = 6; % period for shock in seconds
+BaseLinePeriod = 40; % period for baseline in seconds
 NormWay = 'MADscore'; % {'none' raw signal} {'norm' on interval [0,1]} {'zscore'} {'MADscore'}
 
 PathOut = sprintf('%sPopAnalysis\\',root);
@@ -49,9 +52,9 @@ for group = 1:length(Groups)
         TracesTable = readtable(sprintf('%sTrace_%s_traces.csv', PathTraces,Groups{group}{file}));
         TraceThis = table2array(TracesTable(2:end,2:end));
         
-        % loading features data        
+        % loading features data
         FeaturesTable = readtable(sprintf('%s%s_Features.csv', PathFeatures,Groups{group}{file}));
-        FeaturesThis = table2array(FeaturesTable);        
+        FeaturesThis = table2array(FeaturesTable);
         FeaturesHeaders = FeaturesTable.Properties.VariableNames;
         
         % getting fps and binarization
@@ -61,17 +64,16 @@ for group = 1:length(Groups)
         fprintf('Calcium data\n');
         [TraceThisBinned] = BinarizationArrayMany(TraceThis, FPSTraces);
         fprintf('Behavior data\n');
-        [FeaturesThisBinned] = BinarizationArrayMany(FeaturesThis, FPSFeatures);        
+        [FeaturesThisBinned] = BinarizationArrayMany(FeaturesThis, FPSFeatures);
         
         % saving DataStruct
-        TraceData(group).NeuronData = [TraceData(group).NeuronData TraceThisBinned];                
-        TraceData(group).Features = array2table(FeaturesThisBinned, 'VariableNames', FeaturesHeaders);        
+        TraceData(group).NeuronData = [TraceData(group).NeuronData TraceThisBinned];
+        TraceData(group).Features = array2table(FeaturesThisBinned, 'VariableNames', FeaturesHeaders);
         TraceData(group).NeuronInd = [TraceData(group).NeuronInd size(TraceThisBinned,2)];
         
     end
     TraceData(group).NeuronNum = size(TraceData(group).NeuronData,2);
 end
-%%
 save(sprintf('%sTraceDataAllGroups.mat',PathOut));
 
 %% recalculation shock period to 6 seconds
@@ -84,24 +86,23 @@ for group=1:3
         TraceData(group).Features(ShockFrame(frame)+1:ShockFrame(frame)+ShockPeriod-ShockTime,4) = array2table(1);
     end
 end
-save(sprintf('%sTraceDataAllGroups.mat',PathOut));
+save(sprintf('%sTraceDataAllGroupsShock.mat',PathOut));
 
-%% recalculation baseline period 
+%% recalculation baseline period
+% recalculate baseline period from 10s to BaseLinePeriod
 
-
-BaseLineTime = 2; % in seconds
 for group = 1:size(TraceData,2)
     for trial = 1:7
         BaseLineThisIndex = find(strcmp(FeaturesHeaders, sprintf('baseline%d',trial)));
         BaseLineFrames = find(table2array(TraceData(group).Features(:,BaseLineThisIndex)) == 1);
         
-        for frame = 1:BaseLinePeriod
-            TraceData(group).Features(ShockFrame(frame)+1:ShockFrame(frame)+ShockPeriod-ShockTime,4) = array2table(1);
-        end
+        TraceData(group).Features(BaseLineFrames(end)-BaseLinePeriod+1:BaseLineFrames(1)-1,BaseLineThisIndex) = array2table(ones(length(BaseLineFrames(end)-BaseLinePeriod+1:BaseLineFrames(1)-1),1));
+        
+    end
 end
-save(sprintf('%sTraceDataAllGroups.mat',PathOut));
+save(sprintf('%sTraceDataAllGroupsShockBaseLine.mat',PathOut));
 
-%% scaling of Neuron data 
+%% scaling of Neuron data
 
 for group = 1:size(TraceData,2)
     fprintf('Normalization for %d group started\n',group);
@@ -124,18 +125,19 @@ for group = 1:size(TraceData,2)
     end
     TraceData(group).NeuronDataNorm = NeuronDataNorm;
 end
-save(sprintf('%sTraceDataAllGroupsNormMADscore.mat',PathOut));
-
+save(sprintf('%sTraceDataAllGroupsShockBaseLine%s.mat',PathOut,NormWay));
 
 %% searching spesializations of neurons
+
 ZscoreData = [];
 CellDiffData = [];
+CellDiffNormData = [];
 FeatureList = {'sound','trace1','trace2','trace3'};
 for group = 1:size(TraceData,2)
     
     fprintf('Analysis of %s group started\n',TraceData(group).GroupName);
     
-    NeuronSpecData = struct('Trial',[],'Feature',[],'NeuronSpecNum',[],'NeuronSpecInd',[],'NeuronSpecZscore',[],'BaseLineData',[],'NeuronSpecData',[], 'NeuronDiff', []);
+    NeuronSpecData = struct('Trial',[],'Feature',[],'NeuronSpecData',[],'NeuronSpecNum',[],'NeuronSpecInd',[],'NeuronSpecZscore',[], 'NeuronDiff', [],'BaseLineData',[], 'NeuronDiffNorm',[]);
     
     Giter = 1;
     for trial = 1:7
@@ -169,15 +171,15 @@ for group = 1:size(TraceData,2)
                     BaseLineThis.Cell(:,cell) = TraceData(group).NeuronDataNorm(BaseLineThis.Line.*TraceData(group).NeuronDataNorm(:,cell)~=0,cell);
                     
                     % Calculate specialization of neuron-feature
-                    [CellStatusB, CellZscoreB, CellDiff] = Bootstrap(BaseLineThis.Cell(:,cell)', FeatureThis.Cell(:,cell)', NumIter, SigmaValue);
+                    [CellStatusB, CellZscoreB, CellDiff, CellDiffNorm] = Bootstrap(BaseLineThis.Cell(:,cell)', FeatureThis.Cell(:,cell)', NumIter, SigmaValue, DiffValue, DiffNormValue);
                     
                     % u-test implementation
-                    [CellStatusU] = UTest(BaseLineThis.Cell(:,cell)', FeatureThis.Cell(:,cell)',p_value);
+                    [CellStatusU] = UTest(BaseLineThis.Cell(:,cell)', FeatureThis.Cell(:,cell)', p_value);
                     % fprintf('CellStatus UTest: %d. CellStatus BTest: %d, Zscore: %2.2f\n',CellStatusU,CellStatusB,CellZscoreB);
                     
                     ZscoreData = [ZscoreData CellZscoreB];
                     
-                    if CellStatusB && CellStatusU && CellDiff > DiffTrhreshold
+                    if CellStatusB && CellStatusU
                         NeuronSpecData(Giter).Trial = sprintf('Trial%d',trial);
                         NeuronSpecData(Giter).Feature = FeatureThis.Name;
                         NeuronSpecData(Giter).NeuronSpecNum = NeuronSpecData(Giter).NeuronSpecNum + 1;
@@ -186,14 +188,16 @@ for group = 1:size(TraceData,2)
                         NeuronSpecData(Giter).BaseLineData = [NeuronSpecData(Giter).BaseLineData BaseLineThis.Cell(:,cell)];
                         NeuronSpecData(Giter).NeuronSpecData = [NeuronSpecData(Giter).NeuronSpecData FeatureThis.Cell(:,cell)];
                         NeuronSpecData(Giter).NeuronDiff = [NeuronSpecData(Giter).NeuronDiff CellDiff];
+                        NeuronSpecData(Giter).NeuronDiffNorm = [NeuronSpecData(Giter).NeuronDiffNorm CellDiffNorm];
                         CellDiffData = [CellDiffData CellDiff];
+                        CellDiffNormData = [CellDiffNormData CellDiffNorm];
                     end
                 end
                 Giter = Giter + 1;
             else
                 fprintf('Feature %s not found\n',FeatureThis.Name);
                 clear FeatureThis;
-            end            
+            end
         end
         clear BaseLineThis;
         
@@ -211,6 +215,8 @@ for group = 1:size(TraceData,2)
         NeuronSpecData(Giter).NeuronSpecZscore = NeuronSpecData(IndexTrace1).NeuronSpecZscore(Ind1);
         NeuronSpecData(Giter).BaseLineData = NeuronSpecData(IndexTrace1).BaseLineData(:,Ind1);
         NeuronSpecData(Giter).NeuronSpecData = [NeuronSpecData(IndexTrace1).NeuronSpecData(:,Ind1); NeuronSpecData(IndexTrace2).NeuronSpecData(:,Ind2)];
+        NeuronSpecData(Giter).NeuronDiff = (NeuronSpecData(IndexTrace1).NeuronDiff(Ind1) + NeuronSpecData(IndexTrace2).NeuronDiff(Ind2))./2;
+        NeuronSpecData(Giter).NeuronDiffNorm = (NeuronSpecData(IndexTrace1).NeuronDiffNorm(Ind1) + NeuronSpecData(IndexTrace2).NeuronDiffNorm(Ind2))./2;
         Giter = Giter + 1;
         
         % definition of Trace123
@@ -226,12 +232,14 @@ for group = 1:size(TraceData,2)
         
         NeuronSpecData(Giter).NeuronSpecZscore = NeuronSpecData(IndexTrace1).NeuronSpecZscore(Ind1);
         NeuronSpecData(Giter).BaseLineData = NeuronSpecData(IndexTrace1).BaseLineData(:,Ind1);
-        NeuronSpecData(Giter).NeuronSpecData = [NeuronSpecData(IndexTrace1).NeuronSpecData(:,Ind1); NeuronSpecData(IndexTrace2).NeuronSpecData(:,Ind2)];  
+        NeuronSpecData(Giter).NeuronSpecData = [NeuronSpecData(IndexTrace1).NeuronSpecData(:,Ind1); NeuronSpecData(IndexTrace2).NeuronSpecData(:,Ind2)];
+        NeuronSpecData(Giter).NeuronDiff = (NeuronSpecData(IndexTrace1).NeuronDiff(Ind1) + NeuronSpecData(IndexTrace2).NeuronDiff(Ind2))./2;
+        NeuronSpecData(Giter).NeuronDiffNorm = (NeuronSpecData(IndexTrace1).NeuronDiffNorm(Ind1) + NeuronSpecData(IndexTrace2).NeuronDiffNorm(Ind2))./2;
         Giter = Giter + 1;
     end
     TraceData(group).NeuronSpecData = NeuronSpecData;
 end
-save(sprintf('%sNeuronSpecData_3sigma_MADscoredDiff.mat',PathOut));
+save(sprintf('%sNeuronSpecData_Sigma%d_Diff%d.mat',PathOut,SigmaValue,DiffValue));
 
 %% shock recalculation
 
@@ -245,7 +253,7 @@ for group = 1:3
     FeatureShock.Line = table2array(TraceData(group).Features(:,FeatureShock.Index));
     FeatureShock.Cell = zeros(sum(FeatureShock.Line)/7,size(TraceData(group).NeuronDataNorm,2));
     
-    BaseLineShock.Cell = zeros(20,size(TraceData(group).NeuronDataNorm,2));
+    BaseLineShock.Cell = zeros(BaseLinePeriod,size(TraceData(group).NeuronDataNorm,2));
     
     for trial = 1:7
         BaseLineShock.Index = find(strcmp(FeaturesHeaders, sprintf('baseline%d',trial)));
@@ -265,37 +273,57 @@ for group = 1:3
         BaseLineShock.Cell(:,cell) = BaseLineShock.Cell(:,cell)./7;
         
         % Calculate specialization of neuron-feature
-        [CellStatusB, CellZscoreB, CellDiff] = Bootstrap(BaseLineShock.Cell(:,cell)', FeatureShock.Cell(:,cell)', NumIter, SigmaValue);
+        [CellStatusB, CellZscoreB, CellDiff, CellDiffNorm] = Bootstrap(BaseLineShock.Cell(:,cell)', FeatureShock.Cell(:,cell)', NumIter, SigmaValue, DiffValue, DiffNormValue);
         
         % u-test implementation
         [CellStatusU] = UTest(BaseLineShock.Cell(:,cell)', FeatureShock.Cell(:,cell)',p_value);
         
-        if CellStatusB && CellStatusU && CellDiff > DiffTrhreshold
+        if CellStatusB && CellStatusU
             TraceData(group).NeuronSpecData(end).NeuronSpecNum = TraceData(group).NeuronSpecData(end).NeuronSpecNum + 1;
             TraceData(group).NeuronSpecData(end).NeuronSpecInd = [TraceData(group).NeuronSpecData(end).NeuronSpecInd cell];
             TraceData(group).NeuronSpecData(end).NeuronSpecZscore = [TraceData(group).NeuronSpecData(end).NeuronSpecZscore CellZscoreB];
             TraceData(group).NeuronSpecData(end).BaseLineData = [TraceData(group).NeuronSpecData(end).BaseLineData BaseLineShock.Cell(:,cell)];
             TraceData(group).NeuronSpecData(end).NeuronSpecData = [TraceData(group).NeuronSpecData(end).NeuronSpecData FeatureShock.Cell(:,cell)];
             TraceData(group).NeuronSpecData(end).NeuronDiff = [TraceData(group).NeuronSpecData(end).NeuronDiff CellDiff];
+            TraceData(group).NeuronSpecData(end).NeuronDiffNorm = [TraceData(group).NeuronSpecData(end).NeuronDiffNorm CellDiffNorm];
         end
     end
 end
-save(sprintf('%sNeuronSpecData_MADDiff.mat',PathOut));
+save(sprintf('%sNeuronSpecData_Sigma%d_Diff%d.mat',PathOut,SigmaValue,DiffValue));
+
+%% shock neurons split
+for group = 1:3
+    fprintf('Analysis of %d group for shock feature started\n',group);
+    for spec = 1:size(TraceData(group).NeuronSpecData,2)-1
+        TraceData(group).NeuronSpecDataWithShock = TraceData(group).NeuronSpecData;
+        [~, IndSpec, IndShock] = intersect(TraceData(group).NeuronSpecData(spec).NeuronSpecInd, TraceData(group).NeuronSpecData(43).NeuronSpecInd);
+        
+        TraceData(group).NeuronSpecData(spec).NeuronSpecData(:, IndSpec) = [];
+        TraceData(group).NeuronSpecData(spec).NeuronSpecInd(:, IndSpec) = [];
+        TraceData(group).NeuronSpecData(spec).NeuronSpecZscore(:, IndSpec) = [];
+        TraceData(group).NeuronSpecData(spec).NeuronDiff(:, IndSpec) = [];
+        TraceData(group).NeuronSpecData(spec).BaseLineData(:, IndSpec) = [];
+        TraceData(group).NeuronSpecData(spec).NeuronDiffNorm(:, IndSpec) = [];
+        TraceData(group).NeuronSpecData(spec).NeuronSpecNum = TraceData(group).NeuronSpecData(spec).NeuronSpecNum - length(IndSpec);
+    end
+    
+end
+
+save(sprintf('%sNeuronSpecDataNoShock_Sigma%d_Diff%d.mat',PathOut,SigmaValue,DiffValue));
 
 %% additional plot tools
-% HeatMap([NeuronSpecData.BaseLineData' NeuronSpecData.NeuronSpecData'],'Colormap','cool');
+%% average Ca2+ signal baseline-feature
 
-% average Ca2+ signal baseline-feature
 for group = 1:3
     for feature = 1:size(TraceData(group).NeuronSpecData,2)
         
         BaseFeatureLine = [TraceData(group).NeuronSpecData(feature).BaseLineData; TraceData(group).NeuronSpecData(feature).NeuronSpecData];
         
-%         h=figure;
-%         for cell = 1:size(BaseFeatureLine,2)
-%             plot(1:size(BaseFeatureLine,1),  BaseFeatureLine(:,cell)); 
-%             hold on;
-%         end
+        %         h=figure;
+        %         for cell = 1:size(BaseFeatureLine,2)
+        %             plot(1:size(BaseFeatureLine,1),  BaseFeatureLine(:,cell));
+        %             hold on;
+        %         end
         
         h = figure;
         BaseFeatureLineMean = mean(BaseFeatureLine,2);
@@ -326,7 +354,7 @@ for group = 1:6
     HH = 0;
     
     h=figure;
-    for cell=1:TraceData(group).NeuronNum        
+    for cell=1:TraceData(group).NeuronNum
         plot(1:1294, TraceData(group).NeuronDataNorm(:,cell)+HH); hold on;
         HH = HH + max(TraceData(group).NeuronDataNorm(:,cell));
     end
@@ -402,7 +430,7 @@ for group = 1:6
                 textString = sprintf('Z: %2.2f. Diff: ??',TraceData(group).NeuronSpecData(spec).NeuronSpecZscore(indTemp));
             end
             text(textPositionX, textPositionY, textString, 'FontSize', 8, 'FontWeight', 'bold', 'Color', 'red');
-                        
+            
             HH = HH + max(TraceData(group).NeuronDataNorm(:,cell));
             indTemp = indTemp + 1;
         end
@@ -413,7 +441,7 @@ for group = 1:6
         else
             trials = str2num(TraceData(1).NeuronSpecData(spec).Trial(end));%#ok<ST2NM>
         end
-        for trial = trials 
+        for trial = trials
             for feature = 1:length(FeaturePlotList)-1
                 switch feature
                     case {1,2}
@@ -447,31 +475,11 @@ for group = 1:6
         delete(h);
     end
 end
-%% plot for spec data
-
-group = 1;
-spec = 2;
-
-h = figure;
-HH = 0;
-for cell = TraceData(group).NeuronSpecData(spec).NeuronSpecInd
-    if cell == 1
-        HH = 0;
-    else
-        HH = HH + max(TraceData(group).NeuronDataNorm(:,cell-1));
-    end
-    
-    plot(1:1294, TraceData(group).NeuronDataNorm(:,cell)+HH); hold on;
-end
-
-for line = [71 91 111 113 131 151 170]
-    xline(line, 'r'); hold on;
-end
-
 
 %% searching of CS-Trace and *-only populations
 
 for group = 1:size(TraceData,2)
+    fprintf('Analysis of %d group for shock feature started\n',group);
     NeuronPopData = struct('Feature', [], 'NeuronNum', 0, 'NeuronInd', [], 'PercentAll', [], 'PercentCS', []);
     Fiter = 1;
     
@@ -482,6 +490,10 @@ for group = 1:size(TraceData,2)
     TraceOnlyNeuronPercentALL = zeros(7,3);
     TraceOnlyNeuronPercentTr = zeros(7,3);
     TraceOnlyNeuronNum = zeros(7,3);
+
+    CSOnlyNeuronPercentALL = zeros(7,2);
+    CSOnlyNeuronPercentCS = zeros(7,2);
+    CSOnlyNeuronNum = zeros(7,2);
     
     for trial = 1:7
         CSIndexThis = find(strcmp({TraceData(group).NeuronSpecData.Feature} , sprintf('sound%d', trial)));
@@ -502,8 +514,8 @@ for group = 1:size(TraceData,2)
             [~, IndCS, IndTr] = intersect(TraceData(group).NeuronSpecData(CSIndexThis).NeuronSpecInd, TraceData(group).NeuronSpecData(TraceIndexThis).NeuronSpecInd);
             NeuronPopData(Fiter).NeuronInd = TraceData(group).NeuronSpecData(CSIndexThis).NeuronSpecInd(IndCS);
             NeuronPopData(Fiter).NeuronNum = length(NeuronPopData(Fiter).NeuronInd);
-            NeuronPopData(Fiter).PercentAll = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronNum)*100);
-            NeuronPopData(Fiter).PercentCS = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronSpecData(CSIndexThis).NeuronSpecNum)*100);
+            NeuronPopData(Fiter).PercentAll = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronNum)*100,2);
+            NeuronPopData(Fiter).PercentCS = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronSpecData(CSIndexThis).NeuronSpecNum)*100,2);
             
             NeuronPopData(Fiter).NeuronSpecZscore = TraceData(group).NeuronSpecData(CSIndexThis).NeuronSpecZscore(IndCS);
             NeuronPopData(Fiter).BaseLineData = TraceData(group).NeuronSpecData(CSIndexThis).BaseLineData(:,IndCS);
@@ -527,17 +539,23 @@ for group = 1:size(TraceData,2)
                 NeuronPopData(Fiter).NeuronInd = TempInd(TempInd~=0);
                 
                 NeuronPopData(Fiter).NeuronNum = length(NeuronPopData(Fiter).NeuronInd);
-                NeuronPopData(Fiter).PercentAll = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronNum)*100);
-                NeuronPopData(Fiter).PercentCS = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronSpecData(CSIndexThis).NeuronSpecNum)*100);
+                NeuronPopData(Fiter).PercentAll = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronNum)*100,2);
+                NeuronPopData(Fiter).PercentCS = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronSpecData(CSIndexThis).NeuronSpecNum)*100,2);
                 
                 NeuronPopData(Fiter).NeuronSpecZscore = TraceData(group).NeuronSpecData(CSIndexThis).NeuronSpecZscore(IndCsOnly);
                 NeuronPopData(Fiter).BaseLineData = TraceData(group).NeuronSpecData(CSIndexThis).BaseLineData(:,IndCsOnly);
                 % ToDo: need trace periods of CellCSOnly neurons
                 %             NeuronPopData(Fiter).NeuronSpecData = [TraceData(group).NeuronSpecData(CSIndexThis).NeuronSpecData(:,IndCsOnly); TraceData(group).NeuronSpecData(TraceIndexThis).NeuronSpecData(:,???)];
                 
+                
+                if trace ==1
+                    CSOnlyNeuronPercentALL(trial,trace) =  NeuronPopData(Fiter).PercentAll;
+                    CSOnlyNeuronPercentCS(trial,trace) = NeuronPopData(Fiter).PercentCS;
+                    CSOnlyNeuronNum(trial,trace) = NeuronPopData(Fiter).NeuronNum;
+                end
                 Fiter = Fiter + 1;
-%             end
-            
+                %             end
+                
             % definition of Trace-only
             NeuronPopData(Fiter).Feature = sprintf('TraceOnly%d%d',trial, trace);
             
@@ -549,8 +567,8 @@ for group = 1:size(TraceData,2)
             NeuronPopData(Fiter).NeuronInd = TempInd(TempInd~=0);
             
             NeuronPopData(Fiter).NeuronNum = length(NeuronPopData(Fiter).NeuronInd);
-            NeuronPopData(Fiter).PercentAll = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronNum)*100);
-            NeuronPopData(Fiter).PercentCS = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronSpecData(TraceIndexThis).NeuronSpecNum)*100);
+            NeuronPopData(Fiter).PercentAll = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronNum)*100,2);
+            NeuronPopData(Fiter).PercentCS = round((NeuronPopData(Fiter).NeuronNum/TraceData(group).NeuronSpecData(TraceIndexThis).NeuronSpecNum)*100,2);
             
             NeuronPopData(Fiter).NeuronSpecZscore = TraceData(group).NeuronSpecData(TraceIndexThis).NeuronSpecZscore(IndTraceOnly);
             NeuronPopData(Fiter).BaseLineData = TraceData(group).NeuronSpecData(TraceIndexThis).BaseLineData(:,IndTraceOnly);
@@ -571,12 +589,16 @@ for group = 1:size(TraceData,2)
     
     TraceData(group).CSTraceNeuronNum = CSTraceNeuronNum;
     TraceData(group).TraceOnlyNeuronNum = TraceOnlyNeuronNum;
+    TraceData(group).CSOnlyNeuronNum = CSOnlyNeuronNum;
     
     TraceData(group).CSTraceNeuronPercentALL = CSTraceNeuronPercentALL;
     TraceData(group).CSTraceNeuronPercentCS = CSTraceNeuronPercentCS;
     
+    TraceData(group).CSOnlyNeuronPercentALL = CSOnlyNeuronPercentALL;
+    TraceData(group).CSOnlyNeuronPercentCS = CSOnlyNeuronPercentCS;
+    
     TraceData(group).TraceOnlyNeuronPercentALL = TraceOnlyNeuronPercentALL;
     TraceData(group).TraceOnlyNeuronPercentTr = TraceOnlyNeuronPercentTr;
 end
-save(sprintf('%sNeuronSpecData_PopDataMadDiff.mat',PathOut));
+save(sprintf('%sNeuronPopData.mat',PathOut));
 

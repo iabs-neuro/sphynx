@@ -43,7 +43,7 @@ DegreeSmoothSGolayDefault = 3;
 % PlotOption.speed = 1;
 % PlotOption.space = 1;
 % PlotOption.acts = 1;
-PlotOption.main = 0;
+PlotOption.main = 1;
 
 % FontSize = 40;
 MarkSize = 3;
@@ -258,29 +258,29 @@ for part=1:BodyPartsNumber
             BodyPartsTracesMainY(part,:) = BodyPartsTraces(part).TraceSmoothed.Y;
     end
         
-%     h = figure('Position', Screensize);
-%     plot(time,BodyPartsTraces(part).TraceOriginal.X./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
-%     plot(time,BodyPartsTraces(part).TraceInterpolated.X./Options.pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
-%     plot(time,BodyPartsTraces(part).TraceSmoothed.X./Options.pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
-%     legend({'Original','Interpolated','Smoothed'});
-%     title(sprintf('Body part: %s. X coordinate',BodyPartsTraces(part).BodyPartName));
-%     xlabel('Time, s');
-%     ylabel('Coordinate, cm');
-%     saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.png', PathOut,BodyPartsTraces(part).BodyPartName));
-%     saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.fig', PathOut,BodyPartsTraces(part).BodyPartName));
-%     delete(h);    
-%     
-%     h = figure('Position', Screensize);
-%     plot(time,BodyPartsTraces(part).TraceOriginal.Y./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
-%     plot(time,BodyPartsTraces(part).TraceInterpolated.Y./Options.pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
-%     plot(time,BodyPartsTraces(part).TraceSmoothed.Y./Options.pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
-%     legend({'Original','Interpolated','Smoothed'});
-%     title(sprintf('Body part: %s. Y coordinate',BodyPartsTraces(part).BodyPartName));
-%     xlabel('Time, s');
-%     ylabel('Coordinate, cm');
-%     saveas(h, sprintf('%s\\BodyPartsTraces\\%s_Y_coordinate.png', PathOut,BodyPartsTraces(part).BodyPartName));
-%     saveas(h, sprintf('%s\\BodyPartsTraces\\%s_Y_coordinate.fig', PathOut,BodyPartsTraces(part).BodyPartName));
-%     delete(h);
+    h = figure('Position', Screensize);
+    plot(time,BodyPartsTraces(part).TraceOriginal.X./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
+    plot(time,BodyPartsTraces(part).TraceInterpolated.X./Options.pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
+    plot(time,BodyPartsTraces(part).TraceSmoothed.X./Options.pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
+    legend({'Original','Interpolated','Smoothed'});
+    title(sprintf('Body part: %s. X coordinate',BodyPartsTraces(part).BodyPartName));
+    xlabel('Time, s');
+    ylabel('Coordinate, cm');
+    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.png', PathOut,BodyPartsTraces(part).BodyPartName));
+    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.fig', PathOut,BodyPartsTraces(part).BodyPartName));
+    delete(h);    
+    
+    h = figure('Position', Screensize);
+    plot(time,BodyPartsTraces(part).TraceOriginal.Y./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
+    plot(time,BodyPartsTraces(part).TraceInterpolated.Y./Options.pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
+    plot(time,BodyPartsTraces(part).TraceSmoothed.Y./Options.pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
+    legend({'Original','Interpolated','Smoothed'});
+    title(sprintf('Body part: %s. Y coordinate',BodyPartsTraces(part).BodyPartName));
+    xlabel('Time, s');
+    ylabel('Coordinate, cm');
+    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_Y_coordinate.png', PathOut,BodyPartsTraces(part).BodyPartName));
+    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_Y_coordinate.fig', PathOut,BodyPartsTraces(part).BodyPartName));
+    delete(h);
 end
 
 % BodyPartsNames(points_for_delete) = [];
@@ -916,10 +916,10 @@ for line = 1:size(Acts,2)
     Acts(line).ActMedianMADTime = round(mad(Acts(line).ActDistr),2)/Options.FrameRate;
     Acts(line).Distance = round(mean(BodyPartsTraces(Point.Center).VelocitySmoothed(logical(Acts(line).ActArrayRefine)))*time(end)*Acts(line).ActPercent/10000,2);
     Acts(line).ActMeanDistance = Acts(line).Distance/Acts(line).ActNumber;
-%     histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
-%     title(sprintf('Histogram of acts duration time: %s', string(Acts(line).ActName)));
-%     saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
-%     delete(gcf);
+    histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
+    title(sprintf('Histogram of acts duration time: %s', string(Acts(line).ActName)));
+    saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
+    delete(gcf);
 end
 
 h=figure;
@@ -952,8 +952,8 @@ save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 %% make separate acts videos
 
 % for act = 1:size(Acts,2)
-% for act = 8:size(Acts,2)
-for act = []
+for act = 1:size(Acts,2)
+% for act = []
     fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
     v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
     v.FrameRate = Options.FrameRate;

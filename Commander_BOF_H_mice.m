@@ -25,17 +25,17 @@ PathPreset = 'd:\Projects\BOF\Presets\';
 %     };
 % ArenaType = 'circle';
 % 
-% % 4T
-% FileNames = {
-%     'H02_4T','H03_4T','H04_4T','H07_4T','H08_4T','H10_4T','H11_4T','H12_4T','H13_4T','H14_4T','H15_4T','H16_4T','H17_4T','H19_4T','H22_4T','H23_4T'
-%     };
-% ArenaType = 'polygon';
-% 
-% 5T
+% 4T
 FileNames = {
-    'H02_5T','H03_5T','H04_5T','H07_5T','H08_5T','H10_5T','H11_5T','H12_5T','H13_5T','H14_5T','H15_5T','H16_5T','H17_5T','H19_5T','H22_5T','H23_5T'
+    'H02_4T','H03_4T','H04_4T','H07_4T','H08_4T','H10_4T','H11_4T','H12_4T','H13_4T','H14_4T','H15_4T','H16_4T','H17_4T','H19_4T','H22_4T','H23_4T'
     };
-ArenaType = 'circle';
+ArenaType = 'polygon';
+% 
+% % 5T
+% FileNames = {
+%     'H02_5T','H03_5T','H04_5T','H07_5T','H08_5T','H10_5T','H11_5T','H12_5T','H13_5T','H14_5T','H15_5T','H16_5T','H17_5T','H19_5T','H22_5T','H23_5T'
+%     };
+% ArenaType = 'circle';
 
 FilesNumber = length(FileNames);
 
