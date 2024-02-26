@@ -333,6 +333,152 @@ end
 save(sprintf('%sNeuronSpecDataNoShock_Sigma%d_Diff%d.mat',PathOut,SigmaValue,DiffValue));
 
 %% additional plot tools
+%% HeatMaps 
+[c1,~]=colorGradient(RGB('red'),RGB('darkred'),64*2); % red to black
+[c2,~]=colorGradient(RGB('orange'),RGB('red'),64*0.5); % yellow to red
+[c3,~]=colorGradient(RGB('white'), RGB('orange'),64*0.5); % blue to yellow
+[c4,~]=colorGradient(RGB('blue'),RGB('white'),64);
+[c5,~]=colorGradient(RGB('midnightblue'),RGB('blue'),64*2);
+c = [c5;c4;c3;c2;c1];
+xline1 = 40;xline2 = 60;xline3 = 80;xline4 = 100;xline5 = 120;
+xlines = [40 60 80 100 120];
+
+Specs = {'CSOnly','TraceOnly1','TraceOnly2','TraceOnly3', 'CSTrace1','CSTrace2','CSTrace3'};
+SizePlot = zeros(1,7);
+Step = 0.1;
+%%
+for group = 6
+    
+    ThisData = Activity(group).CSOnly.Data';
+    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
+    ThisDataSorted(:,end) = [];
+    Activity(group).CSOnly.DataHeatMap = ThisDataSorted;
+    SizePlot(1) = size(ThisDataSorted,1);
+    
+    % figure1
+    subplot('Position', [0.1, (sum(SizePlot(2:7))+sum(SizePlot)*Step*7/8)/(sum(SizePlot)*(Step+1)), 0.8, SizePlot(1)/(sum(SizePlot)*(Step+1))]);
+    imagesc(ThisDataSorted);caxis([-10 10]);
+    colormap(c);
+    xline(xline1,'--k','linewidth',1, 'HandleVisibility', 'off');xline(xline2,'--k','linewidth',1, 'HandleVisibility', 'off');xline(xline3,'--k','linewidth',1, 'HandleVisibility', 'off');xline(xline4,'--k','linewidth',1, 'HandleVisibility', 'off');xline(xline5,'--k','linewidth',1, 'HandleVisibility', 'off');
+    xticks([]);
+    ylabel('CSOnly', 'FontSize', 12);
+    yticks([1 size(ThisDataSorted,1)]);
+%     colorbar;
+    
+    ThisData = Activity(group).TraceOnly1.Data';
+    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
+    ThisDataSorted(:,end) = [];
+    Activity(group).TraceOnly1.DataHeatMap = ThisDataSorted;
+    SizePlot(2) = size(ThisDataSorted,1);
+    
+    % figure2
+    subplot('Position', [0.1, (sum(SizePlot(3:7))+sum(SizePlot)*Step*6/8)/(sum(SizePlot)*(Step+1)), 0.8, SizePlot(2)/(sum(SizePlot)*(Step+1))]);
+    imagesc(ThisDataSorted);caxis([-10 10]);
+    colormap(c);
+    xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
+    xticks([]);
+    ylabel('TraceOnly1', 'FontSize', 12);
+    yticks([1 size(ThisDataSorted,1)]);
+    
+    
+    ThisData = Activity(group).TraceOnly2.Data';
+    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
+    ThisDataSorted(:,end) = [];
+    Activity(group).TraceOnly2.DataHeatMap = ThisDataSorted;
+    SizePlot(3) = size(ThisDataSorted,1);
+    
+    % figure3
+    subplot('Position', [0.1, (sum(SizePlot(4:7))+sum(SizePlot)*Step*5/8)/(sum(SizePlot)*(Step+1)), 0.8, SizePlot(3)/(sum(SizePlot)*(Step+1))]);
+    imagesc(ThisDataSorted);caxis([-10 10]);
+    colormap(c);
+    
+    xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
+    xticks([]);
+    ylabel('TraceOnly2', 'FontSize', 12);
+    yticks([1 size(ThisDataSorted,1)]);
+    
+    
+    ThisData = Activity(group).TraceOnly3.Data';
+    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
+    ThisDataSorted(:,end) = [];
+    Activity(group).TraceOnly3.DataHeatMap = ThisDataSorted;
+    SizePlot(4) = size(ThisDataSorted,1);
+    
+    % figure4
+    subplot('Position', [0.1, (sum(SizePlot(5:7))+sum(SizePlot)*Step*4/8)/(sum(SizePlot)*(Step+1)), 0.8, SizePlot(4)/(sum(SizePlot)*(Step+1))]);
+    imagesc(ThisDataSorted);caxis([-10 10]);
+    colormap(c);
+    xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
+    xticks([]);
+    ylabel('TraceOnly3', 'FontSize', 12);
+    yticks([1 size(ThisDataSorted,1)]);
+    
+    
+    ThisData = Activity(group).CSTrace1.Data';
+    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
+    ThisDataSorted(:,end) = [];
+    Activity(group).CSTrace1.DataHeatMap = ThisDataSorted;
+    SizePlot(5) = size(ThisDataSorted,1);
+    
+    % figure5
+    subplot('Position', [0.1, (sum(SizePlot(6:7))+sum(SizePlot)*Step*3/8)/(sum(SizePlot)*(Step+1)), 0.8, SizePlot(5)/(sum(SizePlot)*(Step+1))]);
+    imagesc(ThisDataSorted);caxis([-10 10]);
+    colormap(c);
+    
+    xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
+    xticks([]);
+    ylabel('CSTrace1', 'FontSize', 12);
+    yticks([1 size(ThisDataSorted,1)]);
+    
+    
+    ThisData = Activity(group).CSTrace2.Data';
+    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
+    ThisDataSorted(:,end) = [];
+    Activity(group).CSTrace2.DataHeatMap = ThisDataSorted;
+    SizePlot(6) = size(ThisDataSorted,1);
+    
+    % figure6
+    subplot('Position', [0.1, (sum(SizePlot(7:7))+sum(SizePlot)*Step*2/8)/(sum(SizePlot)*(Step+1)), 0.8, SizePlot(6)/(sum(SizePlot)*(Step+1))]);
+    imagesc(ThisDataSorted);caxis([-10 10]);
+    colormap(c);
+    
+    xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
+    xticks([]);
+    ylabel('CSTrace2', 'FontSize', 12);
+    yticks([1 size(ThisDataSorted,1)]);
+    
+    
+    ThisData = Activity(group).CSTrace3.Data';
+    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
+    ThisDataSorted(:,end) = [];
+    Activity(group).CSTrace3.DataHeatMap = ThisDataSorted;
+    SizePlot(7) = size(ThisDataSorted,1);
+    
+    % figure7
+    subplot('Position', [0.1, (sum(SizePlot)*Step*1/8)/(sum(SizePlot)*(Step+1)), 0.8, SizePlot(7)/(sum(SizePlot)*(Step+1))]);
+    imagesc(ThisDataSorted);caxis([-10 10]);
+    colormap(c);
+    xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
+    xticks([]);
+    ylabel('CSTrace3', 'FontSize', 12);
+    yticks([1 size(ThisDataSorted,1)]);
+    xticks([1 40 60 80 100 120]);
+    xticklabels({'-40','0','20','40','60','80'});
+    colorbar('Position', [0.91, 0.33, 0.04, 0.33]);
+    caxis([-10 10]);
+    
+    % save for group
+    saveas(gca,sprintf('%s%s_HeatMap.png', PathPlot,TraceData(group).GroupName));
+    saveas(gca,sprintf('%s%s_HeatMap.fig', PathPlot,TraceData(group).GroupName));
+%         clf;
+end
 %% average Ca2+ signal baseline-feature
 TimeView = 140;
 
@@ -870,6 +1016,7 @@ for group = 1:6
         CStrace1IndFirst = CStrace1IndThis;
     end
     TraceData(group).DynamicCStrace1Between = CStrace1Dynamic;
+    clear 'CStrace1IndThis';
     
     %CS-only
     CStrace1IndexFirst = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSOnly%d1', 1)));
@@ -883,6 +1030,7 @@ for group = 1:6
         CStrace1IndFirst = CStrace1IndThis;
     end
     TraceData(group).DynamicCSOnly1Between = CStrace1Dynamic;
+    clear 'CStrace1IndThis';
     
     %Trace-only
     CStrace1IndexFirst = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d1', 1)));
@@ -894,7 +1042,9 @@ for group = 1:6
         PercentNum = length(CStrace1IndFirst);
         CStrace1Dynamic(trial-1).Num = length(CStrace1Dynamic(trial-1).Index)/PercentNum*100;
         CStrace1IndFirst = CStrace1IndThis;
-    end
+    end    
     TraceData(group).DynamicTraceOnly1Between = CStrace1Dynamic;
+    clear 'CStrace1IndThis';
 end
+%% 
 save(sprintf('%sNeuronPopData3.mat',PathOut));
