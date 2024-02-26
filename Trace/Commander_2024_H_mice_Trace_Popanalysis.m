@@ -127,6 +127,27 @@ for group = 1:size(TraceData,2)
 end
 save(sprintf('%sTraceDataAllGroupsShockBaseLine%s.mat',PathOut,NormWay));
 
+%% to make indexation by mouse
+
+for group = 1:size(TraceData,2)
+    
+    Iter = 1;
+    MouseIndex = zeros(1,TraceData(group).NeuronNum);
+    MiceIndex = ones(1,TraceData(group).NeuronNum);
+    
+    for mouse = 1:4
+        MiceIndex(Iter:Iter+TraceData(group).NeuronInd(mouse)-1) = mouse;
+        for cell = 1:TraceData(group).NeuronInd(mouse)
+            MouseIndex(Iter) = cell;
+            Iter = Iter + 1;
+        end
+    end
+    TraceData(group).MouseIndex = MouseIndex;
+    TraceData(group).MiceIndex = MiceIndex;
+end
+
+save(sprintf('%sNeuronPopData.mat',PathOut));
+
 %% searching spesializations of neurons
 
 ZscoreData = [];
@@ -313,30 +334,98 @@ save(sprintf('%sNeuronSpecDataNoShock_Sigma%d_Diff%d.mat',PathOut,SigmaValue,Dif
 
 %% additional plot tools
 %% average Ca2+ signal baseline-feature
+TimeView = 140;
 
 for group = 1:3
-    for feature = 1:size(TraceData(group).NeuronSpecData,2)
-        
-        BaseFeatureLine = [TraceData(group).NeuronSpecData(feature).BaseLineData; TraceData(group).NeuronSpecData(feature).NeuronSpecData];
-        
-        %         h=figure;
-        %         for cell = 1:size(BaseFeatureLine,2)
-        %             plot(1:size(BaseFeatureLine,1),  BaseFeatureLine(:,cell));
-        %             hold on;
-        %         end
-        
-        h = figure;
-        BaseFeatureLineMean = mean(BaseFeatureLine,2);
-        plot(1:size(BaseFeatureLineMean,1),  BaseFeatureLineMean');
-        xlabel('Time, s');
-        ylabel('Raw Ca2+');
-        title(sprintf('Group %s\nAverage Ca2+ activity of %s neurons',TraceData(group).GroupName, TraceData(group).NeuronSpecData(feature).Feature));
-        saveas(h, sprintf('%s%s_%s.png', PathPlot,TraceData(group).GroupName, TraceData(group).NeuronSpecData(feature).Feature));
-        delete(h);
-        
+    
+    %CSTrace1
+    Activity(group).CSTrace1.Data = [];
+    for trial = 2:7
+        TraceIndex = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d1', trial)));
+        BaseLineInd = find(strcmp(FeaturesHeaders, sprintf('baseline%d', trial)));
+        FirstTime = min(find(table2array(TraceData(group).Features(:,BaseLineInd)) == 1));
+        Activity(group).CSTrace1.Data = [Activity(group).CSTrace1.Data TraceData(group).NeuronDataNorm(FirstTime:FirstTime+TimeView-1,TraceData(group).NeuronPopData(TraceIndex).NeuronInd)];
     end
+    Activity(group).Data(:,1) = mean(Activity(group).CSTrace1.Data,2);
+    Activity(group).Data(:,2) = std(Activity(group).CSTrace1.Data,0,2)/sqrt(size(Activity(group).CSTrace1.Data,2));
+    
+    %CSTrace2
+    Activity(group).CSTrace2.Data = [];
+    for trial = 2:7
+        TraceIndex = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d2', trial)));
+        BaseLineInd = find(strcmp(FeaturesHeaders, sprintf('baseline%d', trial)));
+        FirstTime = min(find(table2array(TraceData(group).Features(:,BaseLineInd)) == 1));
+        Activity(group).CSTrace2.Data = [Activity(group).CSTrace2.Data TraceData(group).NeuronDataNorm(FirstTime:FirstTime+TimeView-1,TraceData(group).NeuronPopData(TraceIndex).NeuronInd)];
+    end
+    Activity(group).Data(:,3) = mean(Activity(group).CSTrace2.Data,2);
+    Activity(group).Data(:,4) = std(Activity(group).CSTrace2.Data,0,2)/sqrt(size(Activity(group).CSTrace2.Data,2));
+    
+    %CSTrace3
+    Activity(group).CSTrace3.Data = [];
+    for trial = 2:7
+        TraceIndex = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d3', trial)));
+        BaseLineInd = find(strcmp(FeaturesHeaders, sprintf('baseline%d', trial)));
+        FirstTime = min(find(table2array(TraceData(group).Features(:,BaseLineInd)) == 1));
+        Activity(group).CSTrace3.Data = [Activity(group).CSTrace3.Data TraceData(group).NeuronDataNorm(FirstTime:FirstTime+TimeView-1,TraceData(group).NeuronPopData(TraceIndex).NeuronInd)];
+    end
+    Activity(group).Data(:,5) = mean(Activity(group).CSTrace3.Data,2);
+    Activity(group).Data(:,6) = std(Activity(group).CSTrace3.Data,0,2)/sqrt(size(Activity(group).CSTrace3.Data,2));
+    
+    %TraceOnly1
+    Activity(group).TraceOnly1.Data = [];
+    for trial = 2:7
+        TraceIndex = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d1', trial)));
+        BaseLineInd = find(strcmp(FeaturesHeaders, sprintf('baseline%d', trial)));
+        FirstTime = min(find(table2array(TraceData(group).Features(:,BaseLineInd)) == 1));
+        Activity(group).TraceOnly1.Data = [Activity(group).TraceOnly1.Data TraceData(group).NeuronDataNorm(FirstTime:FirstTime+TimeView-1,TraceData(group).NeuronPopData(TraceIndex).NeuronInd)];
+    end
+    Activity(group).Data(:,7) = mean(Activity(group).TraceOnly1.Data,2);
+    Activity(group).Data(:,8) = std(Activity(group).TraceOnly1.Data,0,2)/sqrt(size(Activity(group).TraceOnly1.Data,2));
+    
+    %TraceOnly2
+    Activity(group).TraceOnly2.Data = [];
+    for trial = 2:7
+        TraceIndex = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d2', trial)));
+        BaseLineInd = find(strcmp(FeaturesHeaders, sprintf('baseline%d', trial)));
+        FirstTime = min(find(table2array(TraceData(group).Features(:,BaseLineInd)) == 1));
+        Activity(group).TraceOnly2.Data = [Activity(group).TraceOnly2.Data TraceData(group).NeuronDataNorm(FirstTime:FirstTime+TimeView-1,TraceData(group).NeuronPopData(TraceIndex).NeuronInd)];
+    end
+    Activity(group).Data(:,9) = mean(Activity(group).TraceOnly2.Data,2);
+    Activity(group).Data(:,10) = std(Activity(group).TraceOnly2.Data,0,2)/sqrt(size(Activity(group).TraceOnly2.Data,2));
+    
+    %TraceOnly3
+    Activity(group).TraceOnly3.Data = [];
+    for trial = 2:7
+        TraceIndex = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d3', trial)));
+        BaseLineInd = find(strcmp(FeaturesHeaders, sprintf('baseline%d', trial)));
+        FirstTime = min(find(table2array(TraceData(group).Features(:,BaseLineInd)) == 1));
+        Activity(group).TraceOnly3.Data = [Activity(group).TraceOnly3.Data TraceData(group).NeuronDataNorm(FirstTime:FirstTime+TimeView-1,TraceData(group).NeuronPopData(TraceIndex).NeuronInd)];
+    end
+    Activity(group).Data(:,11) = mean(Activity(group).TraceOnly3.Data,2);
+    Activity(group).Data(:,12) = std(Activity(group).TraceOnly3.Data,0,2)/sqrt(size(Activity(group).TraceOnly3.Data,2));
+    
+    %CSOnly
+    Activity(group).CSOnly.Data = [];
+    for trial = 2:7
+        TraceIndex = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSOnly%d1', trial)));
+        BaseLineInd = find(strcmp(FeaturesHeaders, sprintf('baseline%d', trial)));
+        FirstTime = min(find(table2array(TraceData(group).Features(:,BaseLineInd)) == 1));
+        Activity(group).CSOnly.Data = [Activity(group).CSOnly.Data TraceData(group).NeuronDataNorm(FirstTime:FirstTime+TimeView-1,TraceData(group).NeuronPopData(TraceIndex).NeuronInd)];
+    end
+    Activity(group).Data(:,13) = mean(Activity(group).CSOnly.Data,2);
+    Activity(group).Data(:,14) = std(Activity(group).CSOnly.Data,0,2)/sqrt(size(Activity(group).CSOnly.Data,2));
+    
 end
-
+%%
+save(sprintf('%sNeuronPopData5.mat',PathOut));
+% h = figure;
+% 
+% plot(1:TimeView,  Activity.Trace1.Mean);
+% xlabel('Время, с');
+% ylabel('Ca2+ dF/F, MAD');
+% title(sprintf('Group %s\nAverage Ca2+ activity of %s neurons',TraceData(group).GroupName, TraceData(group).NeuronSpecData(feature).Feature));
+% saveas(h, sprintf('%s%s_%s.png', PathPlot,TraceData(group).GroupName, TraceData(group).NeuronSpecData(feature).Feature));
+% delete(h);
 
 %% show all traces from group
 
@@ -602,3 +691,210 @@ for group = 1:size(TraceData,2)
 end
 save(sprintf('%sNeuronPopData.mat',PathOut));
 
+
+%% figure I
+
+% to make indexation by mouse for spec neurons
+for group = 1:size(TraceData,2)
+    fprintf('Analysis of %d group for shock feature started\n',group);
+    for spec  = 1: size(TraceData(group).NeuronPopData  ,2)
+        TraceData(group).NeuronPopData(spec).NeuronMouseInd = TraceData(group).MouseIndex(TraceData(group).NeuronPopData(spec).NeuronInd);
+        TraceData(group).NeuronPopData(spec).NeuronMiceInd = TraceData(group).MiceIndex(TraceData(group).NeuronPopData(spec).NeuronInd);
+        TraceData(group).NeuronPopData(spec).NeuronMouseNum = [
+            length(find(TraceData(group).NeuronPopData(spec).NeuronMiceInd == 1))...
+            length(find(TraceData(group).NeuronPopData(spec).NeuronMiceInd == 2))...
+            length(find(TraceData(group).NeuronPopData(spec).NeuronMiceInd == 3))...
+            length(find(TraceData(group).NeuronPopData(spec).NeuronMiceInd == 4))...
+            ];
+        TraceData(group).NeuronPopData(spec).NeuronMousePercentAll = [
+            round(length(find(TraceData(group).NeuronPopData(spec).NeuronMiceInd == 1))/TraceData(group).NeuronInd(1)*100,2)...
+            round(length(find(TraceData(group).NeuronPopData(spec).NeuronMiceInd == 2))/TraceData(group).NeuronInd(2)*100,2)...
+            round(length(find(TraceData(group).NeuronPopData(spec).NeuronMiceInd == 3))/TraceData(group).NeuronInd(3)*100,2)...
+            round(length(find(TraceData(group).NeuronPopData(spec).NeuronMiceInd == 4))/TraceData(group).NeuronInd(4)*100,2)...
+            ];
+    end
+end
+
+%% reshape data for prism
+CSTrace1MousePercentAll = zeros(4,7);
+CSTrace2MousePercentAll = zeros(4,7);
+CSTrace3MousePercentAll = zeros(4,7);
+TraceOnly1MousePercentAll = zeros(4,7);
+TraceOnly2MousePercentAll = zeros(4,7);
+TraceOnly3MousePercentAll = zeros(4,7);
+CSOnlyMousePercentAll = zeros(4,7);
+
+for group = 1:size(TraceData,2)
+    fprintf('Analysis of %d group for shock feature started\n',group);
+    
+    for trial = 1:7
+        CStrace1Index = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d1', trial)));
+        CSTrace1MousePercentAll(:,trial) = TraceData(group).NeuronPopData(CStrace1Index).NeuronMousePercentAll';
+        
+        CStrace2Index = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d2', trial)));
+        CSTrace2MousePercentAll(:,trial) = TraceData(group).NeuronPopData(CStrace2Index).NeuronMousePercentAll';
+        
+        CStrace3Index = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d3', trial)));
+        CSTrace3MousePercentAll(:,trial) = TraceData(group).NeuronPopData(CStrace3Index).NeuronMousePercentAll';
+        
+        TraceOnly1Index = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d1', trial)));
+        TraceOnly1MousePercentAll(:,trial) = TraceData(group).NeuronPopData(TraceOnly1Index).NeuronMousePercentAll';
+        
+        TraceOnly2Index = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d2', trial)));
+        TraceOnly2MousePercentAll(:,trial) = TraceData(group).NeuronPopData(TraceOnly2Index).NeuronMousePercentAll';
+        
+        TraceOnly3Index = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d3', trial)));
+        TraceOnly3MousePercentAll(:,trial) = TraceData(group).NeuronPopData(TraceOnly3Index).NeuronMousePercentAll';
+        
+        CSOnlyIndex = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSOnly%d1', trial)));
+        CSOnlyMousePercentAll(:,trial) = TraceData(group).NeuronPopData(CSOnlyIndex).NeuronMousePercentAll';
+    end
+    TraceData(group).CSTrace1MousePercentAll = CSTrace1MousePercentAll;
+    TraceData(group).CSTrace2MousePercentAll = CSTrace2MousePercentAll;
+    TraceData(group).CSTrace3MousePercentAll = CSTrace3MousePercentAll;
+    TraceData(group).TraceOnly1MousePercentAll = TraceOnly1MousePercentAll;
+    TraceData(group).TraceOnly2MousePercentAll = TraceOnly2MousePercentAll;
+    TraceData(group).TraceOnly3MousePercentAll = TraceOnly3MousePercentAll;
+    TraceData(group).CSOnlyMousePercentAll = CSOnlyMousePercentAll;
+    
+end
+%%
+save(sprintf('%sNeuronPopData.mat',PathOut));
+
+%% dinamyc of the same populations 1-3 groups
+
+for group = 1:3
+    fprintf('Analysis of %d group for shock feature started\n',group);    
+    
+    % CSTrace1
+    CStrace1IndexFirst = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d1', 2)));
+    CStrace1Dynamic(1).Index = TraceData(group).NeuronPopData(CStrace1IndexFirst).NeuronInd;
+    CStrace1Dynamic(1).Num = 100;
+    PercentNum = length(CStrace1Dynamic(1).Index);
+    for trial = 3:7
+        CStrace1IndexThis = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d1', trial)));
+        CStrace1IndThis = TraceData(group).NeuronPopData(CStrace1IndexThis).NeuronInd;
+        [CStrace1Dynamic(trial-1).Index] = intersect(CStrace1Dynamic(trial-2).Index,CStrace1IndThis);
+        CStrace1Dynamic(trial-1).Num = length(CStrace1Dynamic(trial-1).Index)/PercentNum*100;
+    end
+    TraceData(group).DynamicCStrace1 = CStrace1Dynamic;
+    
+    %CS-only
+    CStrace1IndexFirst = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSOnly%d1', 2)));
+    CStrace1Dynamic(1).Index = TraceData(group).NeuronPopData(CStrace1IndexFirst).NeuronInd;
+    CStrace1Dynamic(1).Num = 100;
+    PercentNum = length(CStrace1Dynamic(1).Index);
+    for trial = 3:7
+        CStrace1IndexThis = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSOnly%d1', trial)));
+        CStrace1IndThis = TraceData(group).NeuronPopData(CStrace1IndexThis).NeuronInd;
+        [CStrace1Dynamic(trial-1).Index] = intersect(CStrace1Dynamic(trial-2).Index,CStrace1IndThis);
+        CStrace1Dynamic(trial-1).Num = length(CStrace1Dynamic(trial-1).Index)/PercentNum*100;
+    end
+    TraceData(group).DynamicCSOnly = CStrace1Dynamic;
+    
+    %Trace-only
+    CStrace1IndexFirst = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d1', 2)));
+    CStrace1Dynamic(1).Index = TraceData(group).NeuronPopData(CStrace1IndexFirst).NeuronInd;
+    CStrace1Dynamic(1).Num = 100;
+    PercentNum = length(CStrace1Dynamic(1).Index);
+    for trial = 3:7
+        CStrace1IndexThis = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d1', trial)));
+        CStrace1IndThis = TraceData(group).NeuronPopData(CStrace1IndexThis).NeuronInd;
+        [CStrace1Dynamic(trial-1).Index] = intersect(CStrace1Dynamic(trial-2).Index,CStrace1IndThis);
+        CStrace1Dynamic(trial-1).Num = length(CStrace1Dynamic(trial-1).Index)/PercentNum*100;
+    end
+    TraceData(group).DynamicTraceOnly = CStrace1Dynamic;
+end
+
+save(sprintf('%sNeuronPopData2.mat',PathOut));
+%% dinamyc of the same populations 3-6 groups
+
+for group = 4:6
+    fprintf('Analysis of %d group for shock feature started\n',group);    
+    
+    % CSTrace1
+    CStrace1IndexFirst = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d1', 1)));
+    CStrace1Dynamic(1).Index = TraceData(group).NeuronPopData(CStrace1IndexFirst).NeuronInd;
+    CStrace1Dynamic(1).Num = 100;
+    PercentNum = length(CStrace1Dynamic(1).Index);
+    for trial = 2:7
+        CStrace1IndexThis = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d1', trial)));
+        CStrace1IndThis = TraceData(group).NeuronPopData(CStrace1IndexThis).NeuronInd;
+        [CStrace1Dynamic(trial).Index] = intersect(CStrace1Dynamic(trial-1).Index,CStrace1IndThis);
+        CStrace1Dynamic(trial).Num = length(CStrace1Dynamic(trial).Index)/PercentNum*100;
+    end
+    TraceData(group).DynamicCStrace1 = CStrace1Dynamic;
+    
+    %CS-only
+    CStrace1IndexFirst = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSOnly%d1', 1)));
+    CStrace1Dynamic(1).Index = TraceData(group).NeuronPopData(CStrace1IndexFirst).NeuronInd;
+    CStrace1Dynamic(1).Num = 100;
+    PercentNum = length(CStrace1Dynamic(1).Index);
+    for trial = 2:7
+        CStrace1IndexThis = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSOnly%d1', trial)));
+        CStrace1IndThis = TraceData(group).NeuronPopData(CStrace1IndexThis).NeuronInd;
+        [CStrace1Dynamic(trial).Index] = intersect(CStrace1Dynamic(trial-1).Index,CStrace1IndThis);
+        CStrace1Dynamic(trial).Num = length(CStrace1Dynamic(trial).Index)/PercentNum*100;
+    end
+    TraceData(group).DynamicCSOnly = CStrace1Dynamic;
+    
+    %Trace-only
+    CStrace1IndexFirst = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d1', 1)));
+    CStrace1Dynamic(1).Index = TraceData(group).NeuronPopData(CStrace1IndexFirst).NeuronInd;
+    CStrace1Dynamic(1).Num = 100;
+    PercentNum = length(CStrace1Dynamic(1).Index);
+    for trial = 2:7
+        CStrace1IndexThis = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d1', trial)));
+        CStrace1IndThis = TraceData(group).NeuronPopData(CStrace1IndexThis).NeuronInd;
+        [CStrace1Dynamic(trial).Index] = intersect(CStrace1Dynamic(trial-1).Index,CStrace1IndThis);
+        CStrace1Dynamic(trial).Num = length(CStrace1Dynamic(trial).Index)/PercentNum*100;
+    end
+    TraceData(group).DynamicTraceOnly = CStrace1Dynamic;
+end
+
+
+%% dinamyc of the same populations between neighborhood trials
+
+for group = 1:6
+    fprintf('Analysis of %d group for shock feature started\n',group);
+    
+    % CSTrace1
+    CStrace1IndexFirst = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d1', 1)));
+    CStrace1IndFirst = TraceData(group).NeuronPopData(CStrace1IndexFirst).NeuronInd;
+    for trial = 2:7
+        CStrace1IndexThis = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSTrace%d1', trial)));
+        CStrace1IndThis = TraceData(group).NeuronPopData(CStrace1IndexThis).NeuronInd;
+        [CStrace1Dynamic(trial-1).Index] = intersect(CStrace1IndFirst,CStrace1IndThis);
+        PercentNum = length(CStrace1IndFirst);
+        CStrace1Dynamic(trial-1).Num = length(CStrace1Dynamic(trial-1).Index)/PercentNum*100;
+        CStrace1IndFirst = CStrace1IndThis;
+    end
+    TraceData(group).DynamicCStrace1Between = CStrace1Dynamic;
+    
+    %CS-only
+    CStrace1IndexFirst = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSOnly%d1', 1)));
+    CStrace1IndFirst = TraceData(group).NeuronPopData(CStrace1IndexFirst).NeuronInd;
+    for trial = 2:7
+        CStrace1IndexThis = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('CSOnly%d1', trial)));
+        CStrace1IndThis = TraceData(group).NeuronPopData(CStrace1IndexThis).NeuronInd;
+        [CStrace1Dynamic(trial-1).Index] = intersect(CStrace1IndFirst,CStrace1IndThis);
+        PercentNum = length(CStrace1IndFirst);
+        CStrace1Dynamic(trial-1).Num = length(CStrace1Dynamic(trial-1).Index)/PercentNum*100;
+        CStrace1IndFirst = CStrace1IndThis;
+    end
+    TraceData(group).DynamicCSOnly1Between = CStrace1Dynamic;
+    
+    %Trace-only
+    CStrace1IndexFirst = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d1', 1)));
+    CStrace1IndFirst = TraceData(group).NeuronPopData(CStrace1IndexFirst).NeuronInd;
+    for trial = 2:7
+        CStrace1IndexThis = find(strcmp({TraceData(group).NeuronPopData.Feature} , sprintf('TraceOnly%d1', trial)));
+        CStrace1IndThis = TraceData(group).NeuronPopData(CStrace1IndexThis).NeuronInd;
+        [CStrace1Dynamic(trial-1).Index] = intersect(CStrace1IndFirst,CStrace1IndThis);
+        PercentNum = length(CStrace1IndFirst);
+        CStrace1Dynamic(trial-1).Num = length(CStrace1Dynamic(trial-1).Index)/PercentNum*100;
+        CStrace1IndFirst = CStrace1IndThis;
+    end
+    TraceData(group).DynamicTraceOnly1Between = CStrace1Dynamic;
+end
+save(sprintf('%sNeuronPopData3.mat',PathOut));
