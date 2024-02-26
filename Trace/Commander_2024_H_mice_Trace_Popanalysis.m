@@ -346,11 +346,13 @@ xlines = [40 60 80 100 120];
 Specs = {'CSOnly','TraceOnly1','TraceOnly2','TraceOnly3', 'CSTrace1','CSTrace2','CSTrace3'};
 SizePlot = zeros(1,7);
 Step = 0.1;
+LengthMax1 = 80;
 %%
 for group = 6
     
+    % 1
     ThisData = Activity(group).CSOnly.Data';
-    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    [~, MaxIndex] = max(ThisData(:,1:60), [], 2);
     ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
     ThisDataSorted(:,end) = [];
     Activity(group).CSOnly.DataHeatMap = ThisDataSorted;
@@ -362,12 +364,13 @@ for group = 6
     colormap(c);
     xline(xline1,'--k','linewidth',1, 'HandleVisibility', 'off');xline(xline2,'--k','linewidth',1, 'HandleVisibility', 'off');xline(xline3,'--k','linewidth',1, 'HandleVisibility', 'off');xline(xline4,'--k','linewidth',1, 'HandleVisibility', 'off');xline(xline5,'--k','linewidth',1, 'HandleVisibility', 'off');
     xticks([]);
-    ylabel('CSOnly', 'FontSize', 12);
+%     ylabel('CSOnly', 'FontSize', 12);
     yticks([1 size(ThisDataSorted,1)]);
-%     colorbar;
+    set(gca, 'FontSize', 20);
     
+    %2
     ThisData = Activity(group).TraceOnly1.Data';
-    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    [~, MaxIndex] = max(ThisData(:,1:80), [], 2);
     ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
     ThisDataSorted(:,end) = [];
     Activity(group).TraceOnly1.DataHeatMap = ThisDataSorted;
@@ -379,12 +382,12 @@ for group = 6
     colormap(c);
     xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
     xticks([]);
-    ylabel('TraceOnly1', 'FontSize', 12);
+%     ylabel('TraceOnly1', 'FontSize', 12);
     yticks([1 size(ThisDataSorted,1)]);
-    
+    set(gca, 'FontSize', 20);
     
     ThisData = Activity(group).TraceOnly2.Data';
-    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    [maxValues, MaxIndex] = max(ThisData(:,1:100), [], 2);
     ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
     ThisDataSorted(:,end) = [];
     Activity(group).TraceOnly2.DataHeatMap = ThisDataSorted;
@@ -397,12 +400,12 @@ for group = 6
     
     xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
     xticks([]);
-    ylabel('TraceOnly2', 'FontSize', 12);
+%     ylabel('TraceOnly2', 'FontSize', 12);
     yticks([1 size(ThisDataSorted,1)]);
-    
+    set(gca, 'FontSize', 20);
     
     ThisData = Activity(group).TraceOnly3.Data';
-    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    [maxValues, MaxIndex] = max(ThisData(:,1:120), [], 2);
     ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
     ThisDataSorted(:,end) = [];
     Activity(group).TraceOnly3.DataHeatMap = ThisDataSorted;
@@ -414,12 +417,12 @@ for group = 6
     colormap(c);
     xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
     xticks([]);
-    ylabel('TraceOnly3', 'FontSize', 12);
+%     ylabel('TraceOnly3', 'FontSize', 12);
     yticks([1 size(ThisDataSorted,1)]);
-    
+    set(gca, 'FontSize', 20);
     
     ThisData = Activity(group).CSTrace1.Data';
-    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    [maxValues, MaxIndex] = max(ThisData(:,1:80), [], 2);
     ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
     ThisDataSorted(:,end) = [];
     Activity(group).CSTrace1.DataHeatMap = ThisDataSorted;
@@ -432,12 +435,12 @@ for group = 6
     
     xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
     xticks([]);
-    ylabel('CSTrace1', 'FontSize', 12);
+%     ylabel('CSTrace1', 'FontSize', 12);
     yticks([1 size(ThisDataSorted,1)]);
-    
+    set(gca, 'FontSize', 20);
     
     ThisData = Activity(group).CSTrace2.Data';
-    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    [maxValues, MaxIndex] = max(ThisData(:,1:100), [], 2);
     ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
     ThisDataSorted(:,end) = [];
     Activity(group).CSTrace2.DataHeatMap = ThisDataSorted;
@@ -450,12 +453,12 @@ for group = 6
     
     xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
     xticks([]);
-    ylabel('CSTrace2', 'FontSize', 12);
+%     ylabel('CSTrace2', 'FontSize', 12);
     yticks([1 size(ThisDataSorted,1)]);
-    
+    set(gca, 'FontSize', 20);
     
     ThisData = Activity(group).CSTrace3.Data';
-    [maxValues, MaxIndex] = max(ThisData, [], 2);
+    [maxValues, MaxIndex] = max(ThisData(:,1:120), [], 2);
     ThisDataSorted = sortrows([ThisData, MaxIndex], size(ThisData, 2) + 1, 'ascend');
     ThisDataSorted(:,end) = [];
     Activity(group).CSTrace3.DataHeatMap = ThisDataSorted;
@@ -467,15 +470,17 @@ for group = 6
     colormap(c);
     xline(xline1,'--k','linewidth',1);xline(xline2,'--k','linewidth',1);xline(xline3,'--k','linewidth',1);xline(xline4,'--k','linewidth',1);xline(xline5,'--k','linewidth',1);
     xticks([]);
-    ylabel('CSTrace3', 'FontSize', 12);
+%     ylabel('CSTrace3', 'FontSize', 12);
     yticks([1 size(ThisDataSorted,1)]);
-    xticks([1 40 60 80 100 120]);
-    xticklabels({'-40','0','20','40','60','80'});
-    colorbar('Position', [0.91, 0.33, 0.04, 0.33]);
+%     xticks([1 40 60 80 100 120]);
+%     xticklabels({'-40','0','20','40','60','80'});
+%     yticks([]);
+    colorbar('Position', [0.91, 0.33, 0.03, 0.33]);
     caxis([-10 10]);
+    set(gca, 'FontSize', 20);
     
     % save for group
-    saveas(gca,sprintf('%s%s_HeatMap.png', PathPlot,TraceData(group).GroupName));
+%     saveas(gca,sprintf('%s%s_HeatMap.png', PathPlot,TraceData(group).GroupName));
     saveas(gca,sprintf('%s%s_HeatMap.fig', PathPlot,TraceData(group).GroupName));
 %         clf;
 end
