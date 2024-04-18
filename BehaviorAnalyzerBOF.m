@@ -950,12 +950,13 @@ delete(h);
 save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% make separate acts videos
-
+MaxPoints = 1000;
+PointsLine = [];
 % for act = 1:size(Acts,2)
-for act = 1:size(Acts,2)
-% for act = []
+% for act = 1:size(Acts,2)
+for act = [13]
     fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
-    v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
+    v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s_track',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
     v.FrameRate = Options.FrameRate;
     open(v);
     
@@ -985,13 +986,19 @@ for act = 1:size(Acts,2)
         for part=1:length(BodyPartsNames)
             RealFrame = insertShape(RealFrame,'circle', [BodyPartsTraces(part).TraceOriginal.X(k)/Options.x_kcorr BodyPartsTraces(part).TraceOriginal.Y(k) MarkSize*2],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
             RealFrame = insertShape(RealFrame,'filledcircle', [BodyPartsTracesMainX(part,k)/Options.x_kcorr BodyPartsTracesMainY(part,k) MarkSize],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
-        end        
+        end
         
         % field of view
         if Acts(act).ActName == "bowlInView" || Acts(act).ActName == "objectInView"
             RealFrame = insertShape(RealFrame, 'Line', View.Line.L(k,:), 'LineWidth', 3, 'Color', 'red');
             RealFrame = insertShape(RealFrame, 'Line', View.Line.R(k,:), 'LineWidth', 3, 'Color', 'red');
-        end        
+        end
+        
+        % trajectory of mouse
+        PointsLine = [PointsLine k];
+        for l = 1:length(PointsLine)
+            RealFrame = insertShape(RealFrame,'filledcircle', [BodyPartsTraces(5).TraceOriginal.X(PointsLine(l))/Options.x_kcorr BodyPartsTraces(5).TraceOriginal.Y(PointsLine(l)) 2],'Color','green','LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
+        end
         
         % radial velocities of bodyparts in a moving frame of reference
         %         for part=1:length(BodyPartsNames)

@@ -587,15 +587,17 @@ FillColor{3} = [0, 0.5, 0.5];    % cyan 1 trace1
 FillColor{4} = [0, 0.8, 0.8];    % cyan 2 trace2
 FillColor{5} = [0, 1, 1];        % cyan 3 trace3
 FillColor{6} = [1, 0, 0];        % red shock
-Transparency = 0.3;
+Transparency = 0.5;
 FeaturePlotList = {'baseline','sound','trace1','trace2','trace3','shock'};
-
+LineWidth = 3;
 for group = 1:6
     HH = 0;
     
+    IndSpec =  TraceData(1).NeuronPopData(2).NeuronInd ;
     h=figure;
-    for cell=1:TraceData(group).NeuronNum
-        plot(1:1294, TraceData(group).NeuronDataNorm(:,cell)+HH); hold on;
+%     for cell=1:TraceData(group).NeuronNum
+    for cell=IndSpec
+        plot(1:1294, TraceData(group).NeuronDataNorm(:,cell)+HH, 'LineWidth',LineWidth); hold on;
         HH = HH + max(TraceData(group).NeuronDataNorm(:,cell));
     end
     
@@ -630,8 +632,8 @@ for group = 1:6
     xlabel('Time, s');
     ylabel('Norm Ca2+ (Mad method)');
     title(sprintf('Group: %s',TraceData(group).GroupName));
-    saveas(h, sprintf('%sAllTraces\\%s_traces.fig', PathPlot, TraceData(group).GroupName));
-    delete(h);
+%     saveas(h, sprintf('%sAllTraces\\%s_traces.fig', PathPlot, TraceData(group).GroupName));
+%     delete(h);
 end
 
 %% show spec populations from group
@@ -643,33 +645,33 @@ FillColor{3} = [0, 0.5, 0.5];    % cyan 1 trace1
 FillColor{4} = [0, 0.8, 0.8];    % cyan 2 trace2
 FillColor{5} = [0, 1, 1];        % cyan 3 trace3
 FillColor{6} = [1, 0, 0];        % red shock
-Transparency = 0.3;
+Transparency = 0.5;
 FeaturePlotList = {'baseline','sound','trace1','trace2','trace3','shock'};
-
+LineWifth = 3;
 for group = 1:6
     
     for spec = 1:size(TraceData(group).NeuronSpecData,2)
         HH = 0;
         h=figure;
-        IndSpec = TraceData(group).NeuronSpecData(spec).NeuronSpecInd;
+        IndSpec = TraceData(group).NeuronSpecData(spec).NeuronSpecInd;        
         indTemp = 1;
         for cell = IndSpec
             plot(1:1294, TraceData(group).NeuronDataNorm(:,cell)+HH); hold on;
             
-            % text z-score and diff
-            if spec == 43
-                IndTextPlot = 4;
-            else
-                IndTextPlot = find(strcmp(FeaturesHeaders, sprintf('baseline%d',str2num(TraceData(1).NeuronSpecData(spec).Trial(end)))));
-            end
-            textPositionX = min(find(table2array(TraceData(group).Features(:,IndTextPlot)))) - 20; %#ok<MXFND>
-            textPositionY = HH+5;
-            if ~isempty(TraceData(group).NeuronSpecData(spec).NeuronDiff)
-                textString = sprintf('Z: %2.2f. Diff: %2.2f',TraceData(group).NeuronSpecData(spec).NeuronSpecZscore(indTemp),TraceData(group).NeuronSpecData(spec).NeuronDiff(indTemp));
-            else
-                textString = sprintf('Z: %2.2f. Diff: ??',TraceData(group).NeuronSpecData(spec).NeuronSpecZscore(indTemp));
-            end
-            text(textPositionX, textPositionY, textString, 'FontSize', 8, 'FontWeight', 'bold', 'Color', 'red');
+%             % text z-score and diff
+%             if spec == 43
+%                 IndTextPlot = 4;
+%             else
+%                 IndTextPlot = find(strcmp(FeaturesHeaders, sprintf('baseline%d',str2num(TraceData(1).NeuronSpecData(spec).Trial(end)))));
+%             end
+%             textPositionX = min(find(table2array(TraceData(group).Features(:,IndTextPlot)))) - 20; %#ok<MXFND>
+%             textPositionY = HH+5;
+%             if ~isempty(TraceData(group).NeuronSpecData(spec).NeuronDiff)
+%                 textString = sprintf('Z: %2.2f. Diff: %2.2f',TraceData(group).NeuronSpecData(spec).NeuronSpecZscore(indTemp),TraceData(group).NeuronSpecData(spec).NeuronDiff(indTemp));
+%             else
+%                 textString = sprintf('Z: %2.2f. Diff: ??',TraceData(group).NeuronSpecData(spec).NeuronSpecZscore(indTemp));
+%             end
+%             text(textPositionX, textPositionY, textString, 'FontSize', 8, 'FontWeight', 'bold', 'Color', 'red');
             
             HH = HH + max(TraceData(group).NeuronDataNorm(:,cell));
             indTemp = indTemp + 1;
