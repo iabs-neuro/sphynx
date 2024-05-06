@@ -1,18 +1,29 @@
-function [N_ideal, mask] = ConvBorderFix(N_orig,mask_orig)
+function [N_ideal, mask] = ConvBorderFix(N_orig,mask_orig, kernel_size, kernel_sigma)
 % Two dimensional convolution with Gauss kernel and constant summ of matrix
-% N_orig = N;
+% 27.04.24 kernel size and sigma added
+% TO DO make for different sizes correct, now only for 3x3
+
+% for debugging
+% N_orig = N_freq;
 % mask_orig = mask_t;
-% making extended matrix for comvolution
-N(1:size(N_orig,1)+4,1:size(N_orig,2)+4) = 0;
-N(3:size(N_orig,1)+2,3:size(N_orig,2)+2) = N_orig;
+% kernel_size = kernel_opt.big.size;
+% kernel_sigma = kernel_opt.big.sigma;
+
+size_add = kernel_size-1;
+kernel_size_half = round((kernel_size-1)/2);
+
+% making extended matrix for convolution
+N = zeros(size(N_orig,1)+2*size_add,size(N_orig,2)+2*size_add);
+N(size_add+1:size_add+size(N_orig,1),size_add+1:size_add+size(N_orig,2)) = N_orig;
 
 % making masks for holes and border
-mask_holes(1:size(N,1),1:size(N,2)) = 0;
+mask_holes = zeros(size(N,1),size(N,2));
 if sum(sum(mask_orig))
-    mask_holes(1:size(N,1),1:size(N,2)) = 1;
-    mask_holes(3:size(N_orig,1)+2,3:size(N_orig,2)+2) = mask_orig;
+    mask_holes = ones(size(N,1),size(N,2));
+    mask_holes(size_add+1:size_add+size(N_orig,1),size_add+1:size_add+size(N_orig,2)) = mask_orig;
 end
-mask_border(1:size(N,1),1:size(N,2)) = 0;
+
+mask_border = zeros(size(N,1),size(N,2));
 for ii=1:size(N,1)
     for jj=1:size(N,2)
         if N(ii,jj) == 0 && sum(sum(mask_orig))==0
@@ -24,7 +35,8 @@ for ii=1:size(N,1)
     end
 end
 
-ts = fspecial('gaussian', 3, 1.5);
+% main part
+ts = fspecial('gaussian', kernel_size, kernel_sigma);
 N_sm = conv2(N, single(ts), 'same');
 value_holes = mask_holes.*N_sm;
 N_sm2 = N_sm-value_holes;
@@ -32,13 +44,13 @@ N_sm2 = N_sm-value_holes;
 for ii=1:size(N,1)
     for jj=1:size(N,2)
         if value_holes(ii,jj)>0
-            ts2 = ts.*mask_border(ii-1:ii+1,jj-1:jj+1);
+            ts2 = ts.*mask_border(ii-kernel_size_half:ii+kernel_size_half,jj-kernel_size_half:jj+kernel_size_half);
             ts3 = ts2./sum(sum(ts2))*value_holes(ii,jj);
-            N_sm2(ii-1:ii+1,jj-1:jj+1) = N_sm2(ii-1:ii+1,jj-1:jj+1)+ts3;
+            N_sm2(ii-kernel_size_half:ii+kernel_size_half,jj-kernel_size_half:jj+kernel_size_half) = N_sm2(ii-kernel_size_half:ii+kernel_size_half,jj-kernel_size_half:jj+kernel_size_half)+ts3;
         end
     end
 end
 
-N_ideal = N_sm2(3:size(N_orig,1)+2,3:size(N_orig,2)+2);
-mask = mask_holes(3:size(N_orig,1)+2,3:size(N_orig,2)+2);
+N_ideal = N_sm2(size_add+1:size_add+size(N_orig,1),size_add+1:size_add+size(N_orig,2));
+mask = mask_holes(size_add+1:size_add+size(N_orig,1),size_add+1:size_add+size(N_orig,2));
 end
