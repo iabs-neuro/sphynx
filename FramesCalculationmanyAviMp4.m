@@ -57,6 +57,7 @@ fileExt = cellfun(@(x) x(end-2:end), filenames, 'UniformOutput', false);
 if all(strcmp(fileExt, 'csv'))
     % Обработка CSV файлов
     totalRows = cell(size(filenames));
+    totalTime = cell(size(filenames));
     TotalTotalRows = 0;
     
     % Обходим все выбранные CSV файлы
@@ -66,11 +67,13 @@ if all(strcmp(fileExt, 'csv'))
         
         % Читаем CSV файл и считаем количество строк
         csvData = readtable(csvPath);
+        csvDataArray = table2array(csvData);
         totalRows{i} = height(csvData);
+        totalTime{i} = (csvDataArray(end)-csvDataArray(1))/10000000/60; % in minutes
         TotalTotalRows = TotalTotalRows + totalRows{i};
         
         % Выводим результат для текущего CSV файла
-        disp(['Для файла ' filenames{i} ' количество строк: ' num2str(totalRows{i})]);
+        disp(['Для файла ' filenames{i} ' количество строк: ' num2str(totalRows{i}) '. время в минутах: ' num2str(totalTime{i})]);
     end
     
     disp(['Сумма всех строк в CSV файлах: ' num2str(TotalTotalRows)]);
