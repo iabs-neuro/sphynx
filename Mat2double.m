@@ -1,16 +1,18 @@
 
-folder_path = 'd:\Projects\H_mice\NOF\dfsg\\';
-out_path = 'd:\Projects\H_mice\NOF\Filters_mat_doubled\';
+folder_path = 'h:\Projects\NOF\CalciumData\5_Filters\';
+out_path = 'h:\Projects\NOF\CalciumData\5_Filters\5.1_FiltersDoubled\';
 mat_files = dir(fullfile(folder_path, '*.mat'));
 
 %%
 % Перебрать каждый файл .mat
-for i = 1:length(mat_files)
+% for i = 1:length(mat_files)
+for i = [53 55 57 65:67]
     % Загрузить данные из файла .mat
     data = load(fullfile(folder_path, mat_files(i).name));
     
     % Получить переменную из файла (предположим, что переменная называется 'matrix_data')
     if isfield(data, 'A')
+        
         % Проверка на существование переменной 'matrix_data' в файле .mat
         matrix_data = data.A;
         
@@ -20,7 +22,7 @@ for i = 1:length(mat_files)
             
             % Сохранить переменную обратно в файл .mat, без перезаписи
             [~, name, ext] = fileparts(mat_files(i).name);
-            save(fullfile(out_path, [name(1:10) '_converted' ext]), 'matrix_data');
+            save(fullfile(out_path, [name(1:10) '_converted' ext]), 'matrix_data', '-v7.3');
         else
             disp(['Переменная в файле ' mat_files(i).name ' уже является типом double.']);
         end
