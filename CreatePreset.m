@@ -19,8 +19,8 @@ function [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo, PathVideo, P
 % Created by VVP. 14.02.23
 
 if nargin<3
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','H:\BOF\data\BowlsOpenField\BehaviorData\HM_BOF_1T\');
-     PathOut = uigetdir('H:\BOF\data\BowlsOpenField\Presets\');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','d:\Projects\H_mice\2_RawCombineVideo\');
+     PathOut = uigetdir('d:\Projects\H_mice\4_Presets\');
 end
 
 % some local parameters
@@ -64,8 +64,9 @@ switch Options.ExperimentType
         Options.pxl2sm = 6.2;
     case 'Novelty OF'
 %         Options.pxl2sm = 350/44;
-%        Options.pxl2sm = 22.2; % NOF 2024 H01-10
-        Options.pxl2sm = 28.1; % NOF 2024 H11-23
+%        Options.pxl2sm = 22.2; % NOF 2024 H01-10, 1 wave
+%         Options.pxl2sm = 28.1; % NOF 2024 H11-23, 2 wave
+        Options.pxl2sm = 20.6; % NOF 2024 H26-39, 3 wave
     case 'NOL'
         Options.pxl2sm = 16.5;
     case 'Round Track'
