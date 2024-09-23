@@ -19,8 +19,8 @@ function [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo, PathVideo, P
 % Created by VVP. 14.02.23
 
 if nargin<3
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','d:\Projects\H_mice\2_RawCombineVideo\');
-     PathOut = uigetdir('d:\Projects\H_mice\4_Presets\');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','h:\Projects\Feed\2_CombinedData\');
+     PathOut = uigetdir('h:\Projects\Feed\4_Presets\');
 end
 
 % some local parameters
@@ -66,7 +66,8 @@ switch Options.ExperimentType
 %         Options.pxl2sm = 350/44;
 %        Options.pxl2sm = 22.2; % NOF 2024 H01-10, 1 wave
 %         Options.pxl2sm = 28.1; % NOF 2024 H11-23, 2 wave
-        Options.pxl2sm = 20.6; % NOF 2024 H26-39, 3 wave
+%         Options.pxl2sm = 20.6; % NOF 2024 H26-39, 3 wave
+        Options.pxl2sm = 10.8; % feed 2024 H26-39, 3 wave
     case 'NOL'
         Options.pxl2sm = 16.5;
     case 'Round Track'
@@ -118,13 +119,15 @@ prmt = 0;
 while prmt==0
     VidFrames = read(VideoObj,gframe);
     h=figure;
-    IM = VidFrames(:,:,1);
+    %     IM = VidFrames(:,:,1);
+    IM = VidFrames;
     imshow(IM);hold on;
     answer = questdlg('Is it good frame?', 'Arena parameters definition', 'Yes','No','Yes');
     switch answer
         case 'Yes'
             prmt = 1;
             Options.GoodVideoFrame = IM;
+            Options.GoodVideoFrameGray = VidFrames(:,:,1);
         case 'No'
             prmt = 0;
             gframe = randi([round(Options.NumFrames/2), Options.NumFrames]);
@@ -733,24 +736,24 @@ switch Options.ExperimentType
                         find(strcmp({Zones.name}, 'Center')) ...
                         find(strcmp({Zones.name}, 'ArenaCornersAllRealOut'))...
                         ];
-                    IIM(:,:,1) = round((Zones(zone_for_plot(1)).maskfilled*255 + single(Options.GoodVideoFrame))./2);
-                    IIM(:,:,2) = round((Zones(zone_for_plot(2)).maskfilled*255 + single(Options.GoodVideoFrame))./2);
-                    IIM(:,:,3) = round((Zones(zone_for_plot(3)).maskfilled*255 + single(Options.GoodVideoFrame))./2);
+                    IIM(:,:,1) = round((Zones(zone_for_plot(1)).maskfilled*255 + single(Options.GoodVideoFrameGray))./2);
+                    IIM(:,:,2) = round((Zones(zone_for_plot(2)).maskfilled*255 + single(Options.GoodVideoFrameGray))./2);
+                    IIM(:,:,3) = round((Zones(zone_for_plot(3)).maskfilled*255 + single(Options.GoodVideoFrameGray))./2);
                 case {'Circle', 'Ellipse'}
                     zone_for_plot = [
                         find(strcmp({Zones.name}, 'WallsAndCornersRealOut')) ...
                         find(strcmp({Zones.name}, 'Center'))];
-                    IIM(:,:,1) = round((Zones(zone_for_plot(1)).maskfilled*255 + single(Options.GoodVideoFrame))./2);
-                    IIM(:,:,2) = round((Zones(zone_for_plot(2)).maskfilled*255 + single(Options.GoodVideoFrame))./2);
-                    IIM(:,:,3) = single(Options.GoodVideoFrame);
+                    IIM(:,:,1) = round((Zones(zone_for_plot(1)).maskfilled*255 + single(Options.GoodVideoFrameGray))./2);
+                    IIM(:,:,2) = round((Zones(zone_for_plot(2)).maskfilled*255 + single(Options.GoodVideoFrameGray))./2);
+                    IIM(:,:,3) = single(Options.GoodVideoFrameGray);
                 case 'O-maze'
                     zone_for_plot = [
                         find(strcmp({Zones.name}, 'ArenaReal')) ...
                         find(strcmp({Zones.name}, 'ArenaOut'))];
                     PlotArray = PlotArray + Y.*ArenaAndObjects(1).maskborder{2};
-                    IIM(:,:,1) = round((Zones(zone_for_plot(1)).maskfilled*255 + single(Options.GoodVideoFrame))./2);
-                    IIM(:,:,2) = round((Zones(zone_for_plot(2)).maskfilled*255 + single(Options.GoodVideoFrame))./2);
-                    IIM(:,:,3) = single(Options.GoodVideoFrame);
+                    IIM(:,:,1) = round((Zones(zone_for_plot(1)).maskfilled*255 + single(Options.GoodVideoFrameGray))./2);
+                    IIM(:,:,2) = round((Zones(zone_for_plot(2)).maskfilled*255 + single(Options.GoodVideoFrameGray))./2);
+                    IIM(:,:,3) = single(Options.GoodVideoFrameGray);
             end
 
             if Options.ObjectsNumber > 0
@@ -780,9 +783,9 @@ switch Options.ExperimentType
         % plot of all zones
         for zone = 1:length(Zones)
             if strcmp(Zones(zone).type, 'area')
-                IIM(:,:,1) = round((Zones(zone).maskfilled*255 + single(Options.GoodVideoFrame))./2);
-                IIM(:,:,2) = round(single(Options.GoodVideoFrame)./2);
-                IIM(:,:,3) = round(single(Options.GoodVideoFrame)./2);
+                IIM(:,:,1) = round((Zones(zone).maskfilled*255 + single(Options.GoodVideoFrameGray))./2);
+                IIM(:,:,2) = round(single(Options.GoodVideoFrameGray)./2);
+                IIM(:,:,3) = round(single(Options.GoodVideoFrameGray)./2);
                 imwrite(uint8(IIM), sprintf('%s\\%s_Zone_%s.png',PathOut, FilenameOut, Zones(zone).name));
                 fprintf('Saving zones masks %d/%d\n', zone, length(Zones));
             end
