@@ -18,7 +18,7 @@ filenames = {
     'CC_H19_1D','CC_H19_2D','CC_H23_1D','CC_H23_2D'
     };
 
-pathNV = 'd:\Projects\СС\Spikes\';
+pathNV = 'd:\Projects\СС\Spikes_wvt_0.05amp_startenv\';
 path = 'd:\Projects\СС\Features\';
 pathPR = 'd:\Projects\СС\Presets\';
 
@@ -27,5 +27,12 @@ for file = 1:length(filenames)
     filename = sprintf('%s_Features.csv',filenames{file});
     filenameNV = sprintf('%s_spikes.csv',filenames{file});
     filenamePR = sprintf('%s_Preset.mat',filenames{file});
-    [FieldsIC] = PlaceFieldAnalyzerCC(path,filename,pathNV,filenameNV,pathPR,filenamePR);    
+    
+    if file == 1 ||file == 2 ||file == 3 || file == 4
+        plot_opt = 1;
+    else
+        plot_opt = 2;
+    end
+    
+    [FieldsIC] = PlaceFieldAnalyzerCC(path,filename,pathNV,filenameNV,pathPR,filenamePR, plot_opt);    
 end
