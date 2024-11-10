@@ -349,7 +349,7 @@ BlackFrame = uint8(zeros(Options.Height,Options.Width));
 colorbase = jet(length(BodyPartsNames));
 if PlotOption.main
     v = VideoWriter(sprintf('%s\\%s_BodyParts',PathOut, Filename),'MPEG-4');
-    v.FrameRate = Options.FrameRate;
+%     v.FrameRate = Options.FrameRate;
     open(v);
     h = waitbar(1/n_frames, sprintf('Plotting video, frame %d of %d', 0,  n_frames));
     for k=1:n_frames

@@ -2,26 +2,25 @@
 
 PathVideo = 'd:\Projects\H_mice\2_RawCombineVideo\';
 PathDLC = 'd:\Projects\H_mice\3_DLC\';
-PathOut = 'd:\Projects\H_mice\5_Behavior\';
+PathOut = 'd:\Projects\H_mice\5_Behavior_full_video\';
+% PathOut = 'd:\Projects\H_mice\5_Behavior_only_features\';
 
 PathPreset = 'd:\Projects\H_mice\4_Presets\';
 
 FileNames = {
-    'H01_1D','H02_1D','H03_1D','H04_1D','H05_1D','H06_1D','H07_1D','H08_1D','H09_1D','H10_1D',...
-    'H11_1D','H12_1D','H13_1D','H14_1D','H15_1D','H16_1D','H17_1D','H19_1D','H21_1D','H22_1D','H23_1D',...
-    'H01_2D','H02_2D','H03_2D','H04_2D','H05_2D','H06_2D','H07_2D','H08_2D','H09_2D','H10_2D',...
-    'H11_2D','H12_2D','H13_2D','H14_2D','H15_2D','H16_2D','H17_2D','H19_2D','H21_2D','H22_2D','H23_2D'...
-    'H01_3D','H02_3D','H03_3D','H04_3D','H05_3D','H06_3D','H07_3D','H08_3D','H09_3D','H10_3D',...
-    'H11_3D','H12_3D','H13_3D','H14_3D','H15_3D','H16_3D','H17_3D','H19_3D','H21_3D','H22_3D','H23_3D',...
-    'H01_4D','H02_4D','H03_4D','H04_4D','H05_4D','H06_4D','H07_4D','H08_4D','H09_4D','H10_4D',...
-    'H11_4D','H12_4D','H13_4D','H14_4D','H15_4D','H16_4D','H17_4D','H19_4D','H21_4D','H22_4D','H23_4D'    
+    'H01_1D','H02_1D','H03_1D','H06_1D','H07_1D','H08_1D','H09_1D','H14_1D','H23_1D',...
+    'H26_1D','H27_1D','H31_1D','H32_1D','H33_1D','H36_1D','H39_1D',...
+    'H01_2D','H02_2D','H03_2D','H06_2D','H07_2D','H08_2D','H09_2D','H14_2D','H23_2D'...
+    'H26_2D','H27_2D','H31_2D','H32_2D','H33_2D','H36_2D','H39_2D',...
+    'H01_3D','H02_3D','H03_3D','H06_3D','H07_3D','H08_3D','H09_3D','H14_3D','H23_3D',...
+    'H26_3D','H27_3D','H31_3D','H32_3D','H33_3D','H36_3D','H39_3D',...
+    'H01_4D','H02_4D','H03_4D','H06_4D','H07_4D','H08_4D','H09_4D','H14_4D','H23_4D',...  
+    'H26_4D','H27_4D','H31_4D','H32_4D','H33_4D','H36_4D','H39_4D',...
     };
 
 FilesNumber = length(FileNames);
 
-%%
 PathMat = 'd:\Projects\H_mice\8_matfiles\';
-
 
 %% variables initiation
 
@@ -60,16 +59,24 @@ ObjectDistance = zeros(5,length(FileNames));
 %% main part
 for file = 1:length(FileNames)
     
-%     FilenameVideo = sprintf('NOF_%s.mp4', FileNames{file});
-%     FilenameDLC = sprintf('NOF_%sDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv',FileNames{file});
+    FilenameVideo = sprintf('NOF_%s.mp4', FileNames{file});
+    FilenameDLC = sprintf('NOF_%sDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv',FileNames{file});
     
-%     FilenamePreset = sprintf('NOF_%s_Preset.mat', FileNames{file});
+    if file > 9 && file < 17
+        FilenamePreset = 'NOF_H26_1D_Preset.mat';        
+    elseif (file > 25 && file < 33) || (file > 41 && file <  49) || (file > 57)
+        FilenamePreset = 'NOF_H26_2D_Preset.mat';
+    else
+        FilenamePreset = sprintf('NOF_%s_Preset.mat', FileNames{file});
+    end
+    
     fprintf('Processing of NOF_%s\n', FileNames{file})
-    
-%     [Acts, BodyPartsTraces] = BehaviorAnalyzerPlusnin(PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut, 1, 0, PathPreset, FilenamePreset);
-    
+%     fprintf('Processing of NOF_%s\n', FilenamePreset)
 
-    load (sprintf('%sNOF_%s_WorkSpace.mat',PathMat,FileNames{file}), 'Acts', 'BodyPartsTraces');
+[Acts, BodyPartsTraces] = BehaviorAnalyzerNOF(PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut, 1, 0, PathPreset, FilenamePreset);
+    
+%     load (sprintf('%sNOF_%s_WorkSpace.mat',PathMat,FileNames{file}), 'Acts', 'BodyPartsTraces');
+    
     % variables calculaion
     
     FreezingPercent(file) = Acts(4).ActPercent;

@@ -1,4 +1,4 @@
-function [FieldsIC] = PlaceFieldAnalyzerCC(path,filename,pathNV,filenameNV,pathPR,filenamePR)
+function [FieldsIC] = PlaceFieldAnalyzerCC(path,filename,pathNV,filenameNV,pathPR,filenamePR, plot_opt)
 %17.12.2020 added separate matrices for all plots(for correct gauss filtering)
 %24.12 IC criteria
 %26.04 good fitting of ellipse
@@ -25,14 +25,14 @@ x_kcorr = 1;  % for good traces x_kcorr = 4/3 for odor
 t_kcorr = 4000; %correction coefficient for VT and NV time distortion for 'NVista' (1 frame on t_kcorr frames screwing)
 time_smooth = 1; %smoothing indicator for time map
 spike_smooth = 1; %smoothing indicator for spike map
-thres_spike = 0; %threshold for spike map
+thres_spike = 0.3; %threshold for spike map
 thres_firing = 0.3; %threshold for activity map
 length_line = FrameRate/2; %length in frames of period in place field
 pxl2sm = 1; %pixels in sm, 95/4 for odor and holes arena
-bin_size_sm = 7; %length of bin in sm
+bin_size_sm = 8; %length of bin in sm
 bin_size = pxl2sm*bin_size_sm; %length in pixels for bin size
 min_spike = 5; %minimum number of spikes for active cell
-min_spike_field = 5; %minimum number of spikes for place field
+min_spike_field = 3; %minimum number of spikes for place field
 % min_good_line = 5; %minimum number of line with spikes inside a field
 % k_pp = 0; %percentage of good entries for field candidate
 % area_k = 1.5; %area scale for cup fields
@@ -63,24 +63,41 @@ MarksizeSpikesAll = 5;
 FontSizeTitle = 20;
 FontSizeLabel = 20;
 
-Plot_Single_Spike = 1;
+Plot_Single_Spike = 0;
 
 Plot_Spike = 0;
 Plot_Spike_Smooth = 0;
 Plot_FiringRate = 0;
-Plot_FiringRate_Smooth = 1;
-Plot_FiringRate_Smooth_Thres = 1;
+Plot_FiringRate_Smooth = 0;
+Plot_FiringRate_Smooth_Thres = 0;
 
 Plot_FiringRate_Fields = 0;
-Plot_FiringRate_Fields_Corrected = 1;
+Plot_FiringRate_Fields_Corrected = 0;
 Plot_WaterShed = 0;
 Plot_WaterShedField = 0;
 
 Plot_Field = 0;
 
+if plot_opt > 0
+    Plot_Single_Spike = 1;
+    Plot_FiringRate_Smooth = 1;
+    Plot_FiringRate_Fields_Corrected = 1;
+end
+if plot_opt > 1
+    Plot_Spike = 1;
+    Plot_Spike_Smooth = 1;
+    Plot_FiringRate = 1;
+    Plot_FiringRate_Fields = 1;
+    Plot_FiringRate_Smooth_Thres = 1;
+    Plot_WaterShed = 1;
+    Plot_WaterShedField = 1;
+end
 %%
-if nargin<6
+if nargin<7
+    
     %%
+    plot_opt = 1;
+    
     %loading videotracking
     [filename, path]  = uigetfile('*.csv','load the VT file','d:\Projects\СС\Features\');
     
@@ -278,6 +295,11 @@ title('V vs v smooth','FontSize', FontSizeLabel);
 xlabel(sprintf('Time, %s', TimeMode),'FontSize', FontSizeLabel);ylabel('Velocity, sm/s','FontSize', FontSizeLabel);
 saveas(h, sprintf('%s\\%s_velocity.png',path,FilenameOut));
 delete(h);
+
+%% rotation mode (only for CC)
+[x_int_sm, y_int_sm] = RotationMode(x_int_sm, y_int_sm, ArenaAndObjects);
+
+%%
 
 ax_xy(2) = max(max(x_int_sm))+axes_step;
 ax_xy(1) = min(min(x_int_sm))-axes_step;

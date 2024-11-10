@@ -39,9 +39,13 @@ FileNames{3} = {
     'CC_H13_2D','CC_H14_2D','CC_H19_2D','CC_H23_2D'
     };
 
-PathMat = 'd:\Projects\СС\MATPCNew\MAT_3sigma\';
-PathPreset = 'd:\Projects\СС\Presets\';
-PathOut = 'd:\Projects\СС\PlaceCells\3sigma\';
+PathOut = 'd:\Projects\СС\';
+mode_analysis = 'wvt_default_thr_startev';
+
+PathMat = sprintf('%sMAT_PC\\%s\\', PathOut, mode_analysis);
+PathPreset = sprintf('%sPresets\\', PathOut);
+PathOutPlace = sprintf('%sPlaceCells\\%s\\', PathOut, mode_analysis);
+PathOutFields = sprintf('%sFieldsDistrib\\%s\\', PathOut, mode_analysis);
 
 %% main
 %% creating fields distribution
@@ -74,7 +78,7 @@ for file = 1:length(filenames)
         hold on;
     end
     title(strrep(filenames{file}, '_', '\_'), 'FontSize', FontSize);
-    saveas(gcf, sprintf('%s%s_fields.png',PathOut,filenames{file}));
+    saveas(gcf, sprintf('%s%s_fields.png',PathOutPlace,filenames{file}));
     delete(gcf);
 end
 
@@ -94,14 +98,18 @@ for group = 1:length(FileNames)
         FilenamePreset = sprintf('%s%s_Preset.mat',PathPreset,FileNames{group}{mouse});
         load(FilenameMat, 'Cell_IC', 'FieldsIC','test_zone5','MapFieldsIC');
         load(FilenamePreset);
+        if (isempty(FieldsIC) && ~exist('test_zone5','var') && isempty(MapFieldsIC))
+            test_zone5 = [];
+        end
+        disp(['Группа: ' num2str(group) '. Мышь: ' num2str(mouse)]);
         
         % creation struct
         FieldStat{group}.CellIndex = [FieldStat{group}.CellIndex; ones(size(Cell_IC,2),1)*mouse];
-        FieldStat{group}.CellNumberAll = [FieldStat{group}.CellNumberAll; sum(Cell_IC(7,:) > 5)];
-        FieldStat{group}.CellNumberActivePercent = [FieldStat{group}.CellNumberActivePercent; sum(Cell_IC(7,:) > 5)/size(Cell_IC,2)*100];
+        FieldStat{group}.CellNumberAll = [FieldStat{group}.CellNumberAll; size(Cell_IC,2)];
+        FieldStat{group}.CellNumberActivePercent = [FieldStat{group}.CellNumberActivePercent; sum(Cell_IC(2,:) >= 0)/size(Cell_IC,2)*100];
         FieldStat{group}.FiringRate = [FieldStat{group}.FiringRate; (Cell_IC(7,:)/TimeSession*60)'];
         FieldStat{group}.FiringRateMean = [FieldStat{group}.FiringRateMean; mean(Cell_IC(7,:)/TimeSession*60)];
-        FieldStat{group}.PlaceCellNumberPercent = [FieldStat{group}.PlaceCellNumberPercent; sum(Cell_IC(2,:))/FieldStat{group}.CellNumberAll(mouse)*100];
+        FieldStat{group}.PlaceCellNumberPercent = [FieldStat{group}.PlaceCellNumberPercent; sum(Cell_IC(2,:) == 1)/sum(Cell_IC(2,:) >= 0)*100];
         FieldStat{group}.CellICAll = [FieldStat{group}.CellICAll; Cell_IC(6,~isnan(Cell_IC(6,:)))'];        
         FieldStat{group}.CellICAllMean = [FieldStat{group}.CellICAllMean; mean(Cell_IC(6,~isnan(Cell_IC(6,:))))];
         FieldStat{group}.CellICPlaceCells = [FieldStat{group}.CellICPlaceCells; mean(Cell_IC(6,Cell_IC(2,:)==1))];
@@ -118,7 +126,7 @@ end
 %% histograms
 
 %% for stripes specific stats
-PathOut = 'd:\Projects\СС\FieldsDistrib\3sigma\';
+
 StripeStat = struct('PlaceFieldsIndexCenter',[],'PlaceFieldsIndexBorder',[],'PlaceFieldsNumberCenter',[],'PlaceFieldsNumberBorder',[],'PlaceFieldsNumberCenterPercent',[],'PlaceFieldsNumberBorderPercent',[],'FiringRate',[],'CellIC',[],'FieldsSquare',[]);
 for group = 1
     for mouse = 1:length(FileNames{group})
@@ -129,6 +137,11 @@ for group = 1
         load(FilenameMat, 'Cell_IC', 'FieldsIC','SpikeFieldsReal','test_zone5','MapFieldsIC','x_int_sm','y_int_sm');
         load(FilenamePreset);
         
+        if (isempty(FieldsIC) && ~exist('test_zone5','var') && isempty(MapFieldsIC))
+            test_zone5 = [];
+        end
+        disp(['Группа: ' num2str(group) '. Мышь: ' num2str(mouse)]);
+         
 %         % fixing bug
 %         for field  = 1:length(SpikeFieldsReal)
 %             SpikeFieldsReal(field).x_mass_real = round(SpikeFieldsReal(field).x_mass_real(end)*Options.pxl2sm);
@@ -162,6 +175,11 @@ for group = 1
             y_mass_real = [y_mass_real; SpikeFieldsReal(field).y_mass_real];
         end        
         
+        
+        %% fields density
+        
+        
+        
         h = figure;
         MainFrame = ind2rgb(Options.GoodVideoFrame, gray(256));
         imshow(MainFrame);
@@ -172,7 +190,7 @@ for group = 1
         end
         plot(x_mass_real(FieldsCenter)*Options.pxl2sm,y_mass_real(FieldsCenter)*Options.pxl2sm, 'r*', 'MarkerSize',5);hold on;
         plot(x_mass_real(FieldsBorder)*Options.pxl2sm,y_mass_real(FieldsBorder)*Options.pxl2sm, 'g*', 'MarkerSize',5);
-        saveas(h, sprintf('%s%s_stripes.png',PathOut,FileNames{group}{mouse}));
+        saveas(h, sprintf('%s%s_stripes.png',PathOutFields,FileNames{group}{mouse}));
         delete(h);
 
         StripeStat.PlaceFieldsNumberCenter = [StripeStat.PlaceFieldsNumberCenter; length(FieldsCenter)];
@@ -186,16 +204,75 @@ end
 
 StripeStat1DControl = StripeStat;
 % StripeStat1DStripes = StripeStat;
-%% 
-% FieldStat1DControl.CellIndex = [ones(342,1);ones(428,1)*2;ones(150,1)*3;ones(607,1)*4];
-% FieldStat1DStripes.CellIndex = [ones(572,1);ones(516,1)*2;ones(390,1)*3;ones(418,1)*4;ones(590,1)*5;ones(1360,1)*6];
-% 
-% numbers = [221, 595, 280, 218, 220, 329, 559, 391, 348, 392, 534, 636, 656, 1017];
-% CellIndex = [];
-% for i = 1:numel(numbers)
-%     CellIndex = [CellIndex; ones(numbers(i), 1) * i];
-% end
-% FieldStat2DSectors.CellIndex = CellIndex;
+
+%% for stripes specific stats
+
+StripeStat = struct('PlaceFieldsIndexCenter',[],'PlaceFieldsIndexBorder',[],'PlaceFieldsNumberCenter',[],'PlaceFieldsNumberBorder',[],'PlaceFieldsNumberCenterPercent',[],'PlaceFieldsNumberBorderPercent',[],'FiringRate',[],'CellIC',[],'FieldsSquare',[]);
+for group = 2
+    for mouse = 1:length(FileNames{group})
+        
+        % loading data
+        FilenameMat = sprintf('%sWorkSpace_%s_Features.mat',PathMat,FileNames{group}{mouse});
+        FilenamePreset = sprintf('%s%s_Preset.mat',PathPreset,FileNames{group}{mouse});
+        load(FilenameMat, 'Cell_IC', 'FieldsIC','SpikeFieldsReal','test_zone5','MapFieldsIC','x_int_sm','y_int_sm');
+        load(FilenamePreset);
+        
+        if (isempty(FieldsIC) && ~exist('test_zone5','var') && isempty(MapFieldsIC))
+            test_zone5 = [];
+        end
+        disp(['Группа: ' num2str(group) '. Мышь: ' num2str(mouse)]);
+        
+        BWDMask = bwdist(~ArenaAndObjects(1).maskfilled);  
+        BWDMask(BWDMask<CenterDiam*Options.pxl2sm) = 0;
+        
+        BWDMask(BWDMask>0) = 1;
+        
+%         MainFrame = uint8((Options.GoodVideoFrame+uint8(BWDMask.*255))./2);
+%         imshow(MainFrame);
+        
+        FieldsCenter = [];
+        FieldsBorder = [];
+        for field  = 1:size(SpikeFieldsReal,2)
+            if BWDMask(round(SpikeFieldsReal(field).y_mass_real*Options.pxl2sm),round(SpikeFieldsReal(field).x_mass_real*Options.pxl2sm))
+                FieldsCenter = [FieldsCenter field];
+            else
+                FieldsBorder = [FieldsBorder field];
+            end            
+        end
+        StripeStat.PlaceFieldsIndexCenter = [StripeStat.PlaceFieldsIndexCenter; FieldsCenter'];
+        StripeStat.PlaceFieldsIndexBorder = [StripeStat.PlaceFieldsIndexBorder; FieldsBorder'];
+        
+        x_mass_real = [];
+        y_mass_real = [];
+        for field  = 1:size(SpikeFieldsReal,2)
+            x_mass_real = [x_mass_real; SpikeFieldsReal(field).x_mass_real];
+            y_mass_real = [y_mass_real; SpikeFieldsReal(field).y_mass_real];
+        end
+        
+        h = figure;
+        MainFrame = ind2rgb(Options.GoodVideoFrame, gray(256));
+        imshow(MainFrame);
+        hold on;
+        for object  = 2:size(ArenaAndObjects,2)
+            plot(ArenaAndObjects(object).border_x, ArenaAndObjects(object).border_y, 'k', 'LineWidth', 1);
+            hold on;
+        end
+        plot(x_mass_real(FieldsCenter)*Options.pxl2sm,y_mass_real(FieldsCenter)*Options.pxl2sm, 'r*', 'MarkerSize',5);hold on;
+        plot(x_mass_real(FieldsBorder)*Options.pxl2sm,y_mass_real(FieldsBorder)*Options.pxl2sm, 'g*', 'MarkerSize',5);
+        saveas(h, sprintf('%s%s_stripes.png',PathOutFields,FileNames{group}{mouse}));
+        delete(h);
+
+        StripeStat.PlaceFieldsNumberCenter = [StripeStat.PlaceFieldsNumberCenter; length(FieldsCenter)];
+        StripeStat.PlaceFieldsNumberBorder = [StripeStat.PlaceFieldsNumberBorder; length(FieldsBorder)];
+        
+        StripeStat.PlaceFieldsNumberCenterPercent = [StripeStat.PlaceFieldsNumberCenterPercent; length(FieldsCenter)/size(SpikeFieldsReal,2)*100];
+        StripeStat.PlaceFieldsNumberBorderPercent = [StripeStat.PlaceFieldsNumberBorderPercent; length(FieldsBorder)/size(SpikeFieldsReal,2)*100];
+        
+    end
+end
+
+% StripeStat1DControl = StripeStat;
+StripeStat1DStripes = StripeStat;
 
 %% for sectors specific stats
 
@@ -210,9 +287,14 @@ for group = 3
         load(FilenameMat, 'Cell_IC', 'FieldsIC','SpikeFieldsReal','test_zone5','MapFieldsIC','x_int_sm','y_int_sm');
         load(FilenamePreset);
         
+        if (isempty(FieldsIC) && ~exist('test_zone5','var') && isempty(MapFieldsIC))
+            test_zone5 = [];
+        end
+        disp(['Группа: ' num2str(group) '. Мышь: ' num2str(mouse)]);
+        
         % fixing bug
         for field  = 1:length(SpikeFieldsReal)
-            SpikeFieldsReal(field).x_mass_real = round(SpikeFieldsReal(field).x_mass_real(end)*Options.pxl2sm);
+            SpikeFieldsReal(field).x_mass_real = min(Options.Width, round(SpikeFieldsReal(field).x_mass_real(end)*Options.pxl2sm));
             SpikeFieldsReal(field).y_mass_real = round(SpikeFieldsReal(field).y_mass_real(end)*Options.pxl2sm);
         end
         
@@ -222,7 +304,7 @@ for group = 3
                 if ArenaAndObjects(sector+1).maskfilled(SpikeFieldsReal(field).y_mass_real,SpikeFieldsReal(field).x_mass_real)
                     FieldsSectors(field,sector) = field;
                 end
-            end            
+            end
         end
 
         StripeStat(mouse).PlaceFieldsIndex = {FieldsSectors(FieldsSectors(:,1)>0,1)...
@@ -250,7 +332,7 @@ for group = 3
         plot(x_mass_real(StripeStat(mouse).PlaceFieldsIndex{1, 2}),y_mass_real(StripeStat(mouse).PlaceFieldsIndex{1,2}), 'k*', 'MarkerSize',5);hold on;
         plot(x_mass_real(StripeStat(mouse).PlaceFieldsIndex{1, 3}),y_mass_real(StripeStat(mouse).PlaceFieldsIndex{1,3}), 'g*', 'MarkerSize',5);hold on;
         plot(x_mass_real(StripeStat(mouse).PlaceFieldsIndex{1, 4}),y_mass_real(StripeStat(mouse).PlaceFieldsIndex{1,4}), 'b*', 'MarkerSize',5);
-        saveas(h, sprintf('%s%s_stripes.png',PathOut,FileNames{group}{mouse}));
+        saveas(h, sprintf('%s%s_stripes.png',PathOutFields,FileNames{group}{mouse}));
         delete(h);
         
         StripeStat(mouse).PlaceFieldsNumber = [...
@@ -268,4 +350,24 @@ end
 % StripeStat1DStripes = StripeStat;
 StripeStat2DSectors = StripeStat;
 
-%%
+%% saving mat-file
+save(sprintf('%s\\%s.mat',PathOut, mode_analysis), 'StripeStat1DControl','StripeStat1DStripes','StripeStat2DSectors','FieldStat','filenames','FileNames','Sectors');
+
+
+%% Time_HeatMap
+
+for group = 1:length(FileNames)
+    for mouse = 1:length(FileNames{group})
+        
+        % loading data
+        FilenameMat = sprintf('%sWorkSpace_%s_Features.mat',PathMat,FileNames{group}{mouse});
+        FilenamePreset = sprintf('%s%s_Preset.mat',PathPreset,FileNames{group}{mouse});
+        load(FilenameMat, 'Cell_IC', 'FieldsIC','SpikeFieldsReal','test_zone5','MapFieldsIC','x_int_sm','y_int_sm');
+        load(FilenamePreset);
+        
+        if (isempty(FieldsIC) && ~exist('test_zone5','var') && isempty(MapFieldsIC))
+            test_zone5 = [];
+        end
+        disp(['Группа: ' num2str(group) '. Мышь: ' num2str(mouse)]);
+    end
+end
