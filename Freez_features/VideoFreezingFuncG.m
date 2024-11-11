@@ -1,4 +1,4 @@
-function [PctComponentTimeFreezing] = VideoFreezingFuncG(PlotVideo, path,filename,Both,CompUp,CompDown,noiZelvl,MinLengthFreez,MotThres,FreezDuratV,Line)
+function [PctComponentTimeFreezing] = VideoFreezingFuncG(PlotVideo,path,filename,Both,CompUp,CompDown,noiZelvl,MinLengthFreez,MotThres,FreezDuratV,Line)
 % 10.01.23 save only one part (down)
 % Both = 3; for only down part calculation
 % Line = 0; if you want to select manually
