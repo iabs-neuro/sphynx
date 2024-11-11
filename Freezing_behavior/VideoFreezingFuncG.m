@@ -1,11 +1,12 @@
-function [PctComponentTimeFreezing] = VideoFreezingFuncG(PlotVideo, path,filename,Both,CompUp,CompDown,noiZelvl,MinLengthFreez,MotThres,FreezDuratV,Line)
+function [PctComponentTimeFreezing] = VideoFreezingFuncG(PlotVideo,path,filename,Both,CompUp,CompDown,noiZelvl,MinLengthFreez,MotThres,FreezDuratV,Line)
 % 10.01.23 save only one part (down)
 % Both = 3; for only down part calculation
 % Line = 0; if you want to select manually
-% Line = 144; height for standart boxes
+% Line = 144; height for standart boxes without miniscope cabel
+
 if nargin<11
     %%
-    [filename, path]  = uigetfile('*.wmv','Select wmv file','d:\Projects\Trace\RawData\'); 
+    [filename, path]  = uigetfile('*.wmv','Select wmv file','h:\H_mice\RFC_пїЅпїЅпїЅ\VideoData\RFC_3D\'); 
     Both = listdlg('PromptString','Select the way of mouse location ','ListString', {'whole cage', 'up side', 'down side', 'both side'},'ListSize',  [170 60]);
     prompt = {'Duration of components for up sector, s','Duration of components for down sector, s', 'Noiz level(0-255)','Filter window','Motion threshold, px', 'Minimum Freeze Duration (number of frames for 30fps)', 'Dividing line height (zero to select manually)'}; 
     default_data = {'300','300','13','5','18','15','144'};
@@ -13,8 +14,6 @@ if nargin<11
     dlg_data = inputdlg(prompt, 'Parameters', 1, default_data, options);
     DuratCompUp = str2num(dlg_data{1});
     DuratCompDown = str2num(dlg_data{2});
-    DuratCompUp = dlg_data{1};
-    DuratCompDown = dlg_data{2};
     noiZelvl = str2num(dlg_data{3});
     MinLengthFreez = str2num(dlg_data{4});
     MotThres = str2num(dlg_data{5});
@@ -54,7 +53,7 @@ if Both ~= 1
 %     hold on;
     x1 = linspace(1,Width,Width);
     if Line == 0
-        prompt = {'Степень полинома кривой раздела(3-6)'};
+        prompt = {'пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ(3-6)'};
         default_data = {'0'};
         options.Resize='on';
         dlg_data = inputdlg(prompt, 'Parameters', 1, default_data, options);
@@ -105,7 +104,7 @@ if Both == 3
     up = 2;
     down = 2;
 end
-save(sprintf('%s\\%s_WorkSpace_%d_%d_%d_%d.mat',path, filename(1:end-4),noiZelvl,MinLengthFreez,MotThres,FreezDuratV));
+% save(sprintf('%s\\%s_WorkSpace_%d_%d_%d_%d.mat',path, filename(1:end-4),noiZelvl,MinLengthFreez,MotThres,FreezDuratV));
 
 %%
 for m = up:down
