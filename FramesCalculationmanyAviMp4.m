@@ -189,32 +189,6 @@ end
 % Общий вывод
 disp('Общий подсчет кадров завершен.');
 
-%% Run FFmpeg from MATLAB to get frame count
-% videoPath = 'w:\Projects\RFC_3D\1_Raw\RFC_F01_3D\2024_10_29\15_22_55\Miniscope\0.avi';
-function totalFrames = getTotalFramesFFmpeg(videoPath)
-    % Вызов FFmpeg для извлечения данных о видеофайле
-    [status, result] = system(['ffmpeg -i "' videoPath '" -map 0:v:0 -c copy -f null - 2>&1']);
-
-    % Если команда FFmpeg выполнилась успешно, продолжаем обработку
-    if status == 0
-        % Используем регулярное выражение для поиска 'frame=' и извлечения числа
-        frameCountMatch = regexp(result, 'frame=\s*(\d+)', 'tokens', 'once');
-        if ~isempty(frameCountMatch)
-            % Преобразуем извлеченное значение в число
-            totalFrames = str2double(frameCountMatch{1});
-%             disp(['Количество кадров: ', num2str(totalFrames)]);
-        else
-            disp('Ошибка: не удалось извлечь количество кадров.');
-            totalFrames = NaN;
-        end
-    else
-        disp('Ошибка выполнения FFmpeg.');
-        disp(result);  % Показать результат для отладки
-        totalFrames = NaN;
-    end
-end
-%% пееркодировать ffv1 в mp4 через ffmpeg в командной строке
-% ffmpeg -i input_video.avi -c:v libx264 -preset fast -crf 23 output_video.mp4
 %% пееркодировать tif в mp4
 % Укажите путь к многокадровому TIFF-файлу и имя выходного видео
 inputTiffFile = 'e:\\RFC_F01_3D_CR_MC.tif';
@@ -246,3 +220,30 @@ end
 close(videoObj);
 
 disp(['Видео сохранено как ', outputVideoFile]);
+
+%% Run FFmpeg from MATLAB to get frame count
+% videoPath = 'w:\Projects\RFC_3D\1_Raw\RFC_F01_3D\2024_10_29\15_22_55\Miniscope\0.avi';
+function totalFrames = getTotalFramesFFmpeg(videoPath)
+    % Вызов FFmpeg для извлечения данных о видеофайле
+    [status, result] = system(['ffmpeg -i "' videoPath '" -map 0:v:0 -c copy -f null - 2>&1']);
+
+    % Если команда FFmpeg выполнилась успешно, продолжаем обработку
+    if status == 0
+        % Используем регулярное выражение для поиска 'frame=' и извлечения числа
+        frameCountMatch = regexp(result, 'frame=\s*(\d+)', 'tokens', 'once');
+        if ~isempty(frameCountMatch)
+            % Преобразуем извлеченное значение в число
+            totalFrames = str2double(frameCountMatch{1});
+%             disp(['Количество кадров: ', num2str(totalFrames)]);
+        else
+            disp('Ошибка: не удалось извлечь количество кадров.');
+            totalFrames = NaN;
+        end
+    else
+        disp('Ошибка выполнения FFmpeg.');
+        disp(result);  % Показать результат для отладки
+        totalFrames = NaN;
+    end
+end
+%% пееркодировать ffv1 в mp4 через ffmpeg в командной строке
+% ffmpeg -i w:\Projects\RFC\1_Raw\RFC_F10_1D\2024_10_18\17_24_02\Miniscope\3.avi -c:v libx264 -preset fast -crf 23 w:\Projects\RFC\1_Raw\RFC_F10_1D\2024_10_18\17_24_02\Miniscope\3_avi.mp4
