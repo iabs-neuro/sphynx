@@ -1,11 +1,11 @@
 %% paths and filenames
 
-PathVideo = 'C:\Users\1\YandexDisk\_Projects\Мыши_склеенные';
+PathVideo = 'C:\Users\1\YandexDisk\_Projects\Мыши_склеенные\';
 PathDLC = 'C:\Users\1\YandexDisk\_Projects\Мыши_склеенные\';
-PathOut = 'd:\Projects\H_mice\5_Behavior_full_video\';
+PathOut = 'C:\Users\1\YandexDisk\_Projects\Мыши_склеенные\Fileresults\AK\';
 % PathOut = 'd:\Projects\H_mice\5_Behavior_only_features\';
 
-PathPreset = 'C:\Users\1\YandexDisk\_Projects\Мыши_склеенные\Fileresults\AK';
+PathPreset = 'C:\Users\1\YandexDisk\_Projects\Мыши_склеенные\PreSets\';
 
 FileNames = {
     'H31_1D','H31_2D','H32_1D','H32_2D','H33_1D','H39_1D',...
@@ -50,7 +50,7 @@ ObjectMeanDistance = zeros(5,length(FileNames));
 ObjectDistance = zeros(5,length(FileNames));
 
 %% main part
-for file = 1:length(FileNames)
+for file = 2:length(FileNames)
     
     FilenameVideo = sprintf('NOF_%s.mp4', FileNames{file});
     FilenameDLC = sprintf('NOF_%sDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv',FileNames{file});

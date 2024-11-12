@@ -961,7 +961,7 @@ for act = [13]
     open(v);
     
     videoframes = find(Acts(act).ActArrayRefine');
-    videoframesMax = min(length(videoframes),1000);
+    videoframesMax = min(length(videoframes),MaxPoints);
     
     h = waitbar(1/videoframesMax, sprintf('Plotting video, frame %d of %d', 0,  videoframesMax));
     for frame = 1:videoframesMax

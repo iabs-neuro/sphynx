@@ -1,4 +1,4 @@
-function [Acts, BodyPartsTraces] = BehaviorAnalyzerFEED(PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut,StartTime, EndTime, PathPreset, FilenamePreset)
+function [Acts, BodyPartsTraces] = BehaviorAnalyzerBES(PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut,StartTime, EndTime, PathPreset, FilenamePreset)
 % VVP. Deep Behavior analyses tool
 % 18.09.24 Novelty Open Fields experiment, square arena, 4 objects
 
