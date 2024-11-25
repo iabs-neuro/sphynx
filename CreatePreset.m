@@ -56,38 +56,6 @@ Options.BodyPart.Velocity = 'bodycenter';
 Options.BodyPart.WallsZone = 'bodycenter';
 Options.BodyPart.ObjectZone = 'bodycenter';
 
-switch Options.ExperimentType
-    case 'BowlsOpenField'
-        Options.pxl2sm = 9.3; % BOF 2024 1T
-%        Options.pxl2sm = ;  % BOF 2024 2T
-    case 'Complex Context'
-        Options.pxl2sm = 6.2;
-    case 'Novelty OF'
-%         Options.pxl2sm = 350/44;
-%        Options.pxl2sm = 22.2; % NOF 2024 H01-10, 1 wave
-%         Options.pxl2sm = 28.1; % NOF 2024 H11-23, 2 wave
-%         Options.pxl2sm = 20.6; % NOF 2024 H26-39, 3 wave
-        Options.pxl2sm = 10.8; % feed 2024 H26-39, 3 wave
-    case 'NOL'
-        Options.pxl2sm = 16.5;
-    case 'Round Track'
-        Options.pxl2sm = 1;
-    case 'Holes Track'
-        Options.pxl2sm = 95/4;
-    case 'Odor Track'
-        Options.pxl2sm = 95/4;
-    case 'Freezing Track'
-        Options.pxl2sm = 1;
-        Options.TailHeight = 22;
-        Options.WidthReal = 29;
-        Options.HeightReal = 24;
-    case "OF_Obj"
-        Options.pxl2sm = 5.9;
-    case 'New Track'
-        Options.pxl2sm = str2double(inputdlg('Specify the number of pixels in 1 cm', 'Parameters', 1, {'8'}, 'on'));
-        % create box from user
-end
-
 %% reading a video file
 fprintf('Loading video: %s started\n',FilenameVideo);
 VideoObj = VideoReader(sprintf('%s%s', PathVideo, FilenameVideo));
@@ -133,6 +101,40 @@ while prmt==0
             gframe = randi([round(Options.NumFrames/2), Options.NumFrames]);
     end
     delete(h);
+end
+
+%% 
+switch Options.ExperimentType
+    case 'BowlsOpenField'
+        Options.pxl2sm = CalculatePxlInCm(frame);
+%         Options.pxl2sm = 9.3; % BOF 2024 1T
+%        Options.pxl2sm = ;  % BOF 2024 2T
+    case 'Complex Context'
+        Options.pxl2sm = 6.2;
+    case 'Novelty OF'
+%         Options.pxl2sm = 350/44;
+%        Options.pxl2sm = 22.2; % NOF 2024 H01-10, 1 wave
+%         Options.pxl2sm = 28.1; % NOF 2024 H11-23, 2 wave
+%         Options.pxl2sm = 20.6; % NOF 2024 H26-39, 3 wave
+        Options.pxl2sm = 10.8; % feed 2024 H26-39, 3 wave
+    case 'NOL'
+        Options.pxl2sm = 16.5;
+    case 'Round Track'
+        Options.pxl2sm = 1;
+    case 'Holes Track'
+        Options.pxl2sm = 95/4;
+    case 'Odor Track'
+        Options.pxl2sm = 95/4;
+    case 'Freezing Track'
+        Options.pxl2sm = 1;
+        Options.TailHeight = 22;
+        Options.WidthReal = 29;
+        Options.HeightReal = 24;
+    case "OF_Obj"
+        Options.pxl2sm = 5.9;
+    case 'New Track'
+        Options.pxl2sm = str2double(inputdlg('Specify the number of pixels in 1 cm', 'Parameters', 1, {'8'}, 'on'));
+        % create box from user
 end
 
 %% rescale downloaded preset to current video

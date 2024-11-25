@@ -1,12 +1,12 @@
 
-folder_path = 'h:\Projects\NOF\CalciumData\5_Filters\';
-out_path = 'h:\Projects\NOF\CalciumData\5_Filters\5.1_FiltersDoubled\';
+folder_path = 'w:\Projects\RFC\CalciumData\5_Filters\';
+out_path = 'w:\Projects\RFC\CalciumData\5.1_FiltersDoubled\';
 mat_files = dir(fullfile(folder_path, '*.mat'));
 
 %%
 % Перебрать каждый файл .mat
-% for i = 1:length(mat_files)
-for i = [53 55 57 65:67]
+for i = 1:length(mat_files)
+    
     % Загрузить данные из файла .mat
     data = load(fullfile(folder_path, mat_files(i).name));
     

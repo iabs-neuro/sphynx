@@ -1,11 +1,12 @@
 %% paths and names
-path = 'd:\Projects\СС\Traces\';
-sp_path = 'd:\Projects\СС\Spike_wvt_default_thr\';
+path = 'w:\Projects\RFC\CalciumData\6_Traces\';
+sp_path = 'w:\Projects\RFC\CalciumData\6_Traces\';
 % sp_path = 'd:\Projects\СС\Spikes\';
-fname = 'CC_H01_1D_traces.csv';
-sp_fname = 'CC_H01_1D_spikes.csv';
+fname = 'RFC_F30_3D_traces.csv';
+sp_fname = 'RFC_F30_3D_spikes.csv';
 NumFirst = 20; % or [];
 bckg_med_wind = 500;
+
 %% main
 TRACES = csvread(strcat(path, fname), 1);
 SPIKES = csvread(strcat(sp_path, sp_fname), 1);
@@ -15,7 +16,7 @@ X = TRACES(1:dim(1),1);
 maxim = max(max(TRACES(1:dim(1),2:dim(2))));
 minim = min(min(TRACES(1:dim(1),2:dim(2))));
 absmax = max(max(abs(maxim), abs(minim)));
-offset = 1;
+offset = 2;
 if isempty(NumFirst)
     NumFirst = dim(2);
 end
