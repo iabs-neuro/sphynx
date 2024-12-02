@@ -13,7 +13,11 @@ y_track = y_track*Options.pxl2sm;
 bin_size = bin_size*Options.pxl2sm;
 
 if opt.fon
-    rgb_image = ind2rgb(Options.GoodVideoFrame, gray(256));
+    if Options.ExperimentType  == "Freezing Track"
+        rgb_image = Options.GoodVideoFrame;
+    else
+        rgb_image = ind2rgb(Options.GoodVideoFrame, gray(256));
+    end
     
 %     objects_image = zeros(size(ArenaAndObjects(2).maskborder,1),size(ArenaAndObjects(2).maskborder,2));
 %     for object  = 2:size(ArenaAndObjects,2)
