@@ -19,8 +19,8 @@ function [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo, PathVideo, P
 % Created by VVP. 14.02.23
 
 if nargin<3
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\BOF\BehaviorData\2_Combined\');
-     PathOut = uigetdir('w:\Projects\BOF\BehaviorData\4_Presets\');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\FOF\BehaviorData\1_Raw\');
+     PathOut = uigetdir('w:\Projects\FOF\BehaviorData\4_Preset\');
 end
 
 % some local parameters
@@ -42,7 +42,7 @@ PathOut = sprintf('%s\\%s_zones',PathOut, FilenameOut);
 question = questdlg('Do you want dowload Preset?', 'Important question', 'Yes','No','Yes');
 switch question
     case 'Yes'
-        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','w:\Projects\BOF\BehaviorData\4_Presets\');
+        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','w:\Projects\FOF\BehaviorData\4_Preset\');
         load(sprintf('%s//%s', PathPresetDownload, FilenamePresetDownload), 'Options','ArenaAndObjects');
 end
 
@@ -106,7 +106,7 @@ end
 %% 
 switch Options.ExperimentType
     case 'BowlsOpenField'
-        Options.pxl2sm = CalculatePxlInCm(Options.GoodVideoFrame);
+        [Options.pxl2sm, Options.x_kcorr] = CalculatePxlInCm(Options.GoodVideoFrame);
 %         Options.pxl2sm = 9.3; % BOF 2024 1T
 %        Options.pxl2sm = ;  % BOF 2024 2T
     case 'Complex Context'

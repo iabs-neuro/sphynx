@@ -1,8 +1,11 @@
-function [pixelsPerCentimeter] = CalculatePxlInCm(frame)
+function [pixelsPerCentimeter, x_kcorr] = CalculatePxlInCm(frame)
+
+PxlThreshold = 3;
+x_kcorr = 1;
 
 % Отображение кадра
 imshow(frame);
-title('Выберите две точки');
+title('Выберите 4 точки: 2 по вертикали, 2 по горизонтали (порядок важен)');
 
 % Выбор двух точек на кадре
 [x, y] = ginput(4);
@@ -17,13 +20,19 @@ distanceCentimeters1 = input('Сколько сантиметров между 1
 distanceCentimeters2 = input('Сколько сантиметров между 3 и 4 точкой? ');
 
 % Вычисление разрешения пксл/см
-pixelsPerCentimeter1 = distancePixels1 / distanceCentimeters1;
-pixelsPerCentimeter2 = distancePixels2 / distanceCentimeters2;
-pixelsPerCentimeter = (pixelsPerCentimeter1+pixelsPerCentimeter2)/2;
+pixelsPerCentimeterY = distancePixels1 / distanceCentimeters1;
+pixelsPerCentimeterX = distancePixels2 / distanceCentimeters2;
 
-% Вывод результата
-fprintf('Количество пикселей на сантиметр между 1-2: %.2f пксл/см\n', pixelsPerCentimeter1);
-fprintf('Количество пикселей на сантиметр между 3-4: %.2f пксл/см\n', pixelsPerCentimeter2);
-fprintf('Среднее количество пикселей на сантиметр: %.1f пксл/см\n', pixelsPerCentimeter);
 
+if abs(pixelsPerCentimeterX-pixelsPerCentimeterY)/(pixelsPerCentimeterX)*100 > PxlThreshold
+    pixelsPerCentimeter = pixelsPerCentimeterY;
+    x_kcorr = pixelsPerCentimeterY/pixelsPerCentimeterX;
+    fprintf('Количество пикселей на сантиметр между 1-2 (ось Y): %.2f пксл/см\n', pixelsPerCentimeterY);
+    fprintf('Количество пикселей на сантиметр между 3-4 (ось X): %.2f пксл/см\n', pixelsPerCentimeterX);
+    fprintf('Количество пикселей на сантиметр отличается между осями: x_kcorr %.2f пксл/см\n', x_kcorr);
+else
+    pixelsPerCentimeter = (pixelsPerCentimeterY+pixelsPerCentimeterX)/2;
+    fprintf('Количество пикселей на сантиметр между 1-2 (ось Y): %.2f пксл/см\n', pixelsPerCentimeterY);
+    fprintf('Количество пикселей на сантиметр между 3-4 (ось X): %.2f пксл/см\n', pixelsPerCentimeterX);
+    fprintf('Среднее количество пикселей на сантиметр: %.2f пксл/см\n', pixelsPerCentimeter);
 end
