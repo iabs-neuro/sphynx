@@ -19,8 +19,8 @@ function [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo, PathVideo, P
 % Created by VVP. 14.02.23
 
 if nargin<3
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','h:\Projects\Feed\2_CombinedData\');
-     PathOut = uigetdir('h:\Projects\Feed\4_Presets\');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\FOF\BehaviorData\1_Raw\');
+     PathOut = uigetdir('w:\Projects\FOF\BehaviorData\4_Preset\');
 end
 
 % some local parameters
@@ -42,7 +42,7 @@ PathOut = sprintf('%s\\%s_zones',PathOut, FilenameOut);
 question = questdlg('Do you want dowload Preset?', 'Important question', 'Yes','No','Yes');
 switch question
     case 'Yes'
-        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','H:\BOF\data\BowlsOpenField\Presets\');
+        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','w:\Projects\FOF\BehaviorData\4_Preset\');
         load(sprintf('%s//%s', PathPresetDownload, FilenamePresetDownload), 'Options','ArenaAndObjects');
 end
 
@@ -106,7 +106,7 @@ end
 %% 
 switch Options.ExperimentType
     case 'BowlsOpenField'
-        Options.pxl2sm = CalculatePxlInCm(frame);
+        [Options.pxl2sm, Options.x_kcorr] = CalculatePxlInCm(Options.GoodVideoFrame);
 %         Options.pxl2sm = 9.3; % BOF 2024 1T
 %        Options.pxl2sm = ;  % BOF 2024 2T
     case 'Complex Context'
@@ -409,7 +409,7 @@ switch Options.ExperimentType
         prmt = 0;
         while prmt == 0
             dlg_prompt = {'Specify width of wall outside zone (cm)','Specify width of wall inside zone (cm)', 'Specify width of object zone (cm)'};
-            dlg_default_data = {'10', '6', '2.5'};
+            dlg_default_data = {'10', '10', '2.5'};
             dlg_data = inputdlg(dlg_prompt, 'Parameters', 1, dlg_default_data, 'on');
 
             Options.WidthWallOutCm = str2double(dlg_data{1});
