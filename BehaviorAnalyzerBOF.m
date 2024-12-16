@@ -58,15 +58,15 @@ AngleDop = -pi/2;
 
 if nargin<9
     %% loading video and videotracking files
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','d:\Projects\BOF\VideoData\');
-    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','d:\Projects\BOF\DLC\');
-    PathOut = uigetdir('d:\Projects\BOF\Behavior\', 'Pick a Directory for Outputs');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\BOF\BehaviorData\2_Combined\');
+    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','w:\Projects\BOF\BehaviorData\3_DLC\');
+    PathOut = uigetdir('w:\Projects\BOF\BehaviorData\5_Behavior\', 'Pick a Directory for Outputs');
     
     % loading preset file
     answer = questdlg('Do you have preset file?', 'Uploading files', 'Yes','No','Yes');
     switch answer
         case 'Yes'
-            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','d:\Projects\BOF\Presets\');
+            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','w:\Projects\BOF\BehaviorData\4_Presets\');
         case 'No'
             [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo,PathVideo,PathOut);
     end
@@ -480,9 +480,6 @@ Acts = struct('ActName', [], 'ActArray', [],'ActArrayRefine', [], 'ActNumber', [
 Options.SpeedOptions{1} = 'rest';
 Options.SpeedOptions{2} = 'walk';
 Options.SpeedOptions{3} = 'locomotion';
-% Acts(1).ActName = sprintf('speed%s', string(Options.SpeedOptions(1)));
-% Acts(2).ActName = sprintf('speed%s', string(Options.SpeedOptions(2)));
-% Acts(3).ActName = sprintf('speed%s', string(Options.SpeedOptions(3)));
 Acts(1).ActName = Options.SpeedOptions{1};
 Acts(2).ActName = Options.SpeedOptions{2};
 Acts(3).ActName = Options.SpeedOptions{3};
@@ -630,7 +627,7 @@ end
 IndexInteract = find(strcmp({Acts.ActName}, 'objectinteraction'), 1);
 IndexInside = find(strcmp({Acts.ActName}, 'objectinside'), 1);
 if ~isempty(IndexInteract)
-    Acts(end+1).ActName = 'objectinteractreal';    
+    Acts(end+1).ActName = 'objectinteractreal';
     Acts(end).ActArray = Acts(IndexInteract).ActArrayRefine - Acts(IndexInside).ActArrayRefine;
     Acts(end).ActArray(Acts(end).ActArrayRefine == -1) = 0;
     [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
@@ -638,13 +635,21 @@ if ~isempty(IndexInteract)
     Acts(end).Zone = Acts(find(strcmp({Acts.ActName}, 'objectinteraction'), 1)).Zone;
 end
 
+% calculation coordinate features during locomotion
+xlocomotion = MouseCenterX'.*Acts(3).ActArrayRefine;
+ylocomotion = MouseCenterY'.*Acts(3).ActArrayRefine;
+xlocomotion(xlocomotion == 0) = NaN;
+ylocomotion(ylocomotion == 0) = NaN;
+
 %% Acts entryIn entryOut object
+
 VelocityThreshold = 10;
 FramesNumAdd = 15; % for 30 fps
 FramesNumEntry = 30; % for 30 fps
 DistanceObject = [];
 ObjectCenterY  = [];
 ObjectCenterX  = [];
+
 for object  = 1:size(ArenaAndObjects,2)-1
     
     IndexHead = find(strcmp(BodyPartsNames, "headcenter"),1);
@@ -838,27 +843,27 @@ for object  = 1:size(ArenaAndObjects,2)-1
 %     
 
     
-    h = figure;
-    plot(time, DistanceVelocitySmoothed, 'k'); hold on;
-    plot(time, Acts(9+plotact2).ActArrayRefine*mean(DistanceVelocitySmoothed) , 'r'); hold on; % bowl inside
-    plot(time, CombineInteraction*(mean(DistanceVelocitySmoothed)+1) , 'b'); hold on; % bowl combined
-    plot(time, Acts(15+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'g'); hold on;
-    plot(time, Acts(16+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'g.'); hold on;
-    plot(time, Acts(17+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'm'); hold on;
-    plot(time, Acts(18+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'm.'); hold on;
-    plot(time, Acts(19+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'c'); hold on;
-    plot(time, Acts(20+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'c.'); hold on;
-    plot(time, Acts(21+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'y'); hold on;
-    plot(time, Acts(22+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'y.'); hold on;
-    legend('velocity','inside','combined','entryInBowlInside', 'entryInBowlInteract',...
-        'entryInBowlInsideAll','entryInBowlInteractAll','entryOutBowlInside', 'entryOutBowlInteract',...
-        'entryOutBowlInsideAll', 'entryOutBowlInteractAll');
-    title('Entry In/Out Bowl/Object');
-    xlabel('Time, s');
-    ylabel('Speed, cm/s');
-    saveas(h, sprintf('%s\\%s_Entry%d.fig', PathOut,Filename, object));
+%     h = figure;
+%     plot(time, DistanceVelocitySmoothed, 'k'); hold on;
+%     plot(time, Acts(9+plotact2).ActArrayRefine*mean(DistanceVelocitySmoothed) , 'r'); hold on; % bowl inside
+%     plot(time, CombineInteraction*(mean(DistanceVelocitySmoothed)+1) , 'b'); hold on; % bowl combined
+%     plot(time, Acts(15+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'g'); hold on;
+%     plot(time, Acts(16+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'g.'); hold on;
+%     plot(time, Acts(17+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'm'); hold on;
+%     plot(time, Acts(18+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'm.'); hold on;
+%     plot(time, Acts(19+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'c'); hold on;
+%     plot(time, Acts(20+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'c.'); hold on;
+%     plot(time, Acts(21+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'y'); hold on;
+%     plot(time, Acts(22+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'y.'); hold on;
+%     legend('velocity','inside','combined','entryInBowlInside', 'entryInBowlInteract',...
+%         'entryInBowlInsideAll','entryInBowlInteractAll','entryOutBowlInside', 'entryOutBowlInteract',...
+%         'entryOutBowlInsideAll', 'entryOutBowlInteractAll');
+%     title('Entry In/Out Bowl/Object');
+%     xlabel('Time, s');
+%     ylabel('Speed, cm/s');
+%     saveas(h, sprintf('%s\\%s_Entry%d.fig', PathOut,Filename, object));
     
-    delete(h);
+%     delete(h);
 end
 
 %% object in field of view
@@ -950,11 +955,11 @@ delete(h);
 save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% make separate acts videos
-MaxPoints = 1000;
-PointsLine = [];
+MaxPoints = 100;
+
 % for act = 1:size(Acts,2)
-% for act = 1:size(Acts,2)
-for act = [13]
+for act = [3 4 5 7 9:32]
+    PointsLine = [];
     fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
     v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s_track',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
     v.FrameRate = Options.FrameRate;
@@ -995,9 +1000,11 @@ for act = [13]
         end
         
         % trajectory of mouse
-        PointsLine = [PointsLine k];
-        for l = 1:length(PointsLine)
-            RealFrame = insertShape(RealFrame,'filledcircle', [BodyPartsTraces(5).TraceOriginal.X(PointsLine(l))/Options.x_kcorr BodyPartsTraces(5).TraceOriginal.Y(PointsLine(l)) 2],'Color','green','LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
+        if act >=9
+            PointsLine = [PointsLine k];
+            for l = 1:length(PointsLine)
+                RealFrame = insertShape(RealFrame,'filledcircle', [BodyPartsTraces(5).TraceOriginal.X(PointsLine(l))/Options.x_kcorr BodyPartsTraces(5).TraceOriginal.Y(PointsLine(l)) 2],'Color','green','LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
+            end
         end
         
         % radial velocities of bodyparts in a moving frame of reference
@@ -1025,7 +1032,7 @@ end
 
 %% creating outputs table of features
 
-Features.Name = {'x', 'y', 'speed', 'bodydirection', 'headdirection', 'distanceBowl'};
+Features.Name = {'x', 'y', 'speed', 'bodydirection', 'headdirection', 'distanceBowl', 'x_locomotion', 'y_locomotion'};
 
 Features.Data(1:n_frames,1) = MouseCenterX';
 Features.Data(1:n_frames,2) = MouseCenterY';
@@ -1033,6 +1040,8 @@ Features.Data(1:n_frames,3) = Velocity;
 Features.Data(1:n_frames,4) = AngleRot';
 Features.Data(1:n_frames,5) = HeadDirection';
 Features.Data(1:n_frames,6) = DistanceBowl';
+Features.Data(1:n_frames,7) = xlocomotion;
+Features.Data(1:n_frames,8) = ylocomotion;
 
 if ~isempty(DistanceObject)
     Features.Data(1:n_frames,end+1) = DistanceObject';
