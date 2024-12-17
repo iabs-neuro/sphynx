@@ -11,8 +11,10 @@ title('Выберите 4 точки: 2 по вертикали, 2 по гори
 [x, y] = ginput(4);
 
 % Вычисление расстояния между точками в пикселях
-distancePixels1 = sqrt((x(2) - x(1))^2 + (y(2) - y(1))^2);
-distancePixels2 = sqrt((x(4) - x(3))^2 + (y(4) - y(3))^2);
+% distancePixels1 = sqrt((x(2) - x(1))^2 + (y(2) - y(1))^2);
+% distancePixels2 = sqrt((x(4) - x(3))^2 + (y(4) - y(3))^2);
+distancePixels1 = sqrt((y(2) - y(1))^2);
+distancePixels2 = sqrt((x(4) - x(3))^2);
 
 % Ввод пользователя: сколько сантиметров соответствует расстоянию между
 % точками
