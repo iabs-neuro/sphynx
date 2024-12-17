@@ -15,16 +15,19 @@ if ~isfolder(output_folder)
     mkdir(output_folder);
 end
 
+% filenames = {
+%     'F01', 'F05', 'F06', 'F08', 'F09', 'F10', 'F11', 'F12', 'F14', 'F15',...
+%     'F20', 'F28', 'F29', 'F30', 'F31', 'F34', 'F35', 'F37', 'F38', 'F40',...
+%     'F41', 'F52', 'F53', 'F54'
+%     };
+
 filenames = {
-    'F01', 'F05', 'F06', 'F08', 'F09', 'F10', 'F11', 'F12', 'F14', 'F15',...
-    'F20', 'F28', 'F29', 'F30', 'F31', 'F34', 'F35', 'F37', 'F38', 'F40',...
-    'F41', 'F52', 'F53', 'F54'
-    };
+    'F07', 'F48', 'F36'};
 
 timestamps_count_mouse = zeros(1, length(filenames));
 
 %% main part
-for file = 2:length(filenames)
+for file = 1:length(filenames)
     
     mask = sprintf('FOF_%s_*_timestamp.csv', filenames{file});
     
