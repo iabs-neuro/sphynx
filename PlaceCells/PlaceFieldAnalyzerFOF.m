@@ -1,121 +1,167 @@
-function [FieldsIC] = PlaceFieldAnalyzerFOF(pathWS,filenameWS,pathTR,filenameTR,pathNV,filenameNV,pathPR,filenamePR,plot_opt,PathOut)
-%17.12.2020 added separate matrices for all plots(for correct gauss filtering)
-%24.12 IC criteria
-%26.04 good fitting of ellipse
-%26.10 fields geometry added
-%04.12.22 different place field method added, n_objects==0 added,
-%FilenameCut added, CorrectionTrackMode, TimeMode added
-%24.04.24 spikes only in movement added
+function [FieldsIC] = PlaceFieldAnalyzerFOF(params_paths, params_main)
+% 17.12.2020 added separate matrices for all plots(for correct gauss filtering)
+% 24.12 IC criteria
+% 26.04 good fitting of ellipse
+% 26.10 fields geometry added
+% 04.12.22 different place field method added, n_objects==0 added,
+% FilenameCut added, CorrectionTrackMode, TimeMode added
+% 24.04.24 spikes only in movement added
+% 18.12.24 params added
 
-test_mode = 0; % 0 for all cells analysis else number of n first cells
-start = 1;
-app = 1;
-endd = 0;
-field_method = 'IC_orig';
-vel_opt=0; %option for map calculating with velocity border
-
-%% defining all vital parameters
-FilenameCut = 14; % cut x symbol from filename for main filename
-CorrectionTrackMode = 'FC'; % {'NVista', 'FC', 'Bonsai', 'none'} for different mode of correction sync
-TimeMode = 's'; % 's' for 3-20 min of exp good. 'min' - for 30-60 time of exp
-MinTime = 60; %seconds in 1 minutes
-FrameRate = 30;
-FrameRateTrack = 30; % FrameRate of Freezing chamber
-SmoothWindowS = 0.5; % in seconds 0.5 usual
-x_kcorr = 1;  % for good traces and x_kcorr = 4/3 for odor
-t_kcorr = 4000; %correction coefficient for VT and NV time distortion for 'NVista' (1 frame on t_kcorr frames screwing)
-time_smooth = 1; %smoothing indicator for time map
-spike_smooth = 1; %smoothing indicator for spike map
-thres_spike = 0; %threshold for spike map
-thres_firing = 0.5; %threshold for activity map
-length_line = FrameRate/2; %length in frames of period in place field
-pxl2sm = 1; %pixels in sm, 95/4 for odor and holes arena
-bin_size_sm = 3; %length of bin in sm
-bin_size = pxl2sm*bin_size_sm; %length in pixels for bin size
-min_spike = 5; %minimum number of spikes for active cell
-min_spike_field = 5; %minimum number of spikes for place field
-% min_good_line = 5; %minimum number of line with spikes inside a field
-% k_pp = 0; %percentage of good entries for field candidate
-% area_k = 1.5; %area scale for cup fields
-kernel_opt.small.size = 3;
-kernel_opt.small.sigma = 2;
-kernel_opt.big.size = 3;
-kernel_opt.big.sigma = 2;
-
-vel_border = 5; % velocity border in sm/s
-
-N_shift=1000; %number of shift for random distribution
-shift=0.9; %percent of all time occupancy for random shift
-S_sigma = 2; %criteria for informative place cell(~95%)
-smooth_freq_mode = 1; % 1 for smoothing activity map during IC calculation
-
-Screensize = get(0, 'Screensize');
-Screensize(3) = Screensize(4); % for square arena
-
-%supporting plots parameters
-axes_step = 1*pxl2sm; % in sm
-opt.track.trackp = 1;opt.track.textl = 1;opt.track.scale = 1;opt.track.transp = 1;opt.track.fon = 0;opt.track.spike_opt = 0;
-opt.spike.trackp = 0;opt.spike.textl = 1;opt.spike.scale = 1;opt.spike.transp = 1;opt.spike.fon = 0;opt.spike.spike_opt = 1;
-
-LineWidthSpikes = 2;
-MarksizeSpikes = 10;
-MarksizeSpikesAll = 5;
-FontSizeTitle = 20;
-FontSizeLabel = 20;
-
-%%
-if nargin<10
-    %%
-    plot_opt = 1;
-    PathOut = 'w:\Projects\RFC\ActivityData\PlaceCells\';
+%% defining all parameters
+if ~exist('params_paths', 'var') || isempty(params_paths)
+    
+    params_paths.PathOut = uigetdir('w:\Projects\FOF\ActivityData\PlaceCells\', 'Please specify the path to save the data');
     
     %loading videotracking
-    [filenameWS, pathWS]  = uigetfile('*.mat','load the VT file','w:\Projects\RFC\BehaviorData\6_WorkSpace\');
+    [params_paths.filenameWS, params_paths.pathWS]  = uigetfile('*.mat','Please specify the mat-file from behavior analysis','w:\Projects\FOF\ActivityData\Behav_mat\');
     
     %loading spike file
-    [filenameNV, pathNV]  = uigetfile('*.csv','load the spike file','w:\Projects\RFC\CalciumData\8_Spikes\');
-
+    [params_paths.filenameNV, params_paths.pathNV]  = uigetfile('*.csv','Please specify the file with spikes','w:\Projects\FOF\ActivityData\Spikes\');
+    
     %loading trace file
-    [filenameTR, pathTR]  = uigetfile('*.csv','load the trace file','w:\Projects\RFC\CalciumData\6_Traces\');
+    [params_paths.filenameTR, params_paths.pathTR]  = uigetfile('*.csv','Please specify the file with traces','w:\Projects\FOF\ActivityData\Traces\');
     
     %loading preset file
-    [filenamePR, pathPR]  = uigetfile('*.mat','load preset file','w:\Projects\RFC\BehaviorData\');
+    [params_paths.filenamePR, params_paths.pathPR]  = uigetfile('*.mat','Please specify the preset file','w:\Projects\FOF\ActivityData\Presets\');
     
-
 end
 
-%%
-Plot_Single_Spike = 0;
+if ~exist('params_main', 'var') || isempty(params_main)
+    
+    params_main = struct(...
+        'test_mode', 10,...                              % 0 for all cells analysis else number of n first cells
+        'start_frame', 1,...                            % frame of the first frame for analysis
+        'app_frame', 1,...                              % frame of the first frame "mouse in cage" (at last paradigm od analysis - is the same frame like a srart
+        'end_frame', 0,...                              % frame of the last frame for analysis
+        'PC_criterion', 'IC_orig',...                   % method for criterion of Place Cells: 'Peak' - schuffled peak of activity, 'MI_vanila' - Mutual Information for cells,  'MI_vanila_fields' - Mutual Information for fields
+        'vel_opt', 0,...                                % all maps calculate with respond to velocity threshold        
+        'CorrectionTrackMode', 'Bonsai',...             % different modes for correction syncronization of behavior and calcium data {'NVista', 'FC', 'Bonsai', 'none'}
+        'TimeMode', 's',...                             % 's' for 3-20 min duration of session, 'min' - for 30-60 min duration of session
+        'FrameRate', 30,...                             % default framerate for behavior
+        'SmoothWindowS', 0.5,...                        % smoothing window in seconds for behavior analysis (in case non-smoothed data)
+        'time_smooth', 1,...                            % flag for smoothing of time map(occupancy map)
+        'spike_smooth', 1,...                           % flag for smoothing of spikes map
+        'thres_spike', 0.3,...                          % threshold for spike map after smoothing
+        'thres_firing', 0.3,...                         % threshold for activity map after smoothing
+        'length_line_sec', 0.5,...                          % min time for acts (in area of fields or velocity binary timeseries)
+        'pxl2cm', 1,...                                 % pixels in сm. 1 if coordinates are in сm
+        'bin_size_cm', 8,...                            % size of bins in cm
+        'min_spike', 5,...                              % minimum number of spikes for active cell
+        'min_spike_field', 3,...                        % minimum number of spikes for place field
+        'kernel_opt', struct(...
+        'small', struct('size', 3, 'sigma', 1.5),...
+        'big', struct('size', 5, 'sigma', 1.5)),...     % gaussian kernel for maps smoothing
+        'vel_border', 5,...                             % velocity threshold in cm/s
+        'N_shift', 1000,...                             % number of shift for random distribution
+        'shift', 0.9,...                                % percent of all time occupancy for random shift
+        'S_sigma', 2.29,...                             % criteria for informative place cell(1.65 for p = 0.05, 2.29 for p = 0.01)
+        'smooth_freq_mode', 1,...                       % 1 for smoothing activity map during MI calculation
+        ...                                             % SUPPORTING PLOTS PARAMETERS
+        'plot_opt',1,...                                % main plot parameters, 0 - no one plots, 1 - basic plots, 2 - all plots
+        'Screensize', get(0, 'Screensize'),...          % screensize for all plotting
+        'axes_step', 1,...                              % in cm
+        'opt', struct('track', struct('trackp', 1, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 0),...
+        'spike', struct('trackp', 0, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 1)),... % opts for plot activity map
+        'LineWidthSpikes', 2,...
+        'MarksizeSpikes', 10,...
+        'MarksizeSpikesAll', 5,...
+        'FontSizeTitle', 20,...
+        'FontSizeLabel', 20);
+    
+end
 
-Plot_Spike = 0;
-Plot_Spike_Smooth = 0;
-Plot_FiringRate = 0;
-Plot_FiringRate_Smooth = 0;
-Plot_FiringRate_Smooth_Thres = 0;
+%% Unpack parameters
 
-Plot_FiringRate_Fields = 0;
-Plot_FiringRate_Fields_Corrected = 0;
-Plot_WaterShed = 0;
-Plot_WaterShedField = 0;
+pathWS = params_paths.pathWS;
+filenameWS = params_paths.filenameWS;
+pathTR = params_paths.pathTR;
+filenameTR = params_paths.filenameTR;
+pathNV = params_paths.pathNV;
+filenameNV = params_paths.filenameNV;
+pathPR = params_paths.pathPR;
+filenamePR = params_paths.filenamePR;
+path = params_paths.PathOut;
 
-Plot_Field = 0;
+test_mode = params_main.test_mode;
+start_frame = params_main.start_frame;
+app_frame = params_main.app_frame;
+end_frame = params_main.end_frame;
+PC_criterion = params_main.PC_criterion;
+vel_opt = params_main.vel_opt;
+CorrectionTrackMode = params_main.CorrectionTrackMode;
+TimeMode = params_main.TimeMode;
+FrameRate = params_main.FrameRate;
+SmoothWindowS = params_main.SmoothWindowS;
+time_smooth = params_main.time_smooth;
+spike_smooth = params_main.spike_smooth;
+thres_spike = params_main.thres_spike;
+thres_firing = params_main.thres_firing;
+length_line_sec = params_main.length_line_sec;
+pxl2cm = params_main.pxl2cm;
+bin_size_cm = params_main.bin_size_cm;
+min_spike = params_main.min_spike;
+min_spike_field = params_main.min_spike_field;
+kernel_opt = params_main.kernel_opt;
+vel_border = params_main.vel_border;
+N_shift = params_main.N_shift;
+shift = params_main.shift;
+S_sigma = params_main.S_sigma;
+smooth_freq_mode = params_main.smooth_freq_mode;
+plot_opt = params_main.plot_opt;
+Screensize = params_main.Screensize;
+axes_step = params_main.axes_step;
+opt = params_main.opt;
+LineWidthSpikes = params_main.LineWidthSpikes;
+MarksizeSpikes = params_main.MarksizeSpikes;
+MarksizeSpikesAll = params_main.MarksizeSpikesAll;
+FontSizeTitle = params_main.FontSizeTitle;
+FontSizeLabel = params_main.FontSizeLabel;
+
+%% defining internal parameters
+
+MinTime = 60;                               % seconds in 1 minutes :)
+FrameRateTrackFreezChamber = 30;            % FrameRate of Freezing chamber videos
+t_kcorr = 4000;                             % correction coefficient for VT and NV time distortion for 'NVista' (1 frame on t_kcorr frames screwing)
+bin_size = pxl2cm*bin_size_cm;              % length in pixels for bin size
+Screensize(3) = Screensize(4);              % for square arena
+length_line = FrameRate*length_line_sec;    % length in frames of period in place field
+
+% parameters for another criteria of PC
+% min_good_line = 5;                        % minimum number of line with spikes inside a field
+% k_pp = 0;                                 % percentage of good entries for field candidate
+
+plot_opts = struct(...
+    'Plot_Single_Spike', 0,...
+    'Plot_Spike', 0,...
+    'Plot_Spike_Smooth', 0,...
+    'Plot_FiringRate', 0,...
+    'Plot_FiringRate_Smooth', 0,...
+    'Plot_FiringRate_Smooth_Thres', 0,...
+    'Plot_FiringRate_Fields', 0,...
+    'Plot_FiringRate_Fields_Corrected', 0,...
+    'Plot_WaterShed', 0,...
+    'Plot_WaterShedField', 0,...
+    'Plot_Field', 0);
 
 if plot_opt > 0
-    Plot_Single_Spike = 1;
-    Plot_FiringRate_Smooth = 1;
-    Plot_FiringRate_Fields_Corrected = 1;
+    plot_opts.Plot_Single_Spike = 1;
+    plot_opts.Plot_FiringRate_Smooth = 1;
+    plot_opts.Plot_FiringRate_Fields_Corrected = 1;
 end
+
 if plot_opt > 1
-    Plot_Spike = 1;
-    Plot_Spike_Smooth = 1;
-    Plot_FiringRate = 1;
-    Plot_FiringRate_Fields = 1;
-    Plot_FiringRate_Smooth_Thres = 1;
-    Plot_WaterShed = 1;
-    Plot_WaterShedField = 1;
+    plot_opts.Plot_Spike = 1;
+    plot_opts.Plot_Spike_Smooth = 1;
+    plot_opts.Plot_FiringRate = 1;
+    plot_opts.Plot_FiringRate_Fields = 1;
+    plot_opts.Plot_FiringRate_Smooth_Thres = 1;
+    plot_opts.Plot_WaterShed = 1;
+    plot_opts.Plot_WaterShedField = 1;
 end
 
 %% loading data
+
 % spikes
 file_NV_bad = readtable(sprintf('%s%s', pathNV, filenameNV));
 file_NV_bad = table2array(file_NV_bad(2:end,2:end));
@@ -126,14 +172,12 @@ file_TR_bad = table2array(file_TR_bad(2:end,2:end));
 
 load(sprintf('%s%s',pathPR,filenamePR),'Options','ArenaAndObjects');
 
-load(sprintf('%s%s', pathWS, filenameWS),'BodyPartsTracesMainXReal', 'BodyPartsTracesMainYReal', 'Point');
-file = [BodyPartsTracesMainXReal'/Options.pxl2sm BodyPartsTracesMainYReal'/Options.pxl2sm];
-% file = readtable(sprintf('%s%s', path, filename));
+load(sprintf('%s%s', pathWS, filenameWS),'Features');
+file = [Features.Table.x Features.Table.y];
 
-FilenameOut = filenameWS(1:end-FilenameCut);
-path = PathOut;
+FilenameOut = filenameNV(1:find(filenameNV == '_', 1, 'last') - 1);
 
-%creating main and sub folders
+% creating main and sub folders
 path_folder = sprintf('%s_%s', FilenameOut, date);
 num_dir = 1;
 while isfolder(sprintf('%s\\%s_%d', path, path_folder, num_dir))
@@ -145,53 +189,53 @@ while ~s
 end
 path = sprintf('%s\\%s_%d', path, path_folder, num_dir);
 
-if Plot_Single_Spike
+if plot_opts.Plot_Single_Spike
     mkdir(path, 'Spikes');
 end
-if Plot_Spike
+if plot_opts.Plot_Spike
     mkdir(path, 'Heatmap_Spike');
 end
-if Plot_Spike_Smooth
+if plot_opts.Plot_Spike_Smooth
     mkdir(path, 'Heatmap_Spike_Smooth');
 end
-if Plot_FiringRate
+if plot_opts.Plot_FiringRate
     mkdir(path, 'Heatmap_FiringRate_Informative');
     mkdir(path, 'Heatmap_FiringRate_NOT_Informative');
 end
-if Plot_FiringRate_Smooth
+if plot_opts.Plot_FiringRate_Smooth
     mkdir(path, 'Heatmap_FiringRate_Smooth');
 end
-if Plot_FiringRate_Smooth_Thres
+if plot_opts.Plot_FiringRate_Smooth_Thres
     mkdir(path, 'Heatmap_FiringRate_Smooth_Thres_NOT_Informative');
     mkdir(path, 'Heatmap_FiringRate_Smooth_Thres_Informative');
 end
-if Plot_FiringRate_Fields
+if plot_opts.Plot_FiringRate_Fields
     mkdir(path, 'Heatmap_FiringRate_Fields');
 end
-if Plot_FiringRate_Fields_Corrected
+if plot_opts.Plot_FiringRate_Fields_Corrected
     mkdir(path, 'Heatmap_FiringRate_Fields_Corrected_NOT_Inform');
     mkdir(path, 'Heatmap_FiringRate_Fields_Corrected_Inform');
 end
 
-if Plot_WaterShed
+if plot_opts.Plot_WaterShed
     mkdir(path, 'WaterShed');
 end
-if Plot_WaterShedField
+if plot_opts.Plot_WaterShedField
     mkdir(path, 'WaterShedFields');
 end
 
-if Plot_Field
+if plot_opts.Plot_Field
     mkdir(path, 'Heatmap_Fields_Real');
     mkdir(path, 'Heatmap_Fields_NOT_Real');
 end
 
 %% Preparing data
 
-if endd == 0
+if end_frame == 0
     end_track = size(file,1);
     end_spike = size(file_NV_bad,1);
 else
-    end_track = endd;
+    end_track = end_frame;
 end
 
 switch TimeMode
@@ -201,13 +245,14 @@ switch TimeMode
         TimeRate = 60;  % for total time in minutes
 end
 
-x_orig = file(app:end_track, 1)*x_kcorr;
-y_orig = file(app:end_track, 2);
+% x_orig = file(app_frame:end_track, 1)*Options.x_kcorr;
+x_orig = file(app_frame:end_track, 1);
+y_orig = file(app_frame:end_track, 2);
 
-%correction of time distortion NV and VT
+% correction of time distortion NV and VT
 switch CorrectionTrackMode
     case 'Bonsai'
-        TimeSession = 600;
+        TimeSession = 720;
         TimeLine.Track = (0:TimeSession/(size(file,1)-1):TimeSession);
         TimeLine.Calcium = (0:TimeSession/(size(file_NV_bad,1)-1):TimeSession);
         Indexes = [];
@@ -231,12 +276,12 @@ switch CorrectionTrackMode
             end
         end
     case 'FC'
-        FrameRate  = end_spike/(end_track/FrameRateTrack);
+        FrameRate  = end_spike/(end_track/FrameRateTrackFreezChamber);
         x_bad = zeros(1,end_spike);
         y_bad = zeros(1,end_spike);
         for i=1:end_spike
-            x_bad(i) = x_orig(round(i*(FrameRateTrack/FrameRate)));
-            y_bad(i) = y_orig(round(i*(FrameRateTrack/FrameRate)));
+            x_bad(i) = x_orig(round(i*(FrameRateTrackFreezChamber/FrameRate)));
+            y_bad(i) = y_orig(round(i*(FrameRateTrackFreezChamber/FrameRate)));
         end
     case 'none'
         FrameRate = size(file_NV_bad,1)/file_NV_bad(end,1);
@@ -248,9 +293,9 @@ SmoothWindow = round(SmoothWindowS*FrameRate);
 n_frames=length(x_bad);
 TimeTotal = n_frames/FrameRate/TimeRate; %total time in minutes/seconds
 % time_min = 0.00045*TimeTotal; %time in minutes/seconds for minimum summary time in sectors
-time_min = 1;
+time_min = 0.5;
 
-NV_start = app-start+1;
+NV_start = app_frame-start_frame+1;
 file_NV = file_NV_bad(NV_start:NV_start+n_frames-1,:);
 n_cells = size(file_NV, 2);
 
@@ -267,18 +312,20 @@ x_int_sm = smooth(x_int,SmoothWindow);
 y_int_sm = smooth(y_int,SmoothWindow);
 h=figure;plot(time,x_bad); hold on;plot(time,x_int_sm,'r');
 title('X vs x smooth','FontSize', FontSizeLabel);
-xlabel(sprintf('Time, %s', TimeMode),'FontSize', FontSizeLabel);ylabel('X coordinate, sm','FontSize', FontSizeLabel);
+xlabel(sprintf('Time, %s', TimeMode),'FontSize', FontSizeLabel);ylabel('X coordinate, cm','FontSize', FontSizeLabel);
 hh=figure;plot(time,y_bad); hold on;plot(time,y_int_sm,'r');
 title('Y vs y smooth','FontSize', FontSizeLabel);
-xlabel(sprintf('Time, %s', TimeMode),'FontSize', FontSizeLabel);ylabel('Y coordinate, sm','FontSize', FontSizeLabel);
+xlabel(sprintf('Time, %s', TimeMode),'FontSize', FontSizeLabel);ylabel('Y coordinate, cm','FontSize', FontSizeLabel);
 saveas(h, sprintf('%s\\%s_x_coordinate.png',path,FilenameOut));
 saveas(hh, sprintf('%s\\%s_y_coordinate.png',path,FilenameOut));
 delete(h);delete(hh);
 
+
+!! ToDo change velocity from options
 %velocity calculate
 vel = zeros(1, n_frames);
 for i=2:n_frames
-    vel(i)= sqrt((x_int_sm(i)-x_int_sm(i-1))^2+(y_int_sm(i)-y_int_sm(i-1))^2)/pxl2sm*FrameRate;
+    vel(i)= sqrt((x_int_sm(i)-x_int_sm(i-1))^2+(y_int_sm(i)-y_int_sm(i-1))^2)/pxl2cm*FrameRate;
 end
 vel(1) = vel(2);
 vel_sm = smooth(vel,SmoothWindow);
@@ -294,7 +341,7 @@ h=figure;
 plot(time,vel);hold on;plot(time,vel_sm,'r');hold on;
 plot(time,vel_ref*vel_border,'g');
 title('V vs v smooth','FontSize', FontSizeLabel);
-xlabel(sprintf('Time, %s', TimeMode),'FontSize', FontSizeLabel);ylabel('Velocity, sm/s','FontSize', FontSizeLabel);
+xlabel(sprintf('Time, %s', TimeMode),'FontSize', FontSizeLabel);ylabel('Velocity, cm/s','FontSize', FontSizeLabel);
 saveas(h, sprintf('%s\\%s_velocity.png',path,FilenameOut));
 saveas(h, sprintf('%s\\%s_velocity.fig',path,FilenameOut));
 delete(h);
@@ -322,7 +369,7 @@ else
     n_cells_for_analysis = test_mode;
 end
 
-if Plot_Single_Spike
+if plot_opts.Plot_Single_Spike
     for i=1:n_cells_for_analysis
         spike_in_locomotion = find(file_NV(:,i).*velcam');
         spike_t_good = find(file_NV(:,i));
@@ -330,7 +377,7 @@ if Plot_Single_Spike
             h = figure('Position', [1 1 Screensize(4) Screensize(4)]);
             axis([ax_xy(1) ax_xy(2) ax_xy(3) ax_xy(4)]);
             title(sprintf('Trajectory of mouse with n = %d (%d) Ca2+ events (in mov, red) of cell #%d', length(spike_t_good),length(spike_in_locomotion), i), 'FontSize', FontSizeTitle);
-            xlabel('X coordinate, sm','FontSize', FontSizeLabel);ylabel('Y coordinate, sm','FontSize', FontSizeLabel);
+            xlabel('X coordinate, cm','FontSize', FontSizeLabel);ylabel('Y coordinate, cm','FontSize', FontSizeLabel);
             hold on;plot(x_int_sm,y_int_sm, 'b');
             hold on;DrawLine(x_int_sm, y_int_sm, velcam, 1, 'g', 0, 1);
             hold on;plot(x_vel_b(spike_t_good),y_vel_b(spike_t_good),'k*', 'MarkerSize',round(MarksizeSpikes/2), 'LineWidth',round(LineWidthSpikes/2));
@@ -343,11 +390,11 @@ if Plot_Single_Spike
 end
 
 %all spike on one figure
-h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
+h = figure('Position', [1 1 Screensize(4) Screensize(4)]);
 axis([ax_xy(1) ax_xy(2) ax_xy(3) ax_xy(4)]);
 title('Trajectory of mouse with all Ca2+ events', 'FontSize', FontSizeTitle);
-xlabel('X coordinate, sm', 'FontSize', FontSizeLabel);
-ylabel('Y coordinate, sm', 'FontSize', FontSizeLabel);
+xlabel('X coordinate, cm', 'FontSize', FontSizeLabel);
+ylabel('Y coordinate, cm', 'FontSize', FontSizeLabel);
 set(gca, 'FontSize', FontSizeLabel);
 hold on;plot(x_int_sm,y_int_sm, 'b');
 hold on;DrawLine(x_int_sm, y_int_sm, velcam, 1, 'g', 0, 1);
@@ -401,7 +448,7 @@ mask_s = double(mask_t == 0);
 
 %heatmap for occupancy map
 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx (Options,ArenaAndObjects,opt.track,N_time_sm,0,x_int_sm,y_int_sm,bin_size,x_kcorr,spike_t_good);
+DrawHeatMapModSphynx (Options,ArenaAndObjects,opt.track,N_time_sm,0,x_int_sm,y_int_sm,bin_size,Options.x_kcorr,spike_t_good);
 title(sprintf('Occupancy map smoothed (%s)',TimeMode), 'FontSize', FontSizeTitle);
 saveas(h,sprintf('%s\\%s_Heatmap_time_sm.png', path, FilenameOut));
 delete(h);
@@ -574,56 +621,56 @@ for i=g_cell
     
     MapCells(:,:,i) = N_freq_filt_norm_thres; % all activity maps smoothed and tresholded
     
-    if Plot_Spike
+    if plot_opts.Plot_Spike
         h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        DrawHeatMapModSphynx (Options,ArenaAndObjects,opt.spike,N,max_N,x_int_sm,y_int_sm,bin_size,x_kcorr,spike_t_good);
+        DrawHeatMapModSphynx (Options,ArenaAndObjects,opt.spike,N,max_N,x_int_sm,y_int_sm,bin_size,Options.x_kcorr,spike_t_good);
         title(sprintf('Spike''s map of cell #%d. Spikes: %d',i, length(spike_t_good)), 'FontSize', FontSizeTitle);
         saveas(h, sprintf('%s\\Heatmap_Spike\\%s_Heatmap_Spike_%d.png', path,FilenameOut,i));
         delete(h);
     end
     
-    if Plot_Spike_Smooth
+    if plot_opts.Plot_Spike_Smooth
         h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_sm,max_N_sm,x_int_sm,y_int_sm,bin_size,x_kcorr,spike_t_good);
+        DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_sm,max_N_sm,x_int_sm,y_int_sm,bin_size,Options.x_kcorr,spike_t_good);
         title(sprintf('Spikes number of cell %d (smoothed). Spikes: %d',i, length(spike_t_good)), 'FontSize', FontSizeTitle);
         saveas(h, sprintf('%s\\Heatmap_Spike_Smooth\\%s_Heatmap_Spike_sm_%d.png', path,FilenameOut,i));
         delete(h);
     end
     
-    if Plot_FiringRate
+    if plot_opts.Plot_FiringRate
         if Cell_IC(2,i)
             h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq,0,x_int_sm,y_int_sm,bin_size,x_kcorr,spike_t_good);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq,0,x_int_sm,y_int_sm,bin_size,Options.x_kcorr,spike_t_good);
             title(sprintf('Firing rate of informative cell %d (#/min)', i), 'FontSize', FontSizeTitle);
             saveas(h, sprintf('%s\\Heatmap_FiringRate_Informative\\%s_Heatmap_FiringRate_Informative_%d.png', path, FilenameOut,i));
             delete(h);
         else
             h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq,0,x_int_sm,y_int_sm,bin_size,x_kcorr,spike_t_good);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq,0,x_int_sm,y_int_sm,bin_size,Options.x_kcorr,spike_t_good);
             title(sprintf('Firing rate of NOT informative cell %d (#/min)', i), 'FontSize', FontSizeTitle);
             saveas(h, sprintf('%s\\Heatmap_FiringRate_NOT_Informative\\%s_Heatmap_FiringRate_NOT_Informative_%d.png', path, FilenameOut,i));
             delete(h);
         end
     end
     
-    if Plot_FiringRate_Smooth
+    if plot_opts.Plot_FiringRate_Smooth
         h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt,max_N_freq_filt,x_int_sm,y_int_sm,bin_size,x_kcorr,spike_t_good);
+        DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt,max_N_freq_filt,x_int_sm,y_int_sm,bin_size,Options.x_kcorr,spike_t_good);
         title(sprintf('Firing rate, smoothed, of cell %d (#/min). Ca2+ events: %d\n MI = %.2f, MU\\_shuffle = %.3f, SIGMA\\_shuffle = %.3f, MI\\_Zscore = %.1f', i, length(spike_t_good), Cell_IC(3:6,i)), 'FontSize', 10);
         saveas(h, sprintf('%s\\Heatmap_FiringRate_Smooth\\%s_Heatmap_FiringRate_Smoothed_Cell_%d.png', path,FilenameOut,i));
         delete(h);
     end
     
-    if Plot_FiringRate_Smooth_Thres
+    if plot_opts.Plot_FiringRate_Smooth_Thres
         if Cell_IC(2,i)
             h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres,0,x_int_sm,y_int_sm,bin_size,x_kcorr,spike_t_good);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres,0,x_int_sm,y_int_sm,bin_size,Options.x_kcorr,spike_t_good);
             title(sprintf('Firing rate of informative cell %d (smoothed and thresholded)(#/min)',i), 'FontSize', FontSizeTitle);
             saveas(h, sprintf('%s\\Heatmap_FiringRate_Smooth_Thres_Informative\\%s_Heatmap_FiringRate_sm_thres_Informative_%d.png', path,FilenameOut,i));
             delete(h);
         else
             h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres,0,x_int_sm,y_int_sm,bin_size,x_kcorr,spike_t_good);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres,0,x_int_sm,y_int_sm,bin_size,Options.x_kcorr,spike_t_good);
             title(sprintf('Firing rate of NOT informative cell %d (smoothed and thresholded)(#/min)',i), 'FontSize', FontSizeTitle);
             saveas(h, sprintf('%s\\Heatmap_FiringRate_Smooth_Thres_NOT_Informative\\%s_Heatmap_FiringRate_sm_thres_NOT_Informative_%d.png', path,FilenameOut,i));
             delete(h);
@@ -632,19 +679,19 @@ for i=g_cell
 end
 
 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,N_sum,0,x_int_sm,y_int_sm,bin_size,x_kcorr,spike_t_good);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,N_sum,0,x_int_sm,y_int_sm,bin_size,Options.x_kcorr,spike_t_good);
 title('Sum of spikes map', 'FontSize', FontSizeTitle);
 saveas(h, sprintf('%s\\%s_Heatmap_AllCells_spikes.png', path, FilenameOut));
 delete(h);
 
 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,N_freq_filt_sum,0,x_int_sm,y_int_sm,bin_size,x_kcorr,spike_t_good);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,N_freq_filt_sum,0,x_int_sm,y_int_sm,bin_size,Options.x_kcorr,spike_t_good);
 title('Firing rate for all cells(#/min)', 'FontSize', FontSizeTitle);
 saveas(h, sprintf('%s\\%s_Heatmap_AllCells_FiringRate.png', path, FilenameOut));
 delete(h);
 
 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,N_freq_filt_norm_sum,0,x_int_sm,y_int_sm,bin_size,x_kcorr,spike_t_good);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,N_freq_filt_norm_sum,0,x_int_sm,y_int_sm,bin_size,Options.x_kcorr,spike_t_good);
 title('Firing rate for all cells normalized (#/min)', 'FontSize', FontSizeTitle);
 saveas(h, sprintf('%s\\%s_Heatmap_AllCells_Normalized_FiringRate.png', path, FilenameOut));
 delete(h);
@@ -674,7 +721,7 @@ for map = g_cell
     N_water = -MapCells(:,:,map);
     N_freq_filt2 = MapCells(:,:,map);
     L = watershed(N_water);
-    [n_wfield,mask_wfield, spike_in_field] = WaterShedFieldVovaMod(L, spike_t_good, x_int_sm, y_int_sm, bin_size, x_kcorr,x_shift,y_shift);
+    [n_wfield,mask_wfield, spike_in_field] = WaterShedFieldVovaMod(L, spike_t_good, x_int_sm, y_int_sm, bin_size, Options.x_kcorr,x_shift,y_shift);
     
     wfields = wfields+n_wfield;
     for mask_field=1:n_wfield
@@ -682,7 +729,7 @@ for map = g_cell
         Fields(2,wfields-n_wfield+mask_field) = mask_field;
         Fields(8,wfields-n_wfield+mask_field) = length([spike_in_field{mask_field,:}]);
         
-        switch field_method
+        switch PC_criterion
             case 'Peak'
                 orig_peaks = [];
                 for mask_field=1:n_wfield
@@ -695,10 +742,10 @@ for map = g_cell
                 Fields(6,wfields-n_wfield+mask_field) = sigma_fields;
                 Fields(7,wfields-n_wfield+mask_field) = Nsig_fields(mask_field);
                 Fields(9,wfields-n_wfield+mask_field) = (Fields(8,wfields-n_wfield+mask_field)>min_spike_field)*Fields(3,wfields-n_wfield+mask_field);
-            case 'IC_orig'
+            case 'MI_vanila'
                 Fields(3:7,wfields-n_wfield+mask_field) = Cell_IC(2:6,map);
                 Fields(9,wfields-n_wfield+mask_field) = (Fields(8,wfields-n_wfield+mask_field)>min_spike_field)*Fields(3,wfields-n_wfield+mask_field);
-            case 'IC_multi'
+            case 'MI_vanila_fields'
                 Fields(3:6,wfields-n_wfield+mask_field) = RandomShiftMod(smooth_freq_mode,[spike_in_field{mask_field,:}],x_ind,y_ind,N_time_sm,N_shift,shift,S_sigma,TimeRate,FrameRate,kernel_opt);
                 Fields(7,wfields-n_wfield+mask_field) = (Fields(4,wfields-n_wfield+mask_field)-Fields(5,wfields-n_wfield+mask_field))/Fields(6,wfields-n_wfield+mask_field);
                 Fields(9,wfields-n_wfield+mask_field) = (Fields(8,wfields-n_wfield+mask_field)>min_spike_field)*Fields(3,wfields-n_wfield+mask_field);
@@ -708,9 +755,9 @@ for map = g_cell
         N_freq_filt_true = N_freq_filt2.*mask_wfield(:,:,mask_field)/max(max(mask_wfield(:,:,mask_field)));
         MapFields(:,:,wfields-n_wfield+mask_field) = N_freq_filt_true;
         
-        if Plot_FiringRate_Fields
+        if plot_opts.Plot_FiringRate_Fields
             h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_true, 0, x_int_sm, y_int_sm, bin_size, x_kcorr,[spike_in_field{mask_field,:}]);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_true, 0, x_int_sm, y_int_sm, bin_size, Options.x_kcorr,[spike_in_field{mask_field,:}]);
             title(sprintf('Firing rate of cell %d field %d Crit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, mask_field,Fields(3:7,wfields-n_wfield+mask_field)), 'FontSize', 10);
             saveas(h, sprintf('%s\\Heatmap_FiringRate_Fields\\%s_FiringRateFields_Cell_%d_Field_%d.png',path,FilenameOut,map,mask_field));
             delete(h);
@@ -771,25 +818,25 @@ for map = g_cell
         
         MapFieldsCorrected(:,:,wfields-n_wfield+mask_field) = N_freq_filt_norm_thres;
         
-        if Plot_FiringRate_Fields_Corrected
+        if plot_opts.Plot_FiringRate_Fields_Corrected
             if Fields(9,wfields-n_wfield+mask_field)
                 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-                DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres, 0, x_int_sm, y_int_sm, bin_size, x_kcorr, [spike_in_field{mask_field,:}]);
+                DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres, 0, x_int_sm, y_int_sm, bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
                 title(sprintf('Firing rate of informative field %d of cell %d (smoothed and thresholded)(#/min) \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f',mask_field,map,Fields(4:7,wfields-n_wfield+mask_field)), 'FontSize', 10);
                 saveas(h, sprintf('%s\\Heatmap_FiringRate_Fields_Corrected_Inform\\%s_FiringRate_Fields_Corrected_Inform_Cell_%d_Field_%d.png',path,FilenameOut,map,mask_field));
                 delete(h);
             else
 %                 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-%                 DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres, 0, x_int_sm, y_int_sm, bin_size, x_kcorr, [spike_in_field{mask_field,:}]);
+%                 DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres, 0, x_int_sm, y_int_sm, bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
 %                 title(sprintf('Firing rate of NOT informative field %d of cell %d (smoothed and thresholded)(#/min) \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f',mask_field,map,Fields(4:7,wfields-n_wfield+mask_field)), 'FontSize', 10);
 %                 saveas(h, sprintf('%s\\Heatmap_FiringRate_Fields_Corrected_NOT_Inform\\%s_FiringRate_Fields_Corrected_NOT_Inform_%d.png', path,FilenameOut,wfields-n_wfield+mask_field));
 %                 delete(h);
             end
         end
         
-        if Plot_WaterShedField
+        if plot_opts.Plot_WaterShedField
             h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,double(mask_wfield(:,:,mask_field)), 0, x_int_sm, y_int_sm, bin_size, x_kcorr, [spike_in_field{mask_field,:}]);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,double(mask_wfield(:,:,mask_field)), 0, x_int_sm, y_int_sm, bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
             title(sprintf('WaterShed Transform of cell %d field %d ICcrit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, mask_field,Fields(3:7,wfields-n_wfield+mask_field)), 'FontSize', FontSizeTitle);
             saveas(h, sprintf('%s\\WaterShedFields\\%s_WaterShedField_%d.png', path,FilenameOut,wfields-n_wfield+mask_field));
             delete(h);
@@ -797,9 +844,9 @@ for map = g_cell
     end
     
     %watershed plot
-    if Plot_WaterShed
+    if plot_opts.Plot_WaterShed
         h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,double(L), 0, x_int_sm, y_int_sm, bin_size, x_kcorr, [spike_in_field{mask_field,:}]);
+        DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,double(L), 0, x_int_sm, y_int_sm, bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
         title(sprintf('WaterShed Transform of cell %d Crit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, Cell_IC(2:6,map)), 'FontSize', FontSizeTitle);
         saveas(h, sprintf('%s\\WaterShed\\%s_WaterShed_%d.png', path,FilenameOut,map));
         delete(h);
@@ -808,36 +855,36 @@ end
 
 % FiringRate plots
 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_sum, 0, x_int_sm, y_int_sm, bin_size, x_kcorr,spike_t_good);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_sum, 0, x_int_sm, y_int_sm, bin_size, Options.x_kcorr,spike_t_good);
 title('Firing rate for all corrected fields(#/min)', 'FontSize', FontSizeTitle);
 saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRate.png', path, FilenameOut));
 delete(h);
 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_norm_sum, 0, x_int_sm, y_int_sm, bin_size, x_kcorr,spike_t_good);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_norm_sum, 0, x_int_sm, y_int_sm, bin_size, Options.x_kcorr,spike_t_good);
 title('Firing rate for all corrected fields (normalized) (#/min)', 'FontSize', FontSizeTitle);
 saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRate_Normalized.png', path, FilenameOut));
 delete(h);
 
 % FiringRate Informative plots
 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_sum_IC, 0, x_int_sm, y_int_sm, bin_size, x_kcorr,spike_t_good);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_sum_IC, 0, x_int_sm, y_int_sm, bin_size, Options.x_kcorr,spike_t_good);
 title('Firing rate for all INFORM corrected fields(#/min)', 'FontSize', FontSizeTitle);
 saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateInform.png', path, FilenameOut));
 delete(h);
 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_norm_sum_IC, 0, x_int_sm, y_int_sm, bin_size, x_kcorr,spike_t_good);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_norm_sum_IC, 0, x_int_sm, y_int_sm, bin_size, Options.x_kcorr,spike_t_good);
 title('Firing rate for all INFORM corrected fields (normalized)(#/min)', 'FontSize', FontSizeTitle);
 saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateInform_Normalized.png', path, FilenameOut));
 delete(h);
 
 % FiringRate NOT Informative plots
 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_sum_NOT_IC, 0, x_int_sm, y_int_sm, bin_size, x_kcorr,spike_t_good);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_sum_NOT_IC, 0, x_int_sm, y_int_sm, bin_size, Options.x_kcorr,spike_t_good);
 title('Firing rate for all NOT inform corrected fields (#/min)', 'FontSize', FontSizeTitle);
 saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateNOTInform.png', path, FilenameOut));
 delete(h);
 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_norm_sum_NOT_IC, 0, x_int_sm, y_int_sm, bin_size, x_kcorr,spike_t_good);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_norm_sum_NOT_IC, 0, x_int_sm, y_int_sm, bin_size, Options.x_kcorr,spike_t_good);
 title('Firing rate for all NOT inform corrected fields (normalized)(#/min)', 'FontSize', FontSizeTitle);
 saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateNOTInform_Normalized.png', path, FilenameOut));
 delete(h);
@@ -996,7 +1043,7 @@ if ~isempty(MapFieldsIC)
     %         %         plot(x_int_sm, y_int_sm, 'b', 'MarkerSize',20);hold on;
     %         %         plot(x_field,y_field, 'g'); hold on;
     %         %         plot(x_int_sm(find(field_line)),y_int_sm(find(field_line)), 'r');
-    %         %         hold on; DrawLine(x_int_sm*x_kcorr, y_int_sm, field_line, x_kcorr, 'b', 1, 1);
+    %         %         hold on; DrawLine(x_int_sm*Options.x_kcorr, y_int_sm, field_line, Options.x_kcorr, 'b', 1, 1);
     %
     %         %         [field_line_ref, n_entries_field, time_field, field_time, frame_in, frame_out] = RefineLine(field_line, length_line, length_line);
     %
@@ -1042,9 +1089,9 @@ if ~isempty(MapFieldsIC)
     %         % plot for every field
     %         x_field = x_field-bin_size*(x_shift);
     %         y_field = y_field-bin_size*(y_shift);
-    %         if Plot_Field
+    %         if plot_opts.Plot_Field
     %             h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-    %             DrawHeatMapModSphynx(Options,1,1,1,0,0,0, MapFieldsIC(:,:,field),max_N_freq_filt_norm_thres, x_int_sm, y_int_sm, bin_size, x_kcorr,spike_t_good);
+    %             DrawHeatMapModSphynx(Options,1,1,1,0,0,0, MapFieldsIC(:,:,field),max_N_freq_filt_norm_thres, x_int_sm, y_int_sm, bin_size, Options.x_kcorr,spike_t_good);
     %             title(sprintf('Activity of %d cell, field %d \n inform %d, crit %d (all entries: %d, entries with Ca2+: %d)',SpikeFieldsStruct(field).cell,SpikeFieldsStruct(field).fields,SpikeFieldsStruct(field).inform,SpikeFieldsStruct(field).crit,SpikeFieldsStruct(field).n_entries_field,SpikeFieldsStruct(field).n_good_line), 'FontSize', FontSizeTitle);
     %             %             for xx=1:length(x_field)
     %             %                 if x_field(xx)< x_arena(1) || x_field(xx)> x_arena(2)
@@ -1057,11 +1104,11 @@ if ~isempty(MapFieldsIC)
     %             %                 end
     %             %             end
     %
-    %             %             hold on; plot((x_field)/x_kcorr,y_field, 'b', 'LineWidth',3);
-    %             hold on; plot((x_field)/x_kcorr,y_field, 'b', 'LineWidth',3);
-    %             hold on; DrawLine(x_int_sm-bin_size*x_shift, y_int_sm-bin_size*y_shift, field_line_ref, x_kcorr, 'b', 1, 1);
-    %             hold on; DrawLine(x_int_sm-bin_size*x_shift, y_int_sm-bin_size*y_shift, field_good, x_kcorr, 'b', 1, 2);
-    %             hold on; plot((x_int_sm(spike_t_good)-bin_size*x_shift)/x_kcorr,y_int_sm(spike_t_good)-bin_size*y_shift,'k*','MarkerSize',MarksizeSpikes,'LineWidth',LineWidthSpikes);
+    %             %             hold on; plot((x_field)/Options.x_kcorr,y_field, 'b', 'LineWidth',3);
+    %             hold on; plot((x_field)/Options.x_kcorr,y_field, 'b', 'LineWidth',3);
+    %             hold on; DrawLine(x_int_sm-bin_size*x_shift, y_int_sm-bin_size*y_shift, field_line_ref, Options.x_kcorr, 'b', 1, 1);
+    %             hold on; DrawLine(x_int_sm-bin_size*x_shift, y_int_sm-bin_size*y_shift, field_good, Options.x_kcorr, 'b', 1, 2);
+    %             hold on; plot((x_int_sm(spike_t_good)-bin_size*x_shift)/Options.x_kcorr,y_int_sm(spike_t_good)-bin_size*y_shift,'k*','MarkerSize',MarksizeSpikes,'LineWidth',LineWidthSpikes);
     %
     %             F = getframe(h);
     %             if SpikeFieldsStruct(field).inform && SpikeFieldsStruct(field).crit
@@ -1139,14 +1186,14 @@ if ~isempty(MapFieldsIC)
         %         end
         
         %         h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        %         DrawHeatMapModSphynx(Options,n_objects,1,1,1,0,0,0, N_real_fields_sum, 0, cup1_centr_x, cup1_centr_y, cup1_rad, cup2_centr_x, cup2_centr_y, cup2_rad, cup3_centr_x, cup3_centr_y, cup3_rad, x_arena, y_arena, x_int_sm, y_int_sm, bin_size, x_kcorr,cup1_line_ref,cup2_line_ref,cup3_line_ref, spike_t_good);
+        %         DrawHeatMapModSphynx(Options,n_objects,1,1,1,0,0,0, N_real_fields_sum, 0, cup1_centr_x, cup1_centr_y, cup1_rad, cup2_centr_x, cup2_centr_y, cup2_rad, cup3_centr_x, cup3_centr_y, cup3_rad, x_arena, y_arena, x_int_sm, y_int_sm, bin_size, Options.x_kcorr,cup1_line_ref,cup2_line_ref,cup3_line_ref, spike_t_good);
         %         title('Firing rate for all real fields(normalized)', 'FontSize', FontSizeTitle);
         %         F = getframe(h);
         %         saveas(h, sprintf('%s\\%s_Heatmap_AllRealFields.png', path, FilenameOut));
         %         delete(h);
         %
         %         h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        %         DrawHeatMapModSphynx(Options,n_objects,1,1,1,0,0,0, N_not_real_fields_sum, 0, cup1_centr_x, cup1_centr_y, cup1_rad, cup2_centr_x, cup2_centr_y, cup2_rad, cup3_centr_x, cup3_centr_y, cup3_rad, x_arena, y_arena, x_int_sm, y_int_sm, bin_size, x_kcorr,cup1_line_ref,cup2_line_ref,cup3_line_ref, spike_t_good);
+        %         DrawHeatMapModSphynx(Options,n_objects,1,1,1,0,0,0, N_not_real_fields_sum, 0, cup1_centr_x, cup1_centr_y, cup1_rad, cup2_centr_x, cup2_centr_y, cup2_rad, cup3_centr_x, cup3_centr_y, cup3_rad, x_arena, y_arena, x_int_sm, y_int_sm, bin_size, Options.x_kcorr,cup1_line_ref,cup2_line_ref,cup3_line_ref, spike_t_good);
         %         title('Firing rate for all not real fields(normalized)', 'FontSize', FontSizeTitle);
         %         F = getframe(h);
         %         saveas(h, sprintf('%s\\%s_Heatmap_AllNotRealFields.png', path, FilenameOut));
