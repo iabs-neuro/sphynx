@@ -16,7 +16,7 @@ if opt.fon
     if Options.ExperimentType  == "Freezing Track"
         rgb_image = Options.GoodVideoFrame;
     else
-        rgb_image = ind2rgb(Options.GoodVideoFrame, gray(256));
+        rgb_image = ind2rgb(Options.GoodVideoFrameGray, gray(256));
     end
     
 %     objects_image = zeros(size(ArenaAndObjects(2).maskborder,1),size(ArenaAndObjects(2).maskborder,2));
