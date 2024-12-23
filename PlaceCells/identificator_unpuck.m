@@ -1,8 +1,8 @@
-function [mouse] = identificator_unpuck(mouse, id, verbose)
+function [mouse] = identificator_unpuck(mouse)
 
-% id = 'FOF_F01_1D_1T';
+% mouse.params_paths.FilenameOut = 'FOF_F01_1D_1T';
 
-parts = strsplit(id, '_');
+parts = strsplit(mouse.params_paths.filenameOut, '_');
 parts_count = length(parts);
 
 mouse.exp = parts{1};
@@ -31,10 +31,6 @@ if parts_count > 3
     elseif endsWith(parts{4}, 'T')
         mouse.trial = parts{4};
     end
-end
-
-if verbose
-    disp(mouse);
 end
 
 end

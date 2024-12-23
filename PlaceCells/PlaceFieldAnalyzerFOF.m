@@ -11,7 +11,8 @@ function [FieldsIC] = PlaceFieldAnalyzerFOF(params_paths, params_main)
 %% manual defining parameters section
 if ~exist('params_paths', 'var') || isempty(params_paths)
     
-    params_paths.PathOut = uigetdir('w:\Projects\FOF\ActivityData\PlaceCells\', 'Please specify the path to save the data');
+    % define path for outputs
+    params_paths.pathOut = uigetdir('w:\Projects\FOF\ActivityData\PlaceCells\', 'Please specify the path to save the data');
     
     %loading videotracking
     [params_paths.filenameWS, params_paths.pathWS]  = uigetfile('*.mat','Please specify the mat-file from behavior analysis','w:\Projects\FOF\ActivityData\Behav_mat\');
@@ -30,147 +31,113 @@ end
 if ~exist('params_main', 'var') || isempty(params_main)
     
     params_main = struct(...
-        'snr_params', struct('percentile', 50),...      % percent of signal to identify noise
+        ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SYNCHRONIZATION OPTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        'CorrectionTrackMode', 'Bonsai',...             % different modes for correction syncronization of behavior and calcium data {'NVista', 'FC', 'Bonsai', 'none'}
+        'coordinates_correction', 0,...                 % 1 if you need in interpolation and smoothing of videotracking data
         'test_mode', 10,...                             % 0 for all cells analysis else number of n first cells
         'start_frame', 1,...                            % frame of the first frame for analysis
         'app_frame', 1,...                              % frame of the first frame "mouse in cage" (at last paradigm od analysis - is the same frame like a srart
         'end_frame', 0,...                              % frame of the last frame for analysis
-        'PC_criterion', 'IC_orig',...                   % method for criterion of Place Cells: 'Peak' - schuffled peak of activity, 'MI_vanila' - Mutual Information for cells,  'MI_vanila_fields' - Mutual Information for fields
-        'vel_opt', 0,...                                % all maps calculate with respond to velocity threshold        
-        'CorrectionTrackMode', 'Bonsai',...             % different modes for correction syncronization of behavior and calcium data {'NVista', 'FC', 'Bonsai', 'none'}
         'TimeMode', 's',...                             % 's' for 3-20 min duration of session, 'min' - for 30-60 min duration of session
-        'coordinates_correction', 0,...                 % 1 if you need in interpolation and smoothing of videotracking data
+        ...
+        ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% DIFFERENT ANALYSIS MODES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        'PC_criterion', 'MI_vanila',...                 % method for criterion of Place Cells: 'Peak' - schuffled peak of activity, 'MI_vanila' - Mutual Information for cells,  'MI_vanila_fields' - Mutual Information for fields
+        'bin_size_cm', 8,...                            % size of bins in cm
+        'S_sigma', 2.29,...                             % criteria for informative place cell(1.65 for p = 0.05, 2.29 for p = 0.01)
+        'N_shift', 1000,...                             % number of shift for random distribution
+        'shift', 0.9,...                                % percent of all time occupancy for random shift
+        'kernel_opt', struct(...
+        'small', struct('size', 3, 'sigma', 1.5),...
+        'big', struct('size', 5, 'sigma', 1.5)),...     % gaussian kernel for maps smoothing
+        'smooth_freq_mode', 1,...                       % 1 for smoothing activity map during MI calculation
+        ...
+        'vel_opt', 0,...                                % all maps and MI calculated with respond to velocity threshold
+        'vel_border', 5,...                             % velocity threshold in cm/s
+        ...
+        'min_spike', 5,...                              % minimum number of spikes for active cell
+        'min_spike_field', 3,...                        % minimum number of spikes for place field
+        ...
+        ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TEMPORAL PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         'SmoothWindowS', 0.5,...                        % smoothing window in seconds for behavior analysis (in case non-smoothed data)
         'time_smooth', 1,...                            % flag for smoothing of time map(occupancy map)
         'spike_smooth', 1,...                           % flag for smoothing of spikes map
         'thres_spike', 0.3,...                          % threshold for spike map after smoothing
         'thres_firing', 0.3,...                         % threshold for activity map after smoothing
         'length_line_sec', 0.5,...                      % min time for acts (in area of fields or velocity binary timeseries)
-        'pxl2cm', 1,...                                 % pixels in сm. 1 if coordinates are in сm
-        'bin_size_cm', 8,...                            % size of bins in cm
-        'min_spike', 5,...                              % minimum number of spikes for active cell
-        'min_spike_field', 3,...                        % minimum number of spikes for place field
-        'kernel_opt', struct(...
-        'small', struct('size', 3, 'sigma', 1.5),...
-        'big', struct('size', 5, 'sigma', 1.5)),...     % gaussian kernel for maps smoothing
-        'vel_border', 5,...                             % velocity threshold in cm/s
-        'N_shift', 1000,...                             % number of shift for random distribution
-        'shift', 0.9,...                                % percent of all time occupancy for random shift
-        'S_sigma', 2.29,...                             % criteria for informative place cell(1.65 for p = 0.05, 2.29 for p = 0.01)
-        'smooth_freq_mode', 1,...                       % 1 for smoothing activity map during MI calculation
-        ...                                             % SUPPORTING PLOTS PARAMETERS
-        'plot_opt',1,...                                % main plot parameters, 0 - no one plots, 1 - basic plots, 2 - all plots
+        'snr_params', struct('percentile', 50),...      % percent of signal to identify noise lvl in neurob trace
+        ...
+        ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SUPPORTING PLOTS AND VERBOSE PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        'verbose', 1,...                                % additional messages
+        'plot_option', 1,...                            % main plot parameters, 0 - no one plots, 1 - basic plots, 2 - all plots
         'Screensize', get(0, 'Screensize'),...          % screensize for all plotting
         'axes_step', 1,...                              % in cm
         'opt', struct('track', struct('trackp', 1, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 0),...
-        'spike', struct('trackp', 0, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 1)),... % opts for plot activity map
-        'LineWidthSpikes', 2,...
-        'MarksizeSpikes', 10,...
-        'MarksizeSpikesAll', 5,...
-        'FontSizeTitle', 20,...
-        'FontSizeLabel', 20,...
-        'verbose',1 ...                                 % additional messages
-    );                                   
+        'spike', struct('trackp', 0, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 1)),...
+        ...                                             % opts for plot activity map
+        'LineWidthSpikes', 2,...                        % line width for spikes plots
+        'MarksizeSpikes', 10,...                        % size of calcium event mark on spikes plots
+        'MarksizeSpikesAll', 5,...                      % size of calcium event mark on all_spikes plots
+        'FontSizeTitle', 20,...                         % title size on plots
+        'FontSizeLabel', 20 ...                         % axes text size on plots
+        );
     
 end
 
-%% Unpack varargin parameters
-
-% ToDo: change everywhere separate params to struct params
-pathWS = params_paths.pathWS;
-filenameWS = params_paths.filenameWS;
-pathTR = params_paths.pathTR;
-filenameTR = params_paths.filenameTR;
-pathNV = params_paths.pathNV;
-filenameNV = params_paths.filenameNV;
-pathPR = params_paths.pathPR;
-filenamePR = params_paths.filenamePR;
-% ToDo: need to change everywhere 'path' on 'pathout'
-path = params_paths.PathOut;
-
-snr_params = params_main.snr_params;
-test_mode = params_main.test_mode;
-start_frame = params_main.start_frame;
-app_frame = params_main.app_frame;
-end_frame = params_main.end_frame;
-PC_criterion = params_main.PC_criterion;
-vel_opt = params_main.vel_opt;
-CorrectionTrackMode = params_main.CorrectionTrackMode;
-TimeMode = params_main.TimeMode;
-coordinates_correction = params_main.coordinates_correction;
-SmoothWindowS = params_main.SmoothWindowS;
-time_smooth = params_main.time_smooth;
-spike_smooth = params_main.spike_smooth;
-thres_spike = params_main.thres_spike;
-thres_firing = params_main.thres_firing;
-length_line_sec = params_main.length_line_sec;
-pxl2cm = params_main.pxl2cm;
-bin_size_cm = params_main.bin_size_cm;
-min_spike = params_main.min_spike;
-min_spike_field = params_main.min_spike_field;
-kernel_opt = params_main.kernel_opt;
-vel_border = params_main.vel_border;
-N_shift = params_main.N_shift;
-shift = params_main.shift;
-S_sigma = params_main.S_sigma;
-smooth_freq_mode = params_main.smooth_freq_mode;
-plot_opt = params_main.plot_opt;
-Screensize = params_main.Screensize;
-axes_step = params_main.axes_step;
-opt = params_main.opt;
-LineWidthSpikes = params_main.LineWidthSpikes;
-MarksizeSpikes = params_main.MarksizeSpikes;
-MarksizeSpikesAll = params_main.MarksizeSpikesAll;
-FontSizeTitle = params_main.FontSizeTitle;
-FontSizeLabel = params_main.FontSizeLabel;
-verbose = params_main.verbose;
-
-FilenameOut = filenameNV(1:find(filenameNV == '_', 1, 'last') - 1);
-
-%% defining all main structs for analysis
+%% description and defining main struct MOUSE 
 
 % struct MOUSE:
 % 'exp'                         - experiment identifier (e.g. FOF, NOF, 3DM)
 % 'id'                          - mouse identifier (e.g. F01, H39)
 % 'day'                         - day number of registration (e.g. 1D, 6D)
 % 'trial'                       - trial number of registration (e.g. 1T, 6T)
-% 'duration_s'                  - session duration in seconds 
+% 'duration_min'                - session duration in minutes
+% 'duration_s'                  - session duration in seconds
+% 'x'                           - x coordinate of mouse trajectory
+% 'y'                           - y coordinate of mouse trajectory
+% 'x_bad'                       - original x coordinate of mouse trajectory
+% 'y_bad'                       - original y coordinate of mouse trajectory
+% 'behav_opt'                   - all behavior parameters form SPHYNX
+% 'arena_opt'                   - arena spatial parameters form SPHYNX
+% 'params_main'                 - main PC analysis parameters
+% 'params_paths'                - paths and names PC analysis parameters
+% 'plot_opts'                   - main plots parameters
 % 'cells_count'                 - count of all registered cells
 % 'cells_active_count'          - count of all active cells
 % 'cells_informative_count'     - count of all informative cells
-% 'bin_size_cm'                 - size of bin for Heatmaps and MI calculations in cm
-% 'bin_size'                    - size of bin for Heatmaps and MI calculations in pixels
+% 'params_main.bin_size'        - size of bin for Heatmaps and MI calculations in pixels
+% 'behav_opt.arena_border'      - 4 extreme points of arena border (not
+% edges)
 % 
 % TBA
 % 
-% 
 
-mouse = struct('exp', '', 'id', '', 'day', '', 'trial', '', 'duration_s', [], 'cells_count', [], 'cells_active_count', [], 'cells_informative_count', []);
+mouse = struct('exp', '', 'id', '', 'day', '', 'trial', '', 'duration_s', [], 'duration_min', [], 'x', [], 'y', [],...
+'behav_opt', [], 'arena_opt', [], 'plot_opts', [], ...     
+'cells_count', [], 'cells_active_count', [], 'cells_informative_count', []);
 
-[mouse] = identificator_unpuck(mouse, FilenameOut, verbose);
-mouse.bin_size_cm = bin_size_cm;
-mouse.bin_size = pxl2cm*bin_size_cm;
+params_paths.filenameOut = params_paths.filenameNV(1:find(params_paths.filenameNV == '_', 1, 'last') - 1);
+mouse.params_main = params_main;
+mouse.params_paths = params_paths;
 
-%% defining internal parameters
+mouse = identificator_unpuck(mouse);
 
-MinTime = 60;                               % seconds in 1 minutes :)
-FrameRateTrackFreezChamber = 30;            % FrameRate of Freezing chamber videos
-t_kcorr = 4000;                             % correction coefficient for VT and NV time distortion for 'NVista' (1 frame on t_kcorr frames screwing)
+mouse.params_main.MinTime = 60;                                             % seconds in 1 minutes :)
+mouse.params_main.FrameRateTrackFreezChamber = 30;                          % FrameRate of Freezing chamber videos
+mouse.params_main.t_kcorr = 4000;                                           % correction coefficient for VT and NV time distortion for 'NVista' (1 frame on t_kcorr frames screwing)
+mouse.params_main.Screensize(3) = mouse.params_main.Screensize(4);          % for square arena
 
-Screensize(3) = Screensize(4);              % for square arena
-
-switch TimeMode
+switch params_main.TimeMode
     case 's'
-        TimeRate = 1;                       % for total time in seconds
+        mouse.params_main.TimeRate = 1;                                     % for total time in seconds
     case 'min'
-        TimeRate = 60;                      % for total time in minutes
+        mouse.params_main.TimeRate = 60;                                    % for total time in minutes
 end
 
 % parameters for another criteria of PC (oldest version of criterion PC)
-% min_good_line = 5;                        % minimum number of line with spikes inside a field
-% k_pp = 0;                                 % percentage of good entries for field candidate
+% min_good_line = 5;                                                        % minimum number of line with spikes inside a field
+% k_pp = 0;                                                                 % percentage of good entries for field candidate
 
-plot_opts = struct(...
+mouse.plot_opts = struct(...
     'Plot_Single_Spike', 0,...
     'Plot_Spike', 0,...
     'Plot_Spike_Smooth', 0,...
@@ -183,247 +150,175 @@ plot_opts = struct(...
     'Plot_WaterShedField', 0,...
     'Plot_Field', 0);
 
-if plot_opt > 0
-    plot_opts.Plot_Single_Spike = 1;
-    plot_opts.Plot_FiringRate_Smooth = 1;
-    plot_opts.Plot_FiringRate_Fields_Corrected = 1;
+if mouse.params_main.plot_option > 0
+    mouse.plot_opts.Plot_Single_Spike = 1;
+    mouse.plot_opts.Plot_FiringRate_Smooth = 1;
+    mouse.plot_opts.Plot_FiringRate_Fields_Corrected = 1;
 end
 
-if plot_opt > 1
-    plot_opts.Plot_Spike = 1;
-    plot_opts.Plot_Spike_Smooth = 1;
-    plot_opts.Plot_FiringRate = 1;
-    plot_opts.Plot_FiringRate_Fields = 1;
-    plot_opts.Plot_FiringRate_Smooth_Thres = 1;
-    plot_opts.Plot_WaterShed = 1;
-    plot_opts.Plot_WaterShedField = 1;
+if mouse.params_main.plot_option > 1
+    mouse.plot_opts.Plot_Spike = 1;
+    mouse.plot_opts.Plot_Spike_Smooth = 1;
+    mouse.plot_opts.Plot_FiringRate = 1;
+    mouse.plot_opts.Plot_FiringRate_Fields = 1;
+    mouse.plot_opts.Plot_FiringRate_Smooth_Thres = 1;
+    mouse.plot_opts.Plot_WaterShed = 1;
+    mouse.plot_opts.Plot_WaterShedField = 1;
 end
 
 %% loading data
 
 % spikes
-file_NV_orig = readtable(sprintf('%s%s', pathNV, filenameNV));
+file_NV_orig = readtable(sprintf('%s%s', mouse.params_paths.pathNV, mouse.params_paths.filenameNV));
 file_NV_orig = table2array(file_NV_orig(2:end,2:end));
+disp('Таблица со спайками загружена');
 
 % traces
-file_TR_orig = readtable(sprintf('%s%s', pathTR, filenameTR));
+file_TR_orig = readtable(sprintf('%s%s', mouse.params_paths.pathTR, mouse.params_paths.filenameTR));
 file_TR_orig = table2array(file_TR_orig(2:end,2:end));
+disp('Таблица с трейсами загружена');
 
 compareMatrixDimensions(file_TR_orig, file_TR_orig);
 
 % presets
-load(sprintf('%s%s',pathPR,filenamePR),'Options','ArenaAndObjects');
+load(sprintf('%s%s',mouse.params_paths.pathPR,mouse.params_paths.filenamePR),'Options','ArenaAndObjects');
+disp('Пространственная разметка загружена');
 
 % features (video tracking)
-load(sprintf('%s%s', pathWS, filenameWS),'Features');
-file = [Features.Table.x Features.Table.y];
-
-% creating main and sub folders
-path_folder = sprintf('%s_%s', FilenameOut, date);
-num_dir = 1;
-while isfolder(sprintf('%s\\%s_%d', path, path_folder, num_dir))
-    num_dir = num_dir+1;
-end
-[s, ~, ~] = mkdir(path,sprintf('%s_%d', path_folder, num_dir));
-while ~s
-    [s, ~, ~] = mkdir(path,sprintf('%s_%d', path_folder, num_dir));
-end
-path = sprintf('%s\\%s_%d', path, path_folder, num_dir);
-
-if plot_opts.Plot_Single_Spike
-    mkdir(path, 'Spikes');
-end
-if plot_opts.Plot_Spike
-    mkdir(path, 'Heatmap_Spike');
-end
-if plot_opts.Plot_Spike_Smooth
-    mkdir(path, 'Heatmap_Spike_Smooth');
-end
-if plot_opts.Plot_FiringRate
-    mkdir(path, 'Heatmap_FiringRate_Informative');
-    mkdir(path, 'Heatmap_FiringRate_NOT_Informative');
-end
-if plot_opts.Plot_FiringRate_Smooth
-    mkdir(path, 'Heatmap_FiringRate_Smooth');
-end
-if plot_opts.Plot_FiringRate_Smooth_Thres
-    mkdir(path, 'Heatmap_FiringRate_Smooth_Thres_NOT_Informative');
-    mkdir(path, 'Heatmap_FiringRate_Smooth_Thres_Informative');
-end
-if plot_opts.Plot_FiringRate_Fields
-    mkdir(path, 'Heatmap_FiringRate_Fields');
-end
-if plot_opts.Plot_FiringRate_Fields_Corrected
-    mkdir(path, 'Heatmap_FiringRate_Fields_Corrected_NOT_Inform');
-    mkdir(path, 'Heatmap_FiringRate_Fields_Corrected_Inform');
-end
-
-if plot_opts.Plot_WaterShed
-    mkdir(path, 'WaterShed');
-end
-if plot_opts.Plot_WaterShedField
-    mkdir(path, 'WaterShedFields');
-end
-
-if plot_opts.Plot_Field
-    mkdir(path, 'Heatmap_Fields_Real');
-    mkdir(path, 'Heatmap_Fields_NOT_Real');
-end
+load(sprintf('%s%s', mouse.params_paths.pathWS, mouse.params_paths.filenameWS),'Features');
+file_VT = [Features.Table.x Features.Table.y];
+disp('Разметка поведения загружена');
 
 %% Preparing data
+
+% adding parameters from behavior in main struct MOUSE
+mouse.behav_opt = Options;
+mouse.arena_opt = ArenaAndObjects;
+mouse.params_main.bin_size = mouse.behav_opt.pxl2sm*mouse.params_main.bin_size_cm;
+
+% creating main and sub folders
+mouse = createOutputDirectories(mouse);
 
 % defining session struct: duration and framerate information
 session = struct('duration_time_s', [], 'duration_time_min', [], 'duration_frames', [], 'framerate', [], 'time', []);
 
-if end_frame == 0
-    end_track = size(file,1);
-else
-    end_track = end_frame;
+if mouse.params_main.end_frame == 0
+    mouse.params_main.end_frame = size(file_VT,1);
 end
 
-% x_orig = file(app_frame:end_track, 1)*Options.x_kcorr; % if you load data
+% x_orig = file_VT(params_main.app_frame:end_track, 1)*Options.x_kcorr; % if you load data
 % not from features. In features you have corrected data
 
-x_orig = file(app_frame:end_track, 1);
-y_orig = file(app_frame:end_track, 2);
+x_orig = file_VT(mouse.params_main.app_frame:mouse.params_main.end_frame, 1);
+y_orig = file_VT(mouse.params_main.app_frame:mouse.params_main.end_frame, 2);
 
 % correction of time distortion NV and VT
-switch CorrectionTrackMode
+switch params_main.CorrectionTrackMode
     case 'Bonsai'        
         % session.duration_time_s = 720;
-        session.duration_time_s = round(end_track/29.9764,2);
-        session.duration_time_min = round(session.duration_time_s/MinTime,2);        
-        TimeLine.Track = (0:session.duration_time_s/(size(file,1)-1):session.duration_time_s);
-        TimeLine.Calcium = (0:session.duration_time_s/(size(file_NV_orig,1)-1):session.duration_time_s);
+        session.duration_time_s = round(mouse.params_main.end_frame/29.9764,2);
+        session.duration_time_min = round(session.duration_time_s/mouse.params_main.MinTime,2);        
+        mouse.TimeLine.Track = (0:session.duration_time_s/(size(file_VT,1)-1):session.duration_time_s);
+        mouse.TimeLine.Calcium = (0:session.duration_time_s/(size(file_NV_orig,1)-1):session.duration_time_s);
         Indexes = [];
-        for fname = 1:length(TimeLine.Calcium)
-            TempArray = abs(TimeLine.Track - TimeLine.Calcium(fname));
+        for frame = 1:length(mouse.TimeLine.Calcium)
+            TempArray = abs(mouse.TimeLine.Track - mouse.TimeLine.Calcium(frame));
             [~, ind] = min(TempArray);
             Indexes = [Indexes ind];
         end
-        x_bad = x_orig(Indexes);
-        y_bad = y_orig(Indexes);
+        mouse.x_bad = x_orig(Indexes);
+        mouse.y_bad = y_orig(Indexes);
         Features.TableCorrected = Features.Table(Indexes, :);
-        session.framerate = length(x_bad)/session.duration_time_s;        
-        fprintf('Количество кадров видеотрекинга и кальция %d %d \n',length(x_bad),size(file_NV_orig,1));
+        session.framerate = length(mouse.x_bad)/session.duration_time_s;        
+        fprintf('Количество кадров видеотрекинга и кальция %d %d \n',length(mouse.x_bad),size(file_NV_orig,1));
+        clear 'Indexes' 'ind' 'TempArray'
     case 'NVista'
-        k = 1;x_bad = [];y_bad = [];
+        k = 1;mouse.x_bad = [];mouse.y_bad = [];
         for i=1:length(x_orig)
-            if mod(i, t_kcorr) ~= 0
-                x_bad(k) = x_orig(i);
-                y_bad(k) = y_orig(i);
+            if mod(i, mouse.params_main.t_kcorr) ~= 0
+                mouse.x_bad(k) = x_orig(i);
+                mouse.y_bad(k) = y_orig(i);
                 k=k+1;
             end
         end
     case 'FC'
         end_spike = size(file_NV_orig,1);
-        session.framerate  = end_spike/(end_track/FrameRateTrackFreezChamber);
-        x_bad = zeros(1,end_spike);
-        y_bad = zeros(1,end_spike);
+        session.framerate  = end_spike/(mouse.params_main.end_frame/mouse.params_main.FrameRateTrackFreezChamber);
+        mouse.x_bad = zeros(1,end_spike);
+        mouse.y_bad = zeros(1,end_spike);
         for i=1:end_spike
-            x_bad(i) = x_orig(round(i*(FrameRateTrackFreezChamber/session.framerate)));
-            y_bad(i) = y_orig(round(i*(FrameRateTrackFreezChamber/session.framerate)));
+            mouse.x_bad(i) = x_orig(round(i*(mouse.params_main.FrameRateTrackFreezChamber/session.framerate)));
+            mouse.y_bad(i) = y_orig(round(i*(mouse.params_main.FrameRateTrackFreezChamber/session.framerate)));
         end
     case 'none'
         session.framerate = size(file_NV_orig,1)/file_NV_orig(end,1);
-        x_bad = x_orig;
-        y_bad = y_orig;
+        mouse.x_bad = x_orig;
+        mouse.y_bad = y_orig;
 end
+clear 'y_orig' 'x_orig'
 
-length_line = round(session.framerate*length_line_sec);                     % length in frames of period in place field
-SmoothWindow = round(SmoothWindowS*session.framerate);                      % smoothing window in frames for behavior analysis (in case non-smoothed data)
+mouse.params_main.length_line = round(session.framerate*params_main.length_line_sec);       % length in frames of period in place field
+mouse.params_main.SmoothWindow = round(params_main.SmoothWindowS*session.framerate);        % smoothing window in frames for behavior analysis (in case non-smoothed data)
 
-session.duration_frames = length(x_bad);                                    % session duration in frames
-session.time = (1:session.duration_frames)/session.framerate/TimeRate;      % timeline od session in seconds or minutes
-mouse.duration_s = session.duration_time_s;
-mouse.duration_min = session.duration_time_min;
+session.duration_frames = length(mouse.x_bad);                                                    % session duration in frames
+session.time = (1:session.duration_frames)/session.framerate/mouse.params_main.TimeRate;    % timeline od session in seconds or minutes
 
-time_min = 0.5;
-% TimeTotal = session.duration_frames/session.framerate/TimeRate;           % total time in minutes/seconds
-% time_min = 0.00045*TimeTotal;                                             % time in minutes/seconds for minimum summary time in sectors
+mouse.params_main.time_min = 0.5;
+% TimeTotal = session.duration_frames/session.framerate/mouse.params_main.TimeRate;         % total time in minutes/seconds
+% mouse.params_main.time_min = 0.00045*TimeTotal;                                           % time in minutes/seconds for minimum summary time in sectors
 
-NV_start = app_frame-start_frame+1;
+mouse = mergeStructures(mouse,session);
+
+NV_start = mouse.params_main.app_frame-mouse.params_main.start_frame+1;
 
 file_NV = file_NV_orig(NV_start:NV_start+session.duration_frames-1,:);
 file_TR = file_TR_orig(NV_start:NV_start+session.duration_frames-1,:);
 
 mouse.cells_count = size(file_NV, 2);
 
-if test_mode == 0
-    n_cells_for_analysis = mouse.cells_count;
+if mouse.params_main.test_mode == 0
+    mouse.cells_count_for_analysis = mouse.cells_count;
 else
-    n_cells_for_analysis = min(test_mode, mouse.cells_count);
+    mouse.cells_count_for_analysis = min(mouse.params_main.test_mode, mouse.cells_count);
 end
 
-if coordinates_correction
-    x_nan = isnan(x_bad); y_nan = isnan(y_bad);
-    x = x_bad; y = y_bad;
+if mouse.params_main.coordinates_correction
+    x_nan = isnan(mouse.x_bad); y_nan = isnan(mouse.y_bad);
+    x = mouse.x_bad; y = mouse.y_bad;
     x(x_nan) = 0; y(y_nan) = 0;
     x_zero = find(x==0); y_zero = find(y==0);
+    % ToDo убрать старую интерполяцию, заменить на ту, что в сфинксе
     x_int=interpolation_VP(x,x_zero);
     y_int=interpolation_VP(y,y_zero);
-    x_int_sm = smooth(x_int,SmoothWindow);
-    y_int_sm = smooth(y_int,SmoothWindow);
+    mouse.x = smooth(x_int,mouse.params_main.SmoothWindow);
+    mouse.y = smooth(y_int,mouse.params_main.SmoothWindow);
 else
-    x_int_sm = x_bad;
-    y_int_sm = y_bad;
+    mouse.x = mouse.x_bad;
+    mouse.y = mouse.y_bad;
 end
 
-
-h=figure;plot(session.time,x_bad); hold on;plot(session.time,x_int_sm,'r');
-title('X vs x smooth','FontSize', FontSizeLabel);
-xlabel(sprintf('Time, %s', TimeMode),'FontSize', FontSizeLabel);ylabel('X coordinate, cm','FontSize', FontSizeLabel);
-legend({'Original','Interpolated and Smoothed'});
-saveas(h, sprintf('%s\\%s_x_coordinate.png',path,FilenameOut));
-delete(h);
-
-h=figure;plot(session.time,y_bad); hold on;plot(session.time,y_int_sm,'r');
-title('Y vs y smooth','FontSize', FontSizeLabel);
-xlabel(sprintf('Time, %s', TimeMode),'FontSize', FontSizeLabel);ylabel('Y coordinate, cm','FontSize', FontSizeLabel);
-legend({'Original','Interpolated and Smoothed'});
-saveas(h, sprintf('%s\\%s_y_coordinate.png',path,FilenameOut));
-delete(h);
-
+% plot for coordinates
+PlotPC(mouse, 'coordinate');
 
 % velocity calculation
 if isempty(Features.TableCorrected.speed) || isempty(Features.TableCorrected.locomotion)
-    vel = zeros(1, session.duration_frames);
-    for i=2:session.duration_frames
-        vel(i)= sqrt((x_int_sm(i)-x_int_sm(i-1))^2+(y_int_sm(i)-y_int_sm(i-1))^2)/pxl2cm*session.framerate;
-    end
-    vel(1) = vel(2);
-    vel_sm = smooth(vel,SmoothWindow);
-    vel_sm_line = zeros(1, session.duration_frames);
-    for i=1:session.duration_frames
-        if vel_sm(i) >= vel_border
-            vel_sm_line(i) = 1;
-        end
-    end
-    [vel_ref, ~, ~,~,~,~] = RefineLine(vel_sm_line, length_line, length_line);
+    [mouse] = calculate_velocity(mouse);
 else
-    vel = Features.TableCorrected.speed;
-    vel_ref = Features.TableCorrected.locomotion;
+    mouse.velocity = Features.TableCorrected.speed;
+    mouse.velocity_binary = Features.TableCorrected.locomotion;
 end
 
-h=figure;
-plot(session.time,vel);hold on;plot(session.time,vel_sm,'r');hold on;
-plot(session.time,vel_ref*vel_border,'g');
-title('V vs v smooth','FontSize', FontSizeLabel);
-xlabel(sprintf('Time, %s', TimeMode),'FontSize', FontSizeLabel);ylabel('Velocity, cm/s','FontSize', FontSizeLabel);
-saveas(h, sprintf('%s\\%s_velocity.png',path,FilenameOut));
-saveas(h, sprintf('%s\\%s_velocity.fig',path,FilenameOut));
-delete(h);
+% plot for velocity
+PlotPC(mouse, 'velocity');
 
-ax_xy(2) = max(max(x_int_sm))+axes_step;
-ax_xy(1) = min(min(x_int_sm))-axes_step;
-ax_xy(4) = max(max(y_int_sm))+axes_step;
-ax_xy(3) = min(min(y_int_sm))-axes_step;
+% define axes and border pixels of arena for defining binarization independent to trajectory
+mouse = find_arena_border(mouse);
+mouse = define_axes(mouse);
 
-velcam = ones(1, session.duration_frames);
-x_vel_b = x_int_sm;
-y_vel_b = y_int_sm;
-if vel_opt
-    velcam = vel_ref;
+
+mouse.velcam = ones(1, session.duration_frames);
+if mouse.params_main.vel_opt
+    mouse.velcam = vel_ref;
 end
 
 %% calculation and plotting CELLS spikes
@@ -438,7 +333,7 @@ CellInfo = struct(...
     );
 
 
-for cell=1:n_cells_for_analysis
+for cell=1:mouse.cells_count_for_analysis
     
     % defining all parameters of cell
     CellInfo(cell).exp_id = mouse.exp;                                                                          % experiment identifier (e.g. FOF, NOF, 3DM)
@@ -447,8 +342,8 @@ for cell=1:n_cells_for_analysis
     CellInfo(cell).trial_id = mouse.trial;                                                                      % trial of registration (e.g. 1T, 6T)
     CellInfo(cell).cell_id = cell;                                                                              % cell number (same order in trace or spike table)
     CellInfo(cell).trace = file_TR(:,cell);                                                                     % raw cell activity signal from CaImAn   
-    CellInfo(cell).SNR_baseline = snr_calculation(CellInfo(cell).trace, 'baseline', snr_params);                % signal-to-noise ratio in dB calculation on raw signal Baseline-Based Method
-    CellInfo(cell).SNR_peak = snr_calculation(CellInfo(cell).trace, 'peak', snr_params);                        % signal-to-noise ratio in dB calculation on raw signal Peak Method (PSNR)
+    CellInfo(cell).SNR_baseline = snr_calculation(CellInfo(cell).trace, 'baseline', mouse.params_main.snr_params);                % signal-to-noise ratio in dB calculation on raw signal Baseline-Based Method
+    CellInfo(cell).SNR_peak = snr_calculation(CellInfo(cell).trace, 'peak', mouse.params_main.snr_params);                        % signal-to-noise ratio in dB calculation on raw signal Peak Method (PSNR)
     
     CellInfo(cell).spikes_all_frames = find(file_NV(:,cell));                                                   % timestamps of Ca2+ events ('1' in spikes table)
     CellInfo(cell).spikes_all_count = length(CellInfo(cell).spikes_all_frames);                                 % Ca2+ events number
@@ -456,67 +351,56 @@ for cell=1:n_cells_for_analysis
 %     CellInfo(cell).spikes_all_mean_amplitude = 
 %     CellInfo(cell).spikes_all_peak_amplitude = 
 
-    CellInfo(cell).spikes_in_mov_frames = find(file_NV(:,cell).*velcam);                                        % timestamps of Ca2+ events ('1' in spikes table)
+    CellInfo(cell).spikes_in_mov_frames = find(file_NV(:,cell).*mouse.velcam);                                  % timestamps of Ca2+ events ('1' in spikes table)
     CellInfo(cell).spikes_in_mov_count = length(CellInfo(cell).spikes_in_mov_frames);                           % Ca2+ events number
     CellInfo(cell).spikes_in_mov_frequency = round(CellInfo(cell).spikes_in_mov_count/mouse.duration_min,1);    % frequency of Ca2+ events during all session (Ca2+/min)
 %     CellInfo(cell).spikes_in_mov_mean_amplitude = 
 %     CellInfo(cell).spikes_in_mov_peak_amplitude = 
 
-    CellInfo(cell).spikes_in_rest_frames = find(file_NV(:,cell).*double(1-velcam));                             % timestamps of Ca2+ events ('1' in spikes table)
+    CellInfo(cell).spikes_in_rest_frames = find(file_NV(:,cell).*double(1-mouse.velcam));                       % timestamps of Ca2+ events ('1' in spikes table)
     CellInfo(cell).spikes_in_rest_count = length(CellInfo(cell).spikes_in_rest_frames);                         % Ca2+ events number
     CellInfo(cell).spikes_in_rest_frequency = round(CellInfo(cell).spikes_in_rest_count/mouse.duration_min,1);  % frequency of Ca2+ events during all session (Ca2+/min)
 %     CellInfo(cell).spikes_in_mov_mean_amplitude = 
 %     CellInfo(cell).spikes_in_mov_peak_amplitude = 
 
-    if plot_opts.Plot_Single_Spike
-        h = figure('Position', Screensize);
-        axis([ax_xy(1) ax_xy(2) ax_xy(3) ax_xy(4)]);
-        title(sprintf('Trajectory of mouse with n = %d (%d) Ca2+ events (in mov, red) of cell #%d', CellInfo(cell).spikes_all_count,CellInfo(cell).spikes_in_mov_count, cell), 'FontSize', FontSizeTitle);
-        xlabel('X coordinate, cm','FontSize', FontSizeLabel);ylabel('Y coordinate, cm','FontSize', FontSizeLabel);
-        hold on;plot(x_int_sm,y_int_sm, 'b');
-        hold on;DrawLine(x_int_sm, y_int_sm, velcam, 1, 'g', 0, 1);
-        hold on;plot(x_vel_b(CellInfo(cell).spikes_all_frames),y_vel_b(CellInfo(cell).spikes_all_frames),'k*', 'MarkerSize',round(MarksizeSpikes/2), 'LineWidth',round(LineWidthSpikes/2));
-        hold on;plot(x_vel_b(CellInfo(cell).spikes_in_mov_frames),y_vel_b(CellInfo(cell).spikes_in_mov_frames),'r*', 'MarkerSize',MarksizeSpikes, 'LineWidth',LineWidthSpikes);
-        set(gca, 'FontSize', FontSizeLabel);
-        saveas(h, sprintf('%s\\Spikes\\%s_Spikes_Cell_%d.png',path,FilenameOut,cell));
-        delete(h);
-    end
+PlotPC(mouse, 'spike');
+
 end
 
 % all spike on one figure
-h = figure('Position', Screensize);
-axis([ax_xy(1) ax_xy(2) ax_xy(3) ax_xy(4)]);
-title('Trajectory of mouse with all Ca2+ events', 'FontSize', FontSizeTitle);
-xlabel('X coordinate, cm', 'FontSize', FontSizeLabel);
-ylabel('Y coordinate, cm', 'FontSize', FontSizeLabel);
-set(gca, 'FontSize', FontSizeLabel);
-hold on;plot(x_int_sm,y_int_sm, 'b');
-hold on;DrawLine(x_int_sm, y_int_sm, velcam, 1, 'g', 0, 1);
+h = figure('Position', params_main.Screensize);
+axis(axes);
+title('Trajectory of mouse with all Ca2+ events', 'FontSize', params_main.FontSizeTitle);
+xlabel('X coordinate, cm', 'FontSize', params_main.FontSizeLabel);
+ylabel('Y coordinate, cm', 'FontSize', params_main.FontSizeLabel);
+set(gca, 'FontSize', params_main.FontSizeLabel);
+hold on;plot(mouse.x,mouse.y, 'b');
+hold on;DrawLine(mouse.x, mouse.y, mouse.velcam, 1, 'g', 0, 1);
 
-percent_spikes_in_mov = zeros(1,n_cells_for_analysis);
-for cell=1:n_cells_for_analysis
+percent_spikes_in_mov = zeros(1,mouse.cells_count_for_analysis);
+for cell=1:mouse.cells_count_for_analysis
     percent_spikes_in_mov(cell) = (CellInfo(cell).spikes_in_mov_count/CellInfo(cell).spikes_all_count*100);
-    hold on;plot(x_vel_b(CellInfo(cell).spikes_all_frames),y_vel_b(CellInfo(cell).spikes_all_frames),'k*', 'MarkerSize',round(MarksizeSpikesAll/2), 'LineWidth',round(LineWidthSpikes/2));
-    hold on;plot(x_vel_b(CellInfo(cell).spikes_in_mov_frames),y_vel_b(CellInfo(cell).spikes_in_mov_frames),'r*', 'MarkerSize',MarksizeSpikesAll, 'LineWidth',LineWidthSpikes);
+    hold on;plot(mouse.x(CellInfo(cell).spikes_all_frames),mouse.y(CellInfo(cell).spikes_all_frames),'k*', 'MarkerSize',round(params_main.MarksizeSpikesAll/2), 'LineWidth',round(params_main.LineWidthSpikes/2));
+    hold on;plot(mouse.x(CellInfo(cell).spikes_in_mov_frames),mouse.y(CellInfo(cell).spikes_in_mov_frames),'r*', 'MarkerSize',params_main.MarksizeSpikesAll, 'LineWidth',params_main.LineWidthSpikes);
 end
-saveas(h, sprintf('%s\\%s_spike_all_plot.png',path,FilenameOut));
+saveas(h, sprintf('%s\\%s_spike_all_plot.png',mouse.params_paths.pathOut,mouse.filenameOut));
 delete(h);
 
 h = figure;
 histogram(percent_spikes_in_mov);
-title('Percent of spikes in movement', 'FontSize', FontSizeTitle);
-saveas(h, sprintf('%s\\%s_percent_spikes_in_movement.png',path,FilenameOut));
+title('Percent of spikes in movement', 'FontSize', params_main.FontSizeTitle);
+saveas(h, sprintf('%s\\%s_percent_spikes_in_movement.png',mouse.params_paths.pathOut,mouse.filenameOut));
 delete(h);
 
-save(sprintf('%s\\WorkSpace_%s.mat',path, FilenameOut));
+save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.filenameOut));
 
 plot([CellInfo.spikes_all_count], [CellInfo.SNR_baseline], 'k.');
 
 
 
 %% bin's division
-x_ind = fix(x_int_sm/mouse.bin_size);
-y_ind = fix(y_int_sm/mouse.bin_size);
+x_ind = fix(mouse.x/mouse.bin_size);
+y_ind = fix(mouse.y/mouse.bin_size);
 max_x_ind = max(x_ind);
 min_x_ind = min(x_ind);
 max_y_ind = max(y_ind);
@@ -530,30 +414,30 @@ y_ind = y_ind-y_shift;
 
 N_frame_orig = zeros(SizeMY,SizeMX);
 for d=1:session.duration_frames
-    N_frame_orig(y_ind(d),x_ind(d)) = N_frame_orig(y_ind(d),x_ind(d))+1*velcam(d);
+    N_frame_orig(y_ind(d),x_ind(d)) = N_frame_orig(y_ind(d),x_ind(d))+1*mouse.velcam(d);
 end
 
-N_time_orig = N_frame_orig/session.framerate/TimeRate; %in minutes/seconds
+N_time_orig = N_frame_orig/session.framerate/mouse.params_main.TimeRate; %in minutes/seconds
 
 N_time_with_min = N_time_orig;
-N_time_with_min(N_time_orig<time_min) = 0;
+N_time_with_min(N_time_orig<mouse.params_main.time_min) = 0;
 
-if ~time_smooth
+if ~params_main.time_smooth
     N_time_sm = N_time_with_min;
 else
-    [N_time_sm,mask_t] = ConvBorderFix(N_time_with_min,0,kernel_opt.small.size,kernel_opt.small.sigma);
+    [N_time_sm,mask_t] = ConvBorderFix(N_time_with_min,0,params_main.kernel_opt.small.size,params_main.kernel_opt.small.sigma);
 end
 
 mask_s = double(mask_t == 0);
 
 %heatmap for occupancy map
-h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx (Options,ArenaAndObjects,opt.track,N_time_sm,0,x_int_sm,y_int_sm,mouse.bin_size,Options.x_kcorr,spike_t_good);
-title(sprintf('Occupancy map smoothed (%s)',TimeMode), 'FontSize', FontSizeTitle);
-saveas(h,sprintf('%s\\%s_Heatmap_time_sm.png', path, FilenameOut));
+h = figure('Position', params_main.Screensize);
+DrawHeatMapModSphynx (Options,ArenaAndObjects,params_main.opt.track,N_time_sm,0,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
+title(sprintf('Occupancy map smoothed (%s)',params_main.TimeMode), 'FontSize', params_main.FontSizeTitle);
+saveas(h,sprintf('%s\\%s_Heatmap_time_sm.png', mouse.params_paths.pathOut, mouse.filenameOut));
 delete(h);
 
-save(sprintf('%s\\WorkSpace_%s.mat',path, FilenameOut));
+save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.filenameOut));
 
 %% searching mean and max of CELLS HeatMaps
 max_N = 0;
@@ -561,16 +445,16 @@ max_N_sm = 0;
 max_N_freq = 0;
 max_N_freq_filt = 0;
 max_N_freq_filt_norm_thres = 0;
-Cell_IC = zeros(2,n_cells_for_analysis);
-Cell_IC(1,1:n_cells_for_analysis)=linspace(1,n_cells_for_analysis,n_cells_for_analysis);
+Cell_IC = zeros(2,mouse.cells_count_for_analysis);
+Cell_IC(1,1:mouse.cells_count_for_analysis)=linspace(1,mouse.cells_count_for_analysis,mouse.cells_count_for_analysis);
 mean_N_freq_filt = [];
 
-h = waitbar(1/n_cells_for_analysis, sprintf('IC calculation, cell %d of %d', 0,  n_cells_for_analysis));
-for i = 1:n_cells_for_analysis
-    h = waitbar(i/n_cells_for_analysis,h, sprintf('IC calculation, cell %d of %d', i,  n_cells_for_analysis));
+h = waitbar(1/mouse.cells_count_for_analysis, sprintf('IC calculation, cell %d of %d', 0,  mouse.cells_count_for_analysis));
+for i = 1:mouse.cells_count_for_analysis
+    h = waitbar(i/mouse.cells_count_for_analysis,h, sprintf('IC calculation, cell %d of %d', i,  mouse.cells_count_for_analysis));
     spike_t = find(file_NV(:,i));
-    spike_t_good = find(file_NV(:,i).*velcam');
-    if length(spike_t_good) >= min_spike
+    spike_t_good = find(file_NV(:,i).*mouse.velcam');
+    if length(spike_t_good) >= params_main.min_spike
         
         N = zeros(SizeMY,SizeMX);
         for k = 1:length(spike_t_good)
@@ -578,25 +462,25 @@ for i = 1:n_cells_for_analysis
         end
         
         %smoothing of spike's number
-        if spike_smooth
-            [N_sm, ~] = ConvBorderFix(N,mask_t,kernel_opt.small.size,kernel_opt.small.sigma);  
+        if params_main.spike_smooth
+            [N_sm, ~] = ConvBorderFix(N,mask_t,params_main.kernel_opt.small.size,params_main.kernel_opt.small.sigma);  
         else
             N_sm = N;
         end
         
         N_thres = N_sm;
-        N_thres(N_sm < thres_spike * max(N_sm(:))) = 0;
+        N_thres(N_sm < params_main.thres_spike * max(N_sm(:))) = 0;
         
-        N_freq = N_thres./N_time_sm*MinTime;
+        N_freq = N_thres./N_time_sm*mouse.params_main.MinTime;
         N_freq(isnan(N_freq)) = 0;
         N_freq(isinf(N_freq)) = 0;
         
-        [N_freq_filt, ~] = ConvBorderFix(N_freq,mask_t,kernel_opt.big.size,kernel_opt.big.sigma);
+        [N_freq_filt, ~] = ConvBorderFix(N_freq,mask_t,params_main.kernel_opt.big.size,params_main.kernel_opt.big.sigma);
         max_TR = max(max(N_freq_filt));
         
         N_freq_filt_norm = N_freq_filt;        
         N_freq_filt_norm_thres = N_freq_filt_norm;
-        N_freq_filt_norm_thres(N_freq_filt_norm < thres_firing * max_TR) = 0;
+        N_freq_filt_norm_thres(N_freq_filt_norm < params_main.thres_firing * max_TR) = 0;
 
         mean_N_freq_filt(i) = mean(N_freq_filt(N_freq_filt>0));
         
@@ -617,7 +501,7 @@ for i = 1:n_cells_for_analysis
         end
         
         %IC calculation
-        Cell_IC(2:5,i) = RandomShiftMod(smooth_freq_mode,spike_t,velcam,x_ind,y_ind,mask_t,N_time_sm,N_shift,shift,S_sigma,TimeRate,session.framerate,kernel_opt);
+        Cell_IC(2:5,i) = RandomShiftMod(params_main.smooth_freq_mode,spike_t,mouse.velcam,x_ind,y_ind,mask_t,N_time_sm,params_main.N_shift,params_main.shift,params_main.S_sigma,mouse.params_main.TimeRate,session.framerate,params_main.kernel_opt);
         Cell_IC(6,i) = (Cell_IC(3,i)-Cell_IC(4,i))/Cell_IC(5,i);
         Cell_IC(7,i) = length(spike_t_good);
     else
@@ -629,28 +513,28 @@ delete(h);
 if ~isempty(mean_N_freq_filt)
     h = figure;
     histogram(mean_N_freq_filt(mean_N_freq_filt>0),50);
-    title('Histogram of mean firing rate(#/min)', 'FontSize', FontSizeTitle);
-    saveas(h, sprintf('%s\\%s_Histogram_FiringRate.png', path,FilenameOut));
+    title('Histogram of mean firing rate(#/min)', 'FontSize', params_main.FontSizeTitle);
+    saveas(h, sprintf('%s\\%s_Histogram_FiringRate.png', mouse.params_paths.pathOut,mouse.filenameOut));
     delete(h);
-    csvwrite(sprintf('%s\\%s_Mean_FiringRate.csv',path,FilenameOut), mean_N_freq_filt);
+    csvwrite(sprintf('%s\\%s_Mean_FiringRate.csv',mouse.params_paths.pathOut,mouse.filenameOut), mean_N_freq_filt);
 end
 
 if ~isempty(Cell_IC)
     h = figure;
     histogram(Cell_IC(6,:),ceil(sqrt(length(Cell_IC(6,:)))+1));
-    title('Histogram of cell''s IC', 'FontSize', FontSizeTitle);
-    saveas(h, sprintf('%s\\%s_Histogram_IC.png', path,FilenameOut));
+    title('Histogram of cell''s IC', 'FontSize', params_main.FontSizeTitle);
+    saveas(h, sprintf('%s\\%s_Histogram_IC.png', mouse.params_paths.pathOut,mouse.filenameOut));
     delete(h);
-    writematrix(Cell_IC, sprintf('%s\\%s_IC.csv',path,FilenameOut));
+    writematrix(Cell_IC, sprintf('%s\\%s_IC.csv',mouse.params_paths.pathOut,mouse.filenameOut));
 end
 
-save(sprintf('%s\\WorkSpace_%s.mat',path, FilenameOut));
+save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.filenameOut));
 
 %% Calculation and plotting CELLS HeatMaps
 
-g_cell = find(Cell_IC(2,:)>=0);                         % indexes of cells with more than min_spike spikes
+g_cell = find(Cell_IC(2,:)>=0);                         % indexes of cells with more than params_main.min_spike spikes
 if isempty(g_cell)
-    disp('Not enough spikes. No neurons with at least min_spike spikes');
+    disp('Not enough spikes. No neurons with at least params_main.min_spike spikes');
     return;
 end
 
@@ -658,10 +542,10 @@ N_sum = zeros(SizeMY,SizeMX);                           % HeatMap of all spikes 
 N_freq_filt_sum = zeros(SizeMY,SizeMX);                 % HeatMap of all activity map
 N_freq_filt_norm_sum = zeros(SizeMY,SizeMX);            % HeatMap of all normalized activity map
 
-MapCells = zeros(SizeMY,SizeMX,n_cells_for_analysis);   % thresholded activity maps for all cells
+MapCells = zeros(SizeMY,SizeMX,mouse.cells_count_for_analysis);   % thresholded activity maps for all cells
 
 for i = g_cell
-    spike_t_good = find(file_NV(:,i).*velcam');
+    spike_t_good = find(file_NV(:,i).*mouse.velcam');
     
     % creation of Spike's number HeatMap
     N = zeros(SizeMY,SizeMX); 
@@ -670,24 +554,24 @@ for i = g_cell
     end
     N_sum = N_sum+N;   
 
-    if spike_smooth
-        [N_sm, ~] = ConvBorderFix(N,mask_t,kernel_opt.small.size,kernel_opt.small.sigma);
+    if params_main.spike_smooth
+        [N_sm, ~] = ConvBorderFix(N,mask_t,params_main.kernel_opt.small.size,params_main.kernel_opt.small.sigma);
     else
         N_sm = N;
     end
     N_thres = N_sm;
-    N_thres(N_sm < thres_spike * max(N_sm(:))) = 0;
+    N_thres(N_sm < params_main.thres_spike * max(N_sm(:))) = 0;
     
     % creation of Activity HeatMap    
-    N_freq = N_thres./N_time_sm*MinTime;    
+    N_freq = N_thres./N_time_sm*mouse.params_main.MinTime;    
     N_freq(isnan(N_freq)) = 0;
     N_freq(isinf(N_freq)) = 0;
-    [N_freq_filt, ~] = ConvBorderFix(N_freq,mask_t,kernel_opt.big.size,kernel_opt.big.sigma);
+    [N_freq_filt, ~] = ConvBorderFix(N_freq,mask_t,params_main.kernel_opt.big.size,params_main.kernel_opt.big.sigma);
     max_TR = max(max(N_freq_filt));    
     
     N_freq_filt_norm = N_freq_filt;
     N_freq_filt_norm_thres = N_freq_filt_norm;
-    N_freq_filt_norm_thres(N_freq_filt_norm < thres_firing * max_TR) = 0;    
+    N_freq_filt_norm_thres(N_freq_filt_norm < params_main.thres_firing * max_TR) = 0;    
     
     max_TR_t = max(max(N_freq_filt_norm_thres));
     min_TR_t = min(min(N_freq_filt_norm_thres));
@@ -696,82 +580,82 @@ for i = g_cell
     
     MapCells(:,:,i) = N_freq_filt_norm_thres; 
     
-    if plot_opts.Plot_Spike
-        h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        DrawHeatMapModSphynx (Options,ArenaAndObjects,opt.spike,N,max_N,x_int_sm,y_int_sm,mouse.bin_size,Options.x_kcorr,spike_t_good);
-        title(sprintf('Spike''s map of cell #%d. Spikes: %d',i, length(spike_t_good)), 'FontSize', FontSizeTitle);
-        saveas(h, sprintf('%s\\Heatmap_Spike\\%s_Heatmap_Spike_%d.png', path,FilenameOut,i));
+    if mouse.plot_opts.Plot_Spike
+        h = figure('Position', params_main.Screensize);
+        DrawHeatMapModSphynx (Options,ArenaAndObjects,params_main.opt.spike,N,max_N,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
+        title(sprintf('Spike''s map of cell #%d. Spikes: %d',i, length(spike_t_good)), 'FontSize', params_main.FontSizeTitle);
+        saveas(h, sprintf('%s\\Heatmap_Spike\\%s_Heatmap_Spike_%d.png', mouse.params_paths.pathOut,mouse.filenameOut,i));
         delete(h);
     end
     
-    if plot_opts.Plot_Spike_Smooth
-        h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_sm,max_N_sm,x_int_sm,y_int_sm,mouse.bin_size,Options.x_kcorr,spike_t_good);
-        title(sprintf('Spikes number of cell %d (smoothed). Spikes: %d',i, length(spike_t_good)), 'FontSize', FontSizeTitle);
-        saveas(h, sprintf('%s\\Heatmap_Spike_Smooth\\%s_Heatmap_Spike_sm_%d.png', path,FilenameOut,i));
+    if mouse.plot_opts.Plot_Spike_Smooth
+        h = figure('Position', params_main.Screensize);
+        DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_sm,max_N_sm,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
+        title(sprintf('Spikes number of cell %d (smoothed). Spikes: %d',i, length(spike_t_good)), 'FontSize', params_main.FontSizeTitle);
+        saveas(h, sprintf('%s\\Heatmap_Spike_Smooth\\%s_Heatmap_Spike_sm_%d.png', mouse.params_paths.pathOut,mouse.filenameOut,i));
         delete(h);
     end
     
-    if plot_opts.Plot_FiringRate
+    if mouse.plot_opts.Plot_FiringRate
         if Cell_IC(2,i)
-            h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq,0,x_int_sm,y_int_sm,mouse.bin_size,Options.x_kcorr,spike_t_good);
-            title(sprintf('Firing rate of informative cell %d (#/min)', i), 'FontSize', FontSizeTitle);
-            saveas(h, sprintf('%s\\Heatmap_FiringRate_Informative\\%s_Heatmap_FiringRate_Informative_%d.png', path, FilenameOut,i));
+            h = figure('Position', params_main.Screensize);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq,0,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
+            title(sprintf('Firing rate of informative cell %d (#/min)', i), 'FontSize', params_main.FontSizeTitle);
+            saveas(h, sprintf('%s\\Heatmap_FiringRate_Informative\\%s_Heatmap_FiringRate_Informative_%d.png', mouse.params_paths.pathOut, mouse.filenameOut,i));
             delete(h);
         else
-            h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq,0,x_int_sm,y_int_sm,mouse.bin_size,Options.x_kcorr,spike_t_good);
-            title(sprintf('Firing rate of NOT informative cell %d (#/min)', i), 'FontSize', FontSizeTitle);
-            saveas(h, sprintf('%s\\Heatmap_FiringRate_NOT_Informative\\%s_Heatmap_FiringRate_NOT_Informative_%d.png', path, FilenameOut,i));
+            h = figure('Position', params_main.Screensize);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq,0,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
+            title(sprintf('Firing rate of NOT informative cell %d (#/min)', i), 'FontSize', params_main.FontSizeTitle);
+            saveas(h, sprintf('%s\\Heatmap_FiringRate_NOT_Informative\\%s_Heatmap_FiringRate_NOT_Informative_%d.png', mouse.params_paths.pathOut, mouse.filenameOut,i));
             delete(h);
         end
     end
     
-    if plot_opts.Plot_FiringRate_Smooth
-        h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt,max_N_freq_filt,x_int_sm,y_int_sm,mouse.bin_size,Options.x_kcorr,spike_t_good);
+    if mouse.plot_opts.Plot_FiringRate_Smooth
+        h = figure('Position', params_main.Screensize);
+        DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq_filt,max_N_freq_filt,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
         title(sprintf('Firing rate, smoothed, of cell %d (#/min). Ca2+ events: %d\n MI = %.2f, MU\\_shuffle = %.3f, SIGMA\\_shuffle = %.3f, MI\\_Zscore = %.1f', i, length(spike_t_good), Cell_IC(3:6,i)), 'FontSize', 10);
-        saveas(h, sprintf('%s\\Heatmap_FiringRate_Smooth\\%s_Heatmap_FiringRate_Smoothed_Cell_%d.png', path,FilenameOut,i));
+        saveas(h, sprintf('%s\\Heatmap_FiringRate_Smooth\\%s_Heatmap_FiringRate_Smoothed_Cell_%d.png', mouse.params_paths.pathOut,mouse.filenameOut,i));
         delete(h);
     end
     
-    if plot_opts.Plot_FiringRate_Smooth_Thres
+    if mouse.plot_opts.Plot_FiringRate_Smooth_Thres
         if Cell_IC(2,i)
-            h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres,0,x_int_sm,y_int_sm,mouse.bin_size,Options.x_kcorr,spike_t_good);
-            title(sprintf('Firing rate of informative cell %d (smoothed and thresholded)(#/min)',i), 'FontSize', FontSizeTitle);
-            saveas(h, sprintf('%s\\Heatmap_FiringRate_Smooth_Thres_Informative\\%s_Heatmap_FiringRate_sm_thres_Informative_%d.png', path,FilenameOut,i));
+            h = figure('Position', params_main.Screensize);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq_filt_norm_thres,0,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
+            title(sprintf('Firing rate of informative cell %d (smoothed and thresholded)(#/min)',i), 'FontSize', params_main.FontSizeTitle);
+            saveas(h, sprintf('%s\\Heatmap_FiringRate_Smooth_Thres_Informative\\%s_Heatmap_FiringRate_sm_thres_Informative_%d.png', mouse.params_paths.pathOut,mouse.filenameOut,i));
             delete(h);
         else
-            h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres,0,x_int_sm,y_int_sm,mouse.bin_size,Options.x_kcorr,spike_t_good);
-            title(sprintf('Firing rate of NOT informative cell %d (smoothed and thresholded)(#/min)',i), 'FontSize', FontSizeTitle);
-            saveas(h, sprintf('%s\\Heatmap_FiringRate_Smooth_Thres_NOT_Informative\\%s_Heatmap_FiringRate_sm_thres_NOT_Informative_%d.png', path,FilenameOut,i));
+            h = figure('Position', params_main.Screensize);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq_filt_norm_thres,0,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
+            title(sprintf('Firing rate of NOT informative cell %d (smoothed and thresholded)(#/min)',i), 'FontSize', params_main.FontSizeTitle);
+            saveas(h, sprintf('%s\\Heatmap_FiringRate_Smooth_Thres_NOT_Informative\\%s_Heatmap_FiringRate_sm_thres_NOT_Informative_%d.png', mouse.params_paths.pathOut,mouse.filenameOut,i));
             delete(h);
         end
     end
 end
 
-h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,N_sum,0,x_int_sm,y_int_sm,mouse.bin_size,Options.x_kcorr,spike_t_good);
-title('Sum of spikes map', 'FontSize', FontSizeTitle);
-saveas(h, sprintf('%s\\%s_Heatmap_AllCells_spikes.png', path, FilenameOut));
+h = figure('Position', params_main.Screensize);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.track,N_sum,0,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
+title('Sum of spikes map', 'FontSize', params_main.FontSizeTitle);
+saveas(h, sprintf('%s\\%s_Heatmap_AllCells_spikes.png', mouse.params_paths.pathOut, mouse.filenameOut));
 delete(h);
 
-h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,N_freq_filt_sum,0,x_int_sm,y_int_sm,mouse.bin_size,Options.x_kcorr,spike_t_good);
-title('Firing rate for all cells(#/min)', 'FontSize', FontSizeTitle);
-saveas(h, sprintf('%s\\%s_Heatmap_AllCells_FiringRate.png', path, FilenameOut));
+h = figure('Position', params_main.Screensize);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.track,N_freq_filt_sum,0,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
+title('Firing rate for all cells(#/min)', 'FontSize', params_main.FontSizeTitle);
+saveas(h, sprintf('%s\\%s_Heatmap_AllCells_FiringRate.png', mouse.params_paths.pathOut, mouse.filenameOut));
 delete(h);
 
-h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,N_freq_filt_norm_sum,0,x_int_sm,y_int_sm,mouse.bin_size,Options.x_kcorr,spike_t_good);
-title('Firing rate for all cells normalized (#/min)', 'FontSize', FontSizeTitle);
-saveas(h, sprintf('%s\\%s_Heatmap_AllCells_Normalized_FiringRate.png', path, FilenameOut));
+h = figure('Position', params_main.Screensize);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.track,N_freq_filt_norm_sum,0,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
+title('Firing rate for all cells normalized (#/min)', 'FontSize', params_main.FontSizeTitle);
+saveas(h, sprintf('%s\\%s_Heatmap_AllCells_Normalized_FiringRate.png', mouse.params_paths.pathOut, mouse.filenameOut));
 delete(h);
 
-save(sprintf('%s\\WorkSpace_%s.mat',path, FilenameOut));
+save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.filenameOut));
 
 %% calculation and plotting separate fields from activity maps
 
@@ -790,13 +674,13 @@ MapFieldsCorrected = zeros(SizeMY,SizeMX,1); %activity map of all fields correct
 
 wfields=0; %number of fields from all cells
 for map = g_cell
-    spike_t_good = find(file_NV(:,map).*velcam');
+    spike_t_good = find(file_NV(:,map).*mouse.velcam');
     
     % watershed transform
     N_water = -MapCells(:,:,map);
     N_freq_filt2 = MapCells(:,:,map);
     L = watershed(N_water);
-    [n_wfield,mask_wfield, spike_in_field] = WaterShedFieldVovaMod(L, spike_t_good, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr,x_shift,y_shift);
+    [n_wfield,mask_wfield, spike_in_field] = WaterShedFieldVovaMod(L, spike_t_good, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,x_shift,y_shift);
     
     wfields = wfields+n_wfield;
     for mask_field=1:n_wfield
@@ -804,37 +688,37 @@ for map = g_cell
         Fields(2,wfields-n_wfield+mask_field) = mask_field;
         Fields(8,wfields-n_wfield+mask_field) = length([spike_in_field{mask_field,:}]);
         
-        switch PC_criterion
+        switch params_main.PC_criterion
             case 'Peak'
                 orig_peaks = [];
                 for mask_field=1:n_wfield
                     orig_peaks = [orig_peaks max(max(N_freq_filt2.*mask_wfield(:,:,mask_field)/max(max(mask_wfield(:,:,mask_field)))))];
                 end
-                [true_fields, mu_fields, sigma_fields, Nsig_fields] = PeakShift(spike_t_good, mask_t, N_time_sm, x_ind, y_ind, orig_peaks, N_shift, shift, S_sigma);
+                [true_fields, mu_fields, sigma_fields, Nsig_fields] = PeakShift(spike_t_good, mask_t, N_time_sm, x_ind, y_ind, orig_peaks, params_main.N_shift, params_main.shift, params_main.S_sigma);
                 Fields(3,wfields-n_wfield+mask_field) = true_fields(mask_field);
                 Fields(4,wfields-n_wfield+mask_field) = orig_peaks(mask_field);
                 Fields(5,wfields-n_wfield+mask_field) = mu_fields;
                 Fields(6,wfields-n_wfield+mask_field) = sigma_fields;
                 Fields(7,wfields-n_wfield+mask_field) = Nsig_fields(mask_field);
-                Fields(9,wfields-n_wfield+mask_field) = (Fields(8,wfields-n_wfield+mask_field)>min_spike_field)*Fields(3,wfields-n_wfield+mask_field);
+                Fields(9,wfields-n_wfield+mask_field) = (Fields(8,wfields-n_wfield+mask_field)>params_main.min_spike_field)*Fields(3,wfields-n_wfield+mask_field);
             case 'MI_vanila'
                 Fields(3:7,wfields-n_wfield+mask_field) = Cell_IC(2:6,map);
-                Fields(9,wfields-n_wfield+mask_field) = (Fields(8,wfields-n_wfield+mask_field)>min_spike_field)*Fields(3,wfields-n_wfield+mask_field);
+                Fields(9,wfields-n_wfield+mask_field) = (Fields(8,wfields-n_wfield+mask_field)>params_main.min_spike_field)*Fields(3,wfields-n_wfield+mask_field);
             case 'MI_vanila_fields'
-                Fields(3:6,wfields-n_wfield+mask_field) = RandomShiftMod(smooth_freq_mode,[spike_in_field{mask_field,:}],x_ind,y_ind,N_time_sm,N_shift,shift,S_sigma,TimeRate,session.framerate,kernel_opt);
+                Fields(3:6,wfields-n_wfield+mask_field) = RandomShiftMod(params_main.smooth_freq_mode,[spike_in_field{mask_field,:}],x_ind,y_ind,N_time_sm,params_main.N_shift,params_main.shift,params_main.S_sigma,mouse.params_main.TimeRate,session.framerate,params_main.kernel_opt);
                 Fields(7,wfields-n_wfield+mask_field) = (Fields(4,wfields-n_wfield+mask_field)-Fields(5,wfields-n_wfield+mask_field))/Fields(6,wfields-n_wfield+mask_field);
-                Fields(9,wfields-n_wfield+mask_field) = (Fields(8,wfields-n_wfield+mask_field)>min_spike_field)*Fields(3,wfields-n_wfield+mask_field);
+                Fields(9,wfields-n_wfield+mask_field) = (Fields(8,wfields-n_wfield+mask_field)>params_main.min_spike_field)*Fields(3,wfields-n_wfield+mask_field);
         end
         
         % calculation separate field
         N_freq_filt_true = N_freq_filt2.*mask_wfield(:,:,mask_field)/max(max(mask_wfield(:,:,mask_field)));
         MapFields(:,:,wfields-n_wfield+mask_field) = N_freq_filt_true;
         
-        if plot_opts.Plot_FiringRate_Fields
-            h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_true, 0, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr,[spike_in_field{mask_field,:}]);
+        if mouse.plot_opts.Plot_FiringRate_Fields
+            h = figure('Position', params_main.Screensize);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq_filt_true, 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,[spike_in_field{mask_field,:}]);
             title(sprintf('Firing rate of cell %d field %d Crit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, mask_field,Fields(3:7,wfields-n_wfield+mask_field)), 'FontSize', 10);
-            saveas(h, sprintf('%s\\Heatmap_FiringRate_Fields\\%s_FiringRateFields_Cell_%d_Field_%d.png',path,FilenameOut,map,mask_field));
+            saveas(h, sprintf('%s\\Heatmap_FiringRate_Fields\\%s_FiringRateFields_Cell_%d_Field_%d.png',mouse.params_paths.pathOut,mouse.filenameOut,map,mask_field));
             delete(h);
         end
         
@@ -846,28 +730,28 @@ for map = g_cell
         end
         
         %smoothing of spike's number
-        if spike_smooth
-            [N_sm, ~] = ConvBorderFix(N,mask_t,kernel_opt.small.size,kernel_opt.small.sigma);
+        if params_main.spike_smooth
+            [N_sm, ~] = ConvBorderFix(N,mask_t,params_main.kernel_opt.small.size,params_main.kernel_opt.small.sigma);
             for ii=1:SizeMY
                 for jj=1:SizeMX
-                    if N_sm(ii,jj)>=thres_spike*max(max(N_sm))
+                    if N_sm(ii,jj)>=params_main.thres_spike*max(max(N_sm))
                         N_thres(ii,jj) = N_sm(ii,jj);
                     end
                 end
             end
-            N_freq = N_thres./N_time_sm*MinTime;
+            N_freq = N_thres./N_time_sm*mouse.params_main.MinTime;
         else
-            N_freq = N./N_time*MinTime;
+            N_freq = N./N_time*mouse.params_main.MinTime;
         end
         
         N_freq(isnan(N_freq)) = 0;
         N_freq(isinf(N_freq)) = 0;
-        [N_freq_filt, ~] = ConvBorderFix(N_freq,mask_t,kernel_opt.big.size,kernel_opt.big.sigma);
+        [N_freq_filt, ~] = ConvBorderFix(N_freq,mask_t,params_main.kernel_opt.big.size,params_main.kernel_opt.big.sigma);
         max_TR = max(max(N_freq_filt));
         N_freq_filt_norm = N_freq_filt;
         
         N_freq_filt_norm_thres = N_freq_filt_norm;
-        N_freq_filt_norm_thres(N_freq_filt_norm < thres_firing * max_TR) = 0;
+        N_freq_filt_norm_thres(N_freq_filt_norm < params_main.thres_firing * max_TR) = 0;
         
         max_TR_t = max(max(N_freq_filt_norm_thres));
         min_TR_t = min(min(N_freq_filt_norm_thres));
@@ -885,94 +769,94 @@ for map = g_cell
         
         MapFieldsCorrected(:,:,wfields-n_wfield+mask_field) = N_freq_filt_norm_thres;
         
-        if plot_opts.Plot_FiringRate_Fields_Corrected
+        if mouse.plot_opts.Plot_FiringRate_Fields_Corrected
             if Fields(9,wfields-n_wfield+mask_field)
-                h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-                DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres, 0, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
+                h = figure('Position', params_main.Screensize);
+                DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq_filt_norm_thres, 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
                 title(sprintf('Firing rate of informative field %d of cell %d (smoothed and thresholded)(#/min) \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f',mask_field,map,Fields(4:7,wfields-n_wfield+mask_field)), 'FontSize', 10);
-                saveas(h, sprintf('%s\\Heatmap_FiringRate_Fields_Corrected_Inform\\%s_FiringRate_Fields_Corrected_Inform_Cell_%d_Field_%d.png',path,FilenameOut,map,mask_field));
+                saveas(h, sprintf('%s\\Heatmap_FiringRate_Fields_Corrected_Inform\\%s_FiringRate_Fields_Corrected_Inform_Cell_%d_Field_%d.png',mouse.params_paths.pathOut,mouse.filenameOut,map,mask_field));
                 delete(h);
             else
-%                 h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-%                 DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,N_freq_filt_norm_thres, 0, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
+%                 h = figure('Position', params_main.Screensize);
+%                 DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq_filt_norm_thres, 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
 %                 title(sprintf('Firing rate of NOT informative field %d of cell %d (smoothed and thresholded)(#/min) \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f',mask_field,map,Fields(4:7,wfields-n_wfield+mask_field)), 'FontSize', 10);
-%                 saveas(h, sprintf('%s\\Heatmap_FiringRate_Fields_Corrected_NOT_Inform\\%s_FiringRate_Fields_Corrected_NOT_Inform_%d.png', path,FilenameOut,wfields-n_wfield+mask_field));
+%                 saveas(h, sprintf('%s\\Heatmap_FiringRate_Fields_Corrected_NOT_Inform\\%s_FiringRate_Fields_Corrected_NOT_Inform_%d.png', mouse.params_paths.pathOut,mouse.filenameOut,wfields-n_wfield+mask_field));
 %                 delete(h);
             end
         end
         
-        if plot_opts.Plot_WaterShedField
-            h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-            DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,double(mask_wfield(:,:,mask_field)), 0, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
-            title(sprintf('WaterShed Transform of cell %d field %d ICcrit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, mask_field,Fields(3:7,wfields-n_wfield+mask_field)), 'FontSize', FontSizeTitle);
-            saveas(h, sprintf('%s\\WaterShedFields\\%s_WaterShedField_%d.png', path,FilenameOut,wfields-n_wfield+mask_field));
+        if mouse.plot_opts.Plot_WaterShedField
+            h = figure('Position', params_main.Screensize);
+            DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,double(mask_wfield(:,:,mask_field)), 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
+            title(sprintf('WaterShed Transform of cell %d field %d ICcrit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, mask_field,Fields(3:7,wfields-n_wfield+mask_field)), 'FontSize', params_main.FontSizeTitle);
+            saveas(h, sprintf('%s\\WaterShedFields\\%s_WaterShedField_%d.png', mouse.params_paths.pathOut,mouse.filenameOut,wfields-n_wfield+mask_field));
             delete(h);
         end
     end
     
     %watershed plot
-    if plot_opts.Plot_WaterShed
-        h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.spike,double(L), 0, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
-        title(sprintf('WaterShed Transform of cell %d Crit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, Cell_IC(2:6,map)), 'FontSize', FontSizeTitle);
-        saveas(h, sprintf('%s\\WaterShed\\%s_WaterShed_%d.png', path,FilenameOut,map));
+    if mouse.plot_opts.Plot_WaterShed
+        h = figure('Position', params_main.Screensize);
+        DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,double(L), 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
+        title(sprintf('WaterShed Transform of cell %d Crit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, Cell_IC(2:6,map)), 'FontSize', params_main.FontSizeTitle);
+        saveas(h, sprintf('%s\\WaterShed\\%s_WaterShed_%d.png', mouse.params_paths.pathOut,mouse.filenameOut,map));
         delete(h);
     end
 end
 
 % FiringRate plots
-h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_sum, 0, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr,spike_t_good);
-title('Firing rate for all corrected fields(#/min)', 'FontSize', FontSizeTitle);
-saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRate.png', path, FilenameOut));
+h = figure('Position', params_main.Screensize);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.track,Field_thres_sum, 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,spike_t_good);
+title('Firing rate for all corrected fields(#/min)', 'FontSize', params_main.FontSizeTitle);
+saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRate.png', mouse.params_paths.pathOut, mouse.filenameOut));
 delete(h);
-h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_norm_sum, 0, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr,spike_t_good);
-title('Firing rate for all corrected fields (normalized) (#/min)', 'FontSize', FontSizeTitle);
-saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRate_Normalized.png', path, FilenameOut));
+h = figure('Position', params_main.Screensize);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.track,Field_thres_norm_sum, 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,spike_t_good);
+title('Firing rate for all corrected fields (normalized) (#/min)', 'FontSize', params_main.FontSizeTitle);
+saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRate_Normalized.png', mouse.params_paths.pathOut, mouse.filenameOut));
 delete(h);
 
 % FiringRate Informative plots
-h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_sum_IC, 0, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr,spike_t_good);
-title('Firing rate for all INFORM corrected fields(#/min)', 'FontSize', FontSizeTitle);
-saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateInform.png', path, FilenameOut));
+h = figure('Position', params_main.Screensize);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.track,Field_thres_sum_IC, 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,spike_t_good);
+title('Firing rate for all INFORM corrected fields(#/min)', 'FontSize', params_main.FontSizeTitle);
+saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateInform.png', mouse.params_paths.pathOut, mouse.filenameOut));
 delete(h);
-h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_norm_sum_IC, 0, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr,spike_t_good);
-title('Firing rate for all INFORM corrected fields (normalized)(#/min)', 'FontSize', FontSizeTitle);
-saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateInform_Normalized.png', path, FilenameOut));
+h = figure('Position', params_main.Screensize);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.track,Field_thres_norm_sum_IC, 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,spike_t_good);
+title('Firing rate for all INFORM corrected fields (normalized)(#/min)', 'FontSize', params_main.FontSizeTitle);
+saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateInform_Normalized.png', mouse.params_paths.pathOut, mouse.filenameOut));
 delete(h);
 
 % FiringRate NOT Informative plots
-h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_sum_NOT_IC, 0, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr,spike_t_good);
-title('Firing rate for all NOT inform corrected fields (#/min)', 'FontSize', FontSizeTitle);
-saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateNOTInform.png', path, FilenameOut));
+h = figure('Position', params_main.Screensize);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.track,Field_thres_sum_NOT_IC, 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,spike_t_good);
+title('Firing rate for all NOT inform corrected fields (#/min)', 'FontSize', params_main.FontSizeTitle);
+saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateNOTInform.png', mouse.params_paths.pathOut, mouse.filenameOut));
 delete(h);
-h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-DrawHeatMapModSphynx(Options,ArenaAndObjects,opt.track,Field_thres_norm_sum_NOT_IC, 0, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr,spike_t_good);
-title('Firing rate for all NOT inform corrected fields (normalized)(#/min)', 'FontSize', FontSizeTitle);
-saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateNOTInform_Normalized.png', path, FilenameOut));
+h = figure('Position', params_main.Screensize);
+DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.track,Field_thres_norm_sum_NOT_IC, 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,spike_t_good);
+title('Firing rate for all NOT inform corrected fields (normalized)(#/min)', 'FontSize', params_main.FontSizeTitle);
+saveas(h, sprintf('%s\\%s_Heatmap_AllFields_FiringRateNOTInform_Normalized.png', mouse.params_paths.pathOut, mouse.filenameOut));
 delete(h);
 
 if length(Fields(7,:))>2
     h = figure;
     histogram(Fields(7,:),round(length(Fields(7,:))/5));
-    title('Histogram of z-scored IC distribution for fields', 'FontSize', FontSizeLabel);
-    saveas(h, sprintf('%s\\%s_Histogram_IC_fields_normalized.png', path,FilenameOut));
+    title('Histogram of z-scored IC distribution for fields', 'FontSize', params_main.FontSizeLabel);
+    saveas(h, sprintf('%s\\%s_Histogram_IC_fields_normalized.png', mouse.params_paths.pathOut,mouse.filenameOut));
     delete(h);
 end
 
 if length(Cell_IC(1,:))>2
     h = figure;
     histogram(Cell_IC(6,Cell_IC(2,:)>=0),round(length(Cell_IC(6,:))/5));
-    title('Histogram of z-scored IC distribution for cells', 'FontSize', FontSizeLabel);
-    saveas(h, sprintf('%s\\%s_Histogram_IC_cells_normalized.png', path,FilenameOut));
+    title('Histogram of z-scored IC distribution for cells', 'FontSize', params_main.FontSizeLabel);
+    saveas(h, sprintf('%s\\%s_Histogram_IC_cells_normalized.png', mouse.params_paths.pathOut,mouse.filenameOut));
     delete(h);
 end
 
-save(sprintf('%s\\WorkSpace_%s.mat',path,FilenameOut));
+save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut,mouse.filenameOut));
 
 %% searching of real Place Fields
 
@@ -1094,12 +978,12 @@ if ~isempty(MapFieldsIC)
     %         %         field_line = zeros(1,session.duration_frames);
     %         %         max_xe = max(x_field);min_xe = min(x_field);
     %         %         for i=1:session.duration_frames
-    %         %             if x_int_sm(i)>max_xe || x_int_sm(i)<min_xe
+    %         %             if mouse.x(i)>max_xe || mouse.x(i)<min_xe
     %         %                 continue
     %         %             else
     %         %                 elip_per = [];
-    %         %                 elip_per = y_field(find(abs((x_field-x_int_sm(i)))<1));
-    %         %                 if y_int_sm(i)<=max(elip_per) && y_int_sm(i)>=min(elip_per)
+    %         %                 elip_per = y_field(find(abs((x_field-mouse.x(i)))<1));
+    %         %                 if mouse.y(i)<=max(elip_per) && mouse.y(i)>=min(elip_per)
     %         %                     field_line(i) = 1;
     %         %                 end
     %         %             end
@@ -1107,12 +991,12 @@ if ~isempty(MapFieldsIC)
     %
     %         %         %test for interpolation ellipse
     %         %         h = figure;
-    %         %         plot(x_int_sm, y_int_sm, 'b', 'MarkerSize',20);hold on;
+    %         %         plot(mouse.x, mouse.y, 'b', 'MarkerSize',20);hold on;
     %         %         plot(x_field,y_field, 'g'); hold on;
-    %         %         plot(x_int_sm(find(field_line)),y_int_sm(find(field_line)), 'r');
-    %         %         hold on; DrawLine(x_int_sm*Options.x_kcorr, y_int_sm, field_line, Options.x_kcorr, 'b', 1, 1);
+    %         %         plot(mouse.x(find(field_line)),mouse.y(find(field_line)), 'r');
+    %         %         hold on; DrawLine(mouse.x*Options.x_kcorr, mouse.y, field_line, Options.x_kcorr, 'b', 1, 1);
     %
-    %         %         [field_line_ref, n_entries_field, time_field, field_time, frame_in, frame_out] = RefineLine(field_line, length_line, length_line);
+    %         %         [field_line_ref, n_entries_field, time_field, field_time, frame_in, frame_out] = RefineLine(field_line, mouse.params_main.length_line, mouse.params_main.length_line);
     %
     %         %         field_good = zeros(1,session.duration_frames);
     %         spike_t = find(file_NV(:,SpikeFieldsStruct(field).cell));
@@ -1156,10 +1040,10 @@ if ~isempty(MapFieldsIC)
     %         % plot for every field
     %         x_field = x_field-mouse.bin_size*(x_shift);
     %         y_field = y_field-mouse.bin_size*(y_shift);
-    %         if plot_opts.Plot_Field
-    %             h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-    %             DrawHeatMapModSphynx(Options,1,1,1,0,0,0, MapFieldsIC(:,:,field),max_N_freq_filt_norm_thres, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr,spike_t_good);
-    %             title(sprintf('Activity of %d cell, field %d \n inform %d, crit %d (all entries: %d, entries with Ca2+: %d)',SpikeFieldsStruct(field).cell,SpikeFieldsStruct(field).fields,SpikeFieldsStruct(field).inform,SpikeFieldsStruct(field).crit,SpikeFieldsStruct(field).n_entries_field,SpikeFieldsStruct(field).n_good_line), 'FontSize', FontSizeTitle);
+    %         if mouse.plot_opts.Plot_Field
+    %             h = figure('Position', params_main.Screensize);
+    %             DrawHeatMapModSphynx(Options,1,1,1,0,0,0, MapFieldsIC(:,:,field),max_N_freq_filt_norm_thres, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,spike_t_good);
+    %             title(sprintf('Activity of %d cell, field %d \n inform %d, crit %d (all entries: %d, entries with Ca2+: %d)',SpikeFieldsStruct(field).cell,SpikeFieldsStruct(field).fields,SpikeFieldsStruct(field).inform,SpikeFieldsStruct(field).crit,SpikeFieldsStruct(field).n_entries_field,SpikeFieldsStruct(field).n_good_line), 'FontSize', params_main.FontSizeTitle);
     %             %             for xx=1:length(x_field)
     %             %                 if x_field(xx)< x_arena(1) || x_field(xx)> x_arena(2)
     %             %                     x_field(xx)=NaN;
@@ -1173,15 +1057,15 @@ if ~isempty(MapFieldsIC)
     %
     %             %             hold on; plot((x_field)/Options.x_kcorr,y_field, 'b', 'LineWidth',3);
     %             hold on; plot((x_field)/Options.x_kcorr,y_field, 'b', 'LineWidth',3);
-    %             hold on; DrawLine(x_int_sm-mouse.bin_size*x_shift, y_int_sm-mouse.bin_size*y_shift, field_line_ref, Options.x_kcorr, 'b', 1, 1);
-    %             hold on; DrawLine(x_int_sm-mouse.bin_size*x_shift, y_int_sm-mouse.bin_size*y_shift, field_good, Options.x_kcorr, 'b', 1, 2);
-    %             hold on; plot((x_int_sm(spike_t_good)-mouse.bin_size*x_shift)/Options.x_kcorr,y_int_sm(spike_t_good)-mouse.bin_size*y_shift,'k*','MarkerSize',MarksizeSpikes,'LineWidth',LineWidthSpikes);
+    %             hold on; DrawLine(mouse.x-mouse.bin_size*x_shift, mouse.y-mouse.bin_size*y_shift, field_line_ref, Options.x_kcorr, 'b', 1, 1);
+    %             hold on; DrawLine(mouse.x-mouse.bin_size*x_shift, mouse.y-mouse.bin_size*y_shift, field_good, Options.x_kcorr, 'b', 1, 2);
+    %             hold on; plot((mouse.x(spike_t_good)-mouse.bin_size*x_shift)/Options.x_kcorr,mouse.y(spike_t_good)-mouse.bin_size*y_shift,'k*','MarkerSize',params_main.MarksizeSpikes,'LineWidth',params_main.LineWidthSpikes);
     %
     %             F = getframe(h);
     %             if SpikeFieldsStruct(field).inform && SpikeFieldsStruct(field).crit
-    %                 saveas(h, sprintf('%s\\Heatmap_Fields_Real\\%s_Heatmap_Field_Real_%d.png', path,FilenameOut,field));
+    %                 saveas(h, sprintf('%s\\Heatmap_Fields_Real\\%s_Heatmap_Field_Real_%d.png', mouse.params_paths.pathOut,mouse.filenameOut,field));
     %             else
-    %                 saveas(h, sprintf('%s\\Heatmap_Fields_NOT_Real\\%s_Heatmap_Field_NOT_Real_%d.png', path,FilenameOut,field));
+    %                 saveas(h, sprintf('%s\\Heatmap_Fields_NOT_Real\\%s_Heatmap_Field_NOT_Real_%d.png', mouse.params_paths.pathOut,mouse.filenameOut,field));
     %             end
     %             delete(h);
     %         end
@@ -1201,8 +1085,8 @@ if ~isempty(MapFieldsIC)
     %     end
     
     %saving fields content
-    writetable(struct2table(SpikeFieldsStruct1), sprintf('%s\\%s_Fields_IC.csv',path,FilenameOut));
-    %     writetable(struct2table(SpikeFieldsReal1), sprintf('%s\\%s_Fields_Real.csv',path,FilenameOut));
+    writetable(struct2table(SpikeFieldsStruct1), sprintf('%s\\%s_Fields_IC.csv',mouse.params_paths.pathOut,mouse.filenameOut));
+    %     writetable(struct2table(SpikeFieldsReal1), sprintf('%s\\%s_Fields_Real.csv',mouse.params_paths.pathOut,mouse.filenameOut));
     
     % !!!
     SpikeFieldsReal = SpikeFieldsStruct;
@@ -1219,13 +1103,13 @@ if ~isempty(MapFieldsIC)
             SpikeFieldsReal(i).y_mass_real = (yrealms(i)+0.5)*mouse.bin_size;
         end
         
-        h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        axis([ax_xy(1) ax_xy(2) ax_xy(3) ax_xy(4)]);hold on;
-        plot(x_int_sm,y_int_sm, 'b');
-        title('All real fields', 'FontSize', FontSizeTitle);
+        h = figure('Position', params_main.Screensize);
+        axis([axes(1) axes(2) axes(3) axes(4)]);hold on;
+        plot(mouse.x,mouse.y, 'b');
+        title('All real fields', 'FontSize', params_main.FontSizeTitle);
         shift_center = 0.5;
-        hold on;plot((xrealms+shift_center)*mouse.bin_size,(yrealms+shift_center)*mouse.bin_size,'k*','MarkerSize',5,'LineWidth',LineWidthSpikes);
-        saveas(h, sprintf('%s\\%s_Fields_Real_Centers.png', path, FilenameOut));
+        hold on;plot((xrealms+shift_center)*mouse.bin_size,(yrealms+shift_center)*mouse.bin_size,'k*','MarkerSize',5,'LineWidth',params_main.LineWidthSpikes);
+        saveas(h, sprintf('%s\\%s_Fields_Real_Centers.png', mouse.params_paths.pathOut, mouse.filenameOut));
         delete(h);
         
         %         %plot heatmap for all real fields activity map(and not real)
@@ -1252,18 +1136,18 @@ if ~isempty(MapFieldsIC)
         %             end
         %         end
         
-        %         h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        %         DrawHeatMapModSphynx(Options,n_objects,1,1,1,0,0,0, N_real_fields_sum, 0, cup1_centr_x, cup1_centr_y, cup1_rad, cup2_centr_x, cup2_centr_y, cup2_rad, cup3_centr_x, cup3_centr_y, cup3_rad, x_arena, y_arena, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr,cup1_line_ref,cup2_line_ref,cup3_line_ref, spike_t_good);
-        %         title('Firing rate for all real fields(normalized)', 'FontSize', FontSizeTitle);
+        %         h = figure('Position', params_main.Screensize);
+        %         DrawHeatMapModSphynx(Options,n_objects,1,1,1,0,0,0, N_real_fields_sum, 0, cup1_centr_x, cup1_centr_y, cup1_rad, cup2_centr_x, cup2_centr_y, cup2_rad, cup3_centr_x, cup3_centr_y, cup3_rad, x_arena, y_arena, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,cup1_line_ref,cup2_line_ref,cup3_line_ref, spike_t_good);
+        %         title('Firing rate for all real fields(normalized)', 'FontSize', params_main.FontSizeTitle);
         %         F = getframe(h);
-        %         saveas(h, sprintf('%s\\%s_Heatmap_AllRealFields.png', path, FilenameOut));
+        %         saveas(h, sprintf('%s\\%s_Heatmap_AllRealFields.png', mouse.params_paths.pathOut, mouse.filenameOut));
         %         delete(h);
         %
-        %         h = figure('Position', [1 1 Screensize(3) Screensize(4)]);
-        %         DrawHeatMapModSphynx(Options,n_objects,1,1,1,0,0,0, N_not_real_fields_sum, 0, cup1_centr_x, cup1_centr_y, cup1_rad, cup2_centr_x, cup2_centr_y, cup2_rad, cup3_centr_x, cup3_centr_y, cup3_rad, x_arena, y_arena, x_int_sm, y_int_sm, mouse.bin_size, Options.x_kcorr,cup1_line_ref,cup2_line_ref,cup3_line_ref, spike_t_good);
-        %         title('Firing rate for all not real fields(normalized)', 'FontSize', FontSizeTitle);
+        %         h = figure('Position', params_main.Screensize);
+        %         DrawHeatMapModSphynx(Options,n_objects,1,1,1,0,0,0, N_not_real_fields_sum, 0, cup1_centr_x, cup1_centr_y, cup1_rad, cup2_centr_x, cup2_centr_y, cup2_rad, cup3_centr_x, cup3_centr_y, cup3_rad, x_arena, y_arena, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,cup1_line_ref,cup2_line_ref,cup3_line_ref, spike_t_good);
+        %         title('Firing rate for all not real fields(normalized)', 'FontSize', params_main.FontSizeTitle);
         %         F = getframe(h);
-        %         saveas(h, sprintf('%s\\%s_Heatmap_AllNotRealFields.png', path, FilenameOut));
+        %         saveas(h, sprintf('%s\\%s_Heatmap_AllNotRealFields.png', mouse.params_paths.pathOut, mouse.filenameOut));
         %         delete(h);
         
         %searching cup fields spike model
@@ -1290,15 +1174,15 @@ if ~isempty(MapFieldsIC)
             test_zone4(i) = SpikeFieldsReal(i).cell;
         end
         
-        test_zone5 = zeros(1,n_cells_for_analysis);
-        for i=1:n_cells_for_analysis
+        test_zone5 = zeros(1,mouse.cells_count_for_analysis);
+        for i=1:mouse.cells_count_for_analysis
             test_zone5(i) = length(find(test_zone4==i));
         end
         
         h = figure;
         histogram(test_zone5,max(test_zone5)+1);
-        title('Histogram of fields number', 'FontSize', FontSizeTitle);
-        saveas(h, sprintf('%s\\%s_Fields per cell distribution.png', path, FilenameOut));
+        title('Histogram of fields number', 'FontSize', params_main.FontSizeTitle);
+        saveas(h, sprintf('%s\\%s_Fields per cell distribution.png', mouse.params_paths.pathOut, mouse.filenameOut));
         delete(h);        
 
         results(1) = size(SpikeFieldsStruct,2); %total candidate fields
@@ -1306,11 +1190,11 @@ if ~isempty(MapFieldsIC)
         r_results = round(results);
         
         %save results
-        prmtr=fopen(sprintf('%s\\%s_FieldsCupStat.txt',path, FilenameOut),'w');
+        prmtr=fopen(sprintf('%s\\%s_FieldsCupStat.txt',mouse.params_paths.pathOut, mouse.filenameOut),'w');
         fprintf(prmtr,'All fields Real fields\n');
         fprintf(prmtr, '%d %d\n',r_results(1), r_results(2));
         fclose(prmtr);
     end
 end
-save(sprintf('%s\\WorkSpace_%s.mat',path, FilenameOut));
+save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.filenameOut));
 end
