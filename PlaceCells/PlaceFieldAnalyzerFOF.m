@@ -1,12 +1,12 @@
 function [FieldsIC] = PlaceFieldAnalyzerFOF(params_paths, params_main)
-% 17.12.2020 added separate matrices for all plots(for correct gauss filtering)
-% 24.12 IC criteria
-% 26.04 good fitting of ellipse
-% 26.10 fields geometry added
-% 04.12.22 different place field method added, n_objects==0 added,
-% FilenameCut added, CorrectionTrackMode, TimeMode added
-% 24.04.24 spikes only in movement added
-% 18.12.24 params, cellInfo, mouse and session structs added
+% Place Cells and Fields Analysis 
+% Plusnin Viktor 2025
+% Short history of commites:
+% 12.20 added separate matrices for all plots(for correct gauss filtering)
+% 04.21 fitting PF by ellipse, fields geometry added
+% 12.22 different place cells criteria added
+% 04.24 spikes only in movement added
+% 12.24 structs params_paths, params_main, session, mouse and cell added
 
 %% manual defining parameters section
 if ~exist('params_paths', 'var') || isempty(params_paths)
@@ -68,10 +68,10 @@ if ~exist('params_main', 'var') || isempty(params_main)
         ...
         ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SUPPORTING PLOTS AND VERBOSE PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         'verbose', 1,...                                % additional messages
-        'plot_option', 1,...                            % main plot parameters, 0 - no one plots, 1 - basic plots, 2 - all plots
+        'plot_mode', 1,...                            % main plot parameters, 0 - no one plots, 1 - basic plots, 2 - all plots
         'Screensize', get(0, 'Screensize'),...          % screensize for all plotting
         'axes_step', 1,...                              % in cm
-        'opt', struct('track', struct('trackp', 1, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 0),...
+        'heatmap_opt', struct('track', struct('trackp', 1, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 0),...
         'spike', struct('trackp', 0, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 1)),...
         ...                                             % opts for plot activity map
         'LineWidthSpikes', 2,...                        % line width for spikes plots
@@ -79,41 +79,72 @@ if ~exist('params_main', 'var') || isempty(params_main)
         'MarksizeSpikesAll', 5,...                      % size of calcium event mark on all_spikes plots
         'FontSizeTitle', 20,...                         % title size on plots
         'FontSizeLabel', 20 ...                         % axes text size on plots
+        ...
+        ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 'PARAMETERS FOR OLDER VERSION OF CRITERION PC' %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        ... % 'min_good_line', 5, ...                   % minimum count of entries with spikes into place field
+        ... % 'k_pp', 0 ...                             % minimum percentage of entries with spikes into place field
         );
     
 end
 
 %% description and defining main struct MOUSE 
 
-% struct MOUSE:
-% 'exp'                         - experiment identifier (e.g. FOF, NOF, 3DM)
-% 'id'                          - mouse identifier (e.g. F01, H39)
-% 'day'                         - day number of registration (e.g. 1D, 6D)
-% 'trial'                       - trial number of registration (e.g. 1T, 6T)
-% 'duration_min'                - session duration in minutes
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MOUSE INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 'exp'                         - experiment identifier (e.g. 'FOF', 'NOF', '3DM')
+% 'group'                       - experimental group of animal (e.g. 'Control', 'FAD')
+% 'id'                          - mouse identifier (e.g. 'F01', 'H39')
+% 'day'                         - day number of registration (e.g. '1D', '6D')
+% 'trial'                       - trial number of registration (e.g. '1T', '6T')
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SESSION INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 'duration_s'                  - session duration in seconds
+% 'duration_min'                - session duration in minutes
+% 'duration_frames'             - session duration in frames
+% 'framerate'                   - session framerate
+% 'time'                        - session timeline in seconds (or minutes if TimeMode = 'm')
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% BEHAVIOR VARIABLES %%%%%%%%%%%%%%%%%%%%%%%
+% 'TimeLine'                    - timeline track and calcium before synchronization
 % 'x'                           - x coordinate of mouse trajectory
 % 'y'                           - y coordinate of mouse trajectory
 % 'x_bad'                       - original x coordinate of mouse trajectory
 % 'y_bad'                       - original y coordinate of mouse trajectory
-% 'behav_opt'                   - all behavior parameters form SPHYNX
-% 'arena_opt'                   - arena spatial parameters form SPHYNX
+% 'velocity'                    - smoothed mouse velocity
+% 'velocity_binary'             - binarized velocity - locomotions (vel_border as threshold)
+% 'duration_locomotion_min'     - locomotion duration in minutes
+% 'duration_rest_min'           - rest duration in minutes
+% 'locomotion_percent'          - percent of session in locomotions
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 'params_main'                 - main PC analysis parameters
 % 'params_paths'                - paths and names PC analysis parameters
-% 'plot_opts'                   - main plots parameters
+% 'behav_opt'                   - all behavior parameters form SPHYNX
+% 'arena_opt'                   - arena spatial parameters form SPHYNX
+% 'plot_opt'                    - main plots parameters
+% 'axes'                        - axes parameters for maps plot
+% 'params_main.bin_size'        - size of bin for Heatmaps and MI calculations in pixels
+% 'behav_opt.arena_border'      - 4 extreme points of arena border (not edges)
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CELL ACTIVITY INFO %%%%%%%%%%%%%%%%%%%%%%%
+% 'cells_count_for_analysis'    - count of cells for analysis in test mode
 % 'cells_count'                 - count of all registered cells
 % 'cells_active_count'          - count of all active cells
 % 'cells_informative_count'     - count of all informative cells
-% 'params_main.bin_size'        - size of bin for Heatmaps and MI calculations in pixels
-% 'behav_opt.arena_border'      - 4 extreme points of arena border (not
-% edges)
-% 
 % TBA
-% 
+% TBA
+% TBA
+% TBA
+% TBA
+% TBA
+% TBA
 
-mouse = struct('exp', '', 'id', '', 'day', '', 'trial', '', 'duration_s', [], 'duration_min', [], 'x', [], 'y', [],...
-'behav_opt', [], 'arena_opt', [], 'plot_opts', [], ...     
-'cells_count', [], 'cells_active_count', [], 'cells_informative_count', []);
+mouse = struct(...
+    'exp', '', 'group', '', 'id', '', 'day', '', 'trial', '', ...
+    'duration_s', [], 'duration_min', [], 'duration_frames', [], 'framerate', [], 'time', [], ...
+    'TimeLine', [], 'x', [], 'y', [], 'x_bad', [], 'y_bad', [], 'velocity' , [], 'velocity_binary', [], 'duration_locomotion_min', [], 'duration_rest_min', [], 'locomotion_percent', [], ...
+    'params_main', [], 'params_paths', [], 'behav_opt', [], 'arena_opt', [], 'plot_opt', [], 'axes', [], ...     
+    'cells_informative_count', [], 'cells_count', [], 'cells_active_count', [], 'cells_informative_count', [] ...
+    );
 
 params_paths.filenameOut = params_paths.filenameNV(1:find(params_paths.filenameNV == '_', 1, 'last') - 1);
 mouse.params_main = params_main;
@@ -133,11 +164,7 @@ switch params_main.TimeMode
         mouse.params_main.TimeRate = 60;                                    % for total time in minutes
 end
 
-% parameters for another criteria of PC (oldest version of criterion PC)
-% min_good_line = 5;                                                        % minimum number of line with spikes inside a field
-% k_pp = 0;                                                                 % percentage of good entries for field candidate
-
-mouse.plot_opts = struct(...
+mouse.plot_opt = struct(...
     'Plot_Single_Spike', 0,...
     'Plot_Spike', 0,...
     'Plot_Spike_Smooth', 0,...
@@ -150,20 +177,20 @@ mouse.plot_opts = struct(...
     'Plot_WaterShedField', 0,...
     'Plot_Field', 0);
 
-if mouse.params_main.plot_option > 0
-    mouse.plot_opts.Plot_Single_Spike = 1;
-    mouse.plot_opts.Plot_FiringRate_Smooth = 1;
-    mouse.plot_opts.Plot_FiringRate_Fields_Corrected = 1;
+if mouse.params_main.plot_mode > 0
+    mouse.plot_opt.Plot_Single_Spike = 1;
+    mouse.plot_opt.Plot_FiringRate_Smooth = 1;
+    mouse.plot_opt.Plot_FiringRate_Fields_Corrected = 1;
 end
 
-if mouse.params_main.plot_option > 1
-    mouse.plot_opts.Plot_Spike = 1;
-    mouse.plot_opts.Plot_Spike_Smooth = 1;
-    mouse.plot_opts.Plot_FiringRate = 1;
-    mouse.plot_opts.Plot_FiringRate_Fields = 1;
-    mouse.plot_opts.Plot_FiringRate_Smooth_Thres = 1;
-    mouse.plot_opts.Plot_WaterShed = 1;
-    mouse.plot_opts.Plot_WaterShedField = 1;
+if mouse.params_main.plot_mode > 1
+    mouse.plot_opt.Plot_Spike = 1;
+    mouse.plot_opt.Plot_Spike_Smooth = 1;
+    mouse.plot_opt.Plot_FiringRate = 1;
+    mouse.plot_opt.Plot_FiringRate_Fields = 1;
+    mouse.plot_opt.Plot_FiringRate_Smooth_Thres = 1;
+    mouse.plot_opt.Plot_WaterShed = 1;
+    mouse.plot_opt.Plot_WaterShedField = 1;
 end
 
 %% loading data
@@ -178,16 +205,20 @@ file_TR_orig = readtable(sprintf('%s%s', mouse.params_paths.pathTR, mouse.params
 file_TR_orig = table2array(file_TR_orig(2:end,2:end));
 disp('Таблица с трейсами загружена');
 
+% checking synchronization
 compareMatrixDimensions(file_TR_orig, file_TR_orig);
 
 % presets
 load(sprintf('%s%s',mouse.params_paths.pathPR,mouse.params_paths.filenamePR),'Options','ArenaAndObjects');
-disp('Пространственная разметка загружена');
+disp('Пространственная разметка арены загружена');
 
 % features (video tracking)
 load(sprintf('%s%s', mouse.params_paths.pathWS, mouse.params_paths.filenameWS),'Features');
 file_VT = [Features.Table.x Features.Table.y];
 disp('Разметка поведения загружена');
+
+% creating main and sub folders
+mouse = createOutputDirectories(mouse);
 
 %% Preparing data
 
@@ -196,11 +227,8 @@ mouse.behav_opt = Options;
 mouse.arena_opt = ArenaAndObjects;
 mouse.params_main.bin_size = mouse.behav_opt.pxl2sm*mouse.params_main.bin_size_cm;
 
-% creating main and sub folders
-mouse = createOutputDirectories(mouse);
-
 % defining session struct: duration and framerate information
-session = struct('duration_time_s', [], 'duration_time_min', [], 'duration_frames', [], 'framerate', [], 'time', []);
+session = struct('duration_s', [], 'duration_min', [], 'duration_frames', [], 'framerate', [], 'time', []);
 
 if mouse.params_main.end_frame == 0
     mouse.params_main.end_frame = size(file_VT,1);
@@ -213,13 +241,13 @@ x_orig = file_VT(mouse.params_main.app_frame:mouse.params_main.end_frame, 1);
 y_orig = file_VT(mouse.params_main.app_frame:mouse.params_main.end_frame, 2);
 
 % correction of time distortion NV and VT
-switch params_main.CorrectionTrackMode
+switch mouse.params_main.CorrectionTrackMode
     case 'Bonsai'        
         % session.duration_time_s = 720;
-        session.duration_time_s = round(mouse.params_main.end_frame/29.9764,2);
-        session.duration_time_min = round(session.duration_time_s/mouse.params_main.MinTime,2);        
-        mouse.TimeLine.Track = (0:session.duration_time_s/(size(file_VT,1)-1):session.duration_time_s);
-        mouse.TimeLine.Calcium = (0:session.duration_time_s/(size(file_NV_orig,1)-1):session.duration_time_s);
+        session.duration_s = round(mouse.params_main.end_frame/29.9764,2);
+        session.duration_min = round(session.duration_s/mouse.params_main.MinTime,2);        
+        mouse.TimeLine.Track = (0:session.duration_s/(size(file_VT,1)-1):session.duration_s);
+        mouse.TimeLine.Calcium = (0:session.duration_s/(size(file_NV_orig,1)-1):session.duration_s);
         Indexes = [];
         for frame = 1:length(mouse.TimeLine.Calcium)
             TempArray = abs(mouse.TimeLine.Track - mouse.TimeLine.Calcium(frame));
@@ -229,7 +257,7 @@ switch params_main.CorrectionTrackMode
         mouse.x_bad = x_orig(Indexes);
         mouse.y_bad = y_orig(Indexes);
         Features.TableCorrected = Features.Table(Indexes, :);
-        session.framerate = length(mouse.x_bad)/session.duration_time_s;        
+        session.framerate = length(mouse.x_bad)/session.duration_s;        
         fprintf('Количество кадров видеотрекинга и кальция %d %d \n',length(mouse.x_bad),size(file_NV_orig,1));
         clear 'Indexes' 'ind' 'TempArray'
     case 'NVista'
@@ -260,12 +288,11 @@ clear 'y_orig' 'x_orig'
 mouse.params_main.length_line = round(session.framerate*params_main.length_line_sec);       % length in frames of period in place field
 mouse.params_main.SmoothWindow = round(params_main.SmoothWindowS*session.framerate);        % smoothing window in frames for behavior analysis (in case non-smoothed data)
 
-session.duration_frames = length(mouse.x_bad);                                                    % session duration in frames
-session.time = (1:session.duration_frames)/session.framerate/mouse.params_main.TimeRate;    % timeline od session in seconds or minutes
+session.duration_frames = length(mouse.x_bad);                                              % session duration in frames
+session.time = (1:session.duration_frames)/session.framerate/mouse.params_main.TimeRate;    % timeline of session in seconds or minutes
 
-mouse.params_main.time_min = 0.5;
-% TimeTotal = session.duration_frames/session.framerate/mouse.params_main.TimeRate;         % total time in minutes/seconds
-% mouse.params_main.time_min = 0.00045*TimeTotal;                                           % time in minutes/seconds for minimum summary time in sectors
+mouse.params_main.time_min = 0.5;                                                           % minimum time in bins in seconds
+% mouse.params_main.time_min = 0.00045*TimeTotal;                                           
 
 mouse = mergeStructures(mouse,session);
 
@@ -273,6 +300,7 @@ NV_start = mouse.params_main.app_frame-mouse.params_main.start_frame+1;
 
 file_NV = file_NV_orig(NV_start:NV_start+session.duration_frames-1,:);
 file_TR = file_TR_orig(NV_start:NV_start+session.duration_frames-1,:);
+clear 'NV_start'
 
 mouse.cells_count = size(file_NV, 2);
 
@@ -308,6 +336,10 @@ else
     mouse.velocity_binary = Features.TableCorrected.locomotion;
 end
 
+mouse.duration_locomotion_min = sum(mouse.velocity_binary)/mouse.framerate/mouse.params_main.MinTime;
+mouse.duration_rest_min = sum(1-mouse.velocity_binary)/mouse.framerate/mouse.params_main.MinTime;
+mouse.locomotion_percent = round(mouse.duration_locomotion_min/mouse.duration_min*100,2);
+
 % plot for velocity
 PlotPC(mouse, 'velocity');
 
@@ -315,90 +347,99 @@ PlotPC(mouse, 'velocity');
 mouse = find_arena_border(mouse);
 mouse = define_axes(mouse);
 
+save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
 
-mouse.velcam = ones(1, session.duration_frames);
-if mouse.params_main.vel_opt
-    mouse.velcam = vel_ref;
-end
+%% description and defining struct CELL
 
-%% calculation and plotting CELLS spikes
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MOUSE INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 'exp'                         - experiment identifier (e.g. 'FOF', 'NOF', '3DM')
+% 'group'                       - experimental group of animal (e.g. 'Control', 'FAD')
+% 'id'                          - mouse identifier (e.g. 'F01', 'H39')
+% 'day'                         - day number of registration (e.g. '1D', '6D')
+% 'trial'                       - trial number of registration (e.g. '1T', '6T')
 
-% main struct for all stats of cell
-CellInfo = struct(...
-    'exp_id', [], 'group_id', [], 'mouse_id', [], 'day_id', [], 'trial_id', [], 'cell_id', [], 'trace', [], 'SNR_baseline', [], 'SNR_peak', [], 'criterion_activity', [], 'criterion_MI', [], ...  
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MAIN CELL INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 'cell'                        - cell number (same order in trace or spike table)
+% 'trace'                       - raw cell activity signal from CaImAn
+% 'SNR_baseline'                - signal-to-noise ratio in dB calculation on raw signal Baseline-Based Method
+% 'SNR_peak'                    - signal-to-noise ratio in dB calculation on raw signal Peak Method (PSNR)
+% 'criterion_activity'          - 1 - if cell passed activity criteria
+% 'criterion_MI'                - 1 - if cell passed information criteria
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SPIKES STATISTICS %%%%%%%%%%%%%%%%%%%%%%%%
+% 'spikes_all_count'            - count of all Ca2+ events
+% 'spikes_all_frames'           - timestamps of all Ca2+ events ('1' in spikes table)
+% 'spikes_all_frequency'        - frequency of all Ca2+ events during session (Ca2+/min)
+% 'spikes_all_mean_amplitude'   - mean all Ca2+ events amplitude 
+% 'spikes_all_peak_amplitude'   - maximum amplitude of Ca2+ events
+% 
+% 'spikes_in_mov-//-'           - the same statistics as 'all' but during locomotion
+% 'spikes_in_rest-//-'          - the same statistics as 'all' but during rest
+% 'frequency_ratio_mov_rest'    - ratio of 'spikes_in_mov_frequency'/'spikes_in_rest_frequency'
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MUTUAL INFORMATION %%%%%%%%%%%%%%%%%%%%%%%
+% 'MI_bit'                      -
+% 'MI_zscore'                   -
+% 'MI_mean_shuffles'            -
+% 'MI_std_shuffles'             -
+% 
+
+
+cell = struct(...
+    'exp', '', 'group', '', 'id', '', 'day', '', 'trial', '', ...
+    'cell', [], 'trace', [], 'SNR_baseline', [], 'SNR_peak', [], 'criterion_activity', [], 'criterion_MI', [], ...  
     'spikes_all_count', [], 'spikes_all_frames', [], 'spikes_all_frequency', [], 'spikes_all_mean_amplitude', [], 'spikes_all_peak_amplitude', [], ...
     'spikes_in_mov_count', [],'spikes_in_mov_frames', [], 'spikes_in_mov_frequency', [],'spikes_in_mov_mean_amplitude', [], 'spikes_in_mov_peak_amplitude', [], ...
     'spikes_in_rest_count', [], 'spikes_in_rest_frames', [], 'spikes_in_rest_frequency', [], 'spikes_in_rest_mean_amplitude', [], 'spikes_in_rest_peak_amplitude', [], ... 
+    'frequency_ratio_mov_rest', [], ...
     'MI_bit', [], 'MI_zscore', [], 'MI_mean_shuffles', [], 'MI_std_shuffles', [] ...  
     );
 
-
-for cell=1:mouse.cells_count_for_analysis
+for ncell=1:mouse.cells_count_for_analysis
     
-    % defining all parameters of cell
-    CellInfo(cell).exp_id = mouse.exp;                                                                          % experiment identifier (e.g. FOF, NOF, 3DM)
-    CellInfo(cell).mouse_id = mouse.id;                                                                         % mouse identifier (e.g. F01, H39)
-    CellInfo(cell).day_id = mouse.day;                                                                          % day of registration (e.g. 1D, 6D)
-    CellInfo(cell).trial_id = mouse.trial;                                                                      % trial of registration (e.g. 1T, 6T)
-    CellInfo(cell).cell_id = cell;                                                                              % cell number (same order in trace or spike table)
-    CellInfo(cell).trace = file_TR(:,cell);                                                                     % raw cell activity signal from CaImAn   
-    CellInfo(cell).SNR_baseline = snr_calculation(CellInfo(cell).trace, 'baseline', mouse.params_main.snr_params);                % signal-to-noise ratio in dB calculation on raw signal Baseline-Based Method
-    CellInfo(cell).SNR_peak = snr_calculation(CellInfo(cell).trace, 'peak', mouse.params_main.snr_params);                        % signal-to-noise ratio in dB calculation on raw signal Peak Method (PSNR)
+    cell(ncell).exp = mouse.exp;
+    cell(ncell).id = mouse.id;
+    cell(ncell).day = mouse.day;
+    cell(ncell).trial = mouse.trial;
+    cell(ncell).cell = ncell;
+    cell(ncell).trace = file_TR(:,ncell);
+    cell(ncell).SNR_baseline = snr_calculation(cell(ncell).trace, 'baseline', mouse.params_main.snr_params);
+    cell(ncell).SNR_peak = snr_calculation(cell(ncell).trace, 'peak', mouse.params_main.snr_params);
     
-    CellInfo(cell).spikes_all_frames = find(file_NV(:,cell));                                                   % timestamps of Ca2+ events ('1' in spikes table)
-    CellInfo(cell).spikes_all_count = length(CellInfo(cell).spikes_all_frames);                                 % Ca2+ events number
-    CellInfo(cell).spikes_all_frequency = round(CellInfo(cell).spikes_all_count/mouse.duration_min,1);          % frequency of Ca2+ events during all session (Ca2+/min)
-%     CellInfo(cell).spikes_all_mean_amplitude = 
-%     CellInfo(cell).spikes_all_peak_amplitude = 
+    cell(ncell).spikes_all_frames = find(file_NV(:,ncell));
+    cell(ncell).spikes_all_count = length(cell(ncell).spikes_all_frames);
+    cell(ncell).spikes_all_frequency = round(cell(ncell).spikes_all_count/mouse.duration_min,1);
+%     cell(ncell).spikes_all_mean_amplitude = 
+%     cell(ncell).spikes_all_peak_amplitude = 
+    
+    cell(ncell).spikes_in_mov_frames = find(file_NV(:,ncell).*mouse.velocity_binary);
+    cell(ncell).spikes_in_mov_count = length(cell(ncell).spikes_in_mov_frames);
+    cell(ncell).spikes_in_mov_frequency = round(cell(ncell).spikes_in_mov_count/mouse.duration_locomotion_min,1);
+%     cell(ncell).spikes_in_mov_mean_amplitude = 
+%     cell(ncell).spikes_in_mov_peak_amplitude = 
+    
+    cell(ncell).spikes_in_rest_frames = find(file_NV(:,ncell).*double(1-mouse.velocity_binary));
+    cell(ncell).spikes_in_rest_count = length(cell(ncell).spikes_in_rest_frames);
+    cell(ncell).spikes_in_rest_frequency = round(cell(ncell).spikes_in_rest_count/mouse.duration_rest_min,1);
+%     cell(ncell).spikes_in_mov_mean_amplitude = 
+%     cell(ncell).spikes_in_mov_peak_amplitude = 
 
-    CellInfo(cell).spikes_in_mov_frames = find(file_NV(:,cell).*mouse.velcam);                                  % timestamps of Ca2+ events ('1' in spikes table)
-    CellInfo(cell).spikes_in_mov_count = length(CellInfo(cell).spikes_in_mov_frames);                           % Ca2+ events number
-    CellInfo(cell).spikes_in_mov_frequency = round(CellInfo(cell).spikes_in_mov_count/mouse.duration_min,1);    % frequency of Ca2+ events during all session (Ca2+/min)
-%     CellInfo(cell).spikes_in_mov_mean_amplitude = 
-%     CellInfo(cell).spikes_in_mov_peak_amplitude = 
-
-    CellInfo(cell).spikes_in_rest_frames = find(file_NV(:,cell).*double(1-mouse.velcam));                       % timestamps of Ca2+ events ('1' in spikes table)
-    CellInfo(cell).spikes_in_rest_count = length(CellInfo(cell).spikes_in_rest_frames);                         % Ca2+ events number
-    CellInfo(cell).spikes_in_rest_frequency = round(CellInfo(cell).spikes_in_rest_count/mouse.duration_min,1);  % frequency of Ca2+ events during all session (Ca2+/min)
-%     CellInfo(cell).spikes_in_mov_mean_amplitude = 
-%     CellInfo(cell).spikes_in_mov_peak_amplitude = 
-
-PlotPC(mouse, 'spike');
-
+    cell(ncell).frequency_ratio_mov_rest = round(cell(ncell).spikes_in_mov_frequency/cell(ncell).spikes_in_rest_frequency,2);
+    
 end
 
-% all spike on one figure
-h = figure('Position', params_main.Screensize);
-axis(axes);
-title('Trajectory of mouse with all Ca2+ events', 'FontSize', params_main.FontSizeTitle);
-xlabel('X coordinate, cm', 'FontSize', params_main.FontSizeLabel);
-ylabel('Y coordinate, cm', 'FontSize', params_main.FontSizeLabel);
-set(gca, 'FontSize', params_main.FontSizeLabel);
-hold on;plot(mouse.x,mouse.y, 'b');
-hold on;DrawLine(mouse.x, mouse.y, mouse.velcam, 1, 'g', 0, 1);
-
-percent_spikes_in_mov = zeros(1,mouse.cells_count_for_analysis);
-for cell=1:mouse.cells_count_for_analysis
-    percent_spikes_in_mov(cell) = (CellInfo(cell).spikes_in_mov_count/CellInfo(cell).spikes_all_count*100);
-    hold on;plot(mouse.x(CellInfo(cell).spikes_all_frames),mouse.y(CellInfo(cell).spikes_all_frames),'k*', 'MarkerSize',round(params_main.MarksizeSpikesAll/2), 'LineWidth',round(params_main.LineWidthSpikes/2));
-    hold on;plot(mouse.x(CellInfo(cell).spikes_in_mov_frames),mouse.y(CellInfo(cell).spikes_in_mov_frames),'r*', 'MarkerSize',params_main.MarksizeSpikesAll, 'LineWidth',params_main.LineWidthSpikes);
+% map of Ca2+ events of cells
+if mouse.plot_opt.Plot_Single_Spike
+    PlotPC(mouse, 'single_spike', cell);
 end
-saveas(h, sprintf('%s\\%s_spike_all_plot.png',mouse.params_paths.pathOut,mouse.filenameOut));
-delete(h);
 
-h = figure;
-histogram(percent_spikes_in_mov);
-title('Percent of spikes in movement', 'FontSize', params_main.FontSizeTitle);
-saveas(h, sprintf('%s\\%s_percent_spikes_in_movement.png',mouse.params_paths.pathOut,mouse.filenameOut));
-delete(h);
+% all Ca2+ events from all cells on one figure plot
+PlotPC(mouse, 'all_spikes', cell);
 
-save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.filenameOut));
-
-plot([CellInfo.spikes_all_count], [CellInfo.SNR_baseline], 'k.');
-
-
+save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
 
 %% bin's division
+
 x_ind = fix(mouse.x/mouse.bin_size);
 y_ind = fix(mouse.y/mouse.bin_size);
 max_x_ind = max(x_ind);
@@ -580,7 +621,7 @@ for i = g_cell
     
     MapCells(:,:,i) = N_freq_filt_norm_thres; 
     
-    if mouse.plot_opts.Plot_Spike
+    if mouse.plot_opt.Plot_Spike
         h = figure('Position', params_main.Screensize);
         DrawHeatMapModSphynx (Options,ArenaAndObjects,params_main.opt.spike,N,max_N,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
         title(sprintf('Spike''s map of cell #%d. Spikes: %d',i, length(spike_t_good)), 'FontSize', params_main.FontSizeTitle);
@@ -588,7 +629,7 @@ for i = g_cell
         delete(h);
     end
     
-    if mouse.plot_opts.Plot_Spike_Smooth
+    if mouse.plot_opt.Plot_Spike_Smooth
         h = figure('Position', params_main.Screensize);
         DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_sm,max_N_sm,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
         title(sprintf('Spikes number of cell %d (smoothed). Spikes: %d',i, length(spike_t_good)), 'FontSize', params_main.FontSizeTitle);
@@ -596,7 +637,7 @@ for i = g_cell
         delete(h);
     end
     
-    if mouse.plot_opts.Plot_FiringRate
+    if mouse.plot_opt.Plot_FiringRate
         if Cell_IC(2,i)
             h = figure('Position', params_main.Screensize);
             DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq,0,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
@@ -612,7 +653,7 @@ for i = g_cell
         end
     end
     
-    if mouse.plot_opts.Plot_FiringRate_Smooth
+    if mouse.plot_opt.Plot_FiringRate_Smooth
         h = figure('Position', params_main.Screensize);
         DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq_filt,max_N_freq_filt,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
         title(sprintf('Firing rate, smoothed, of cell %d (#/min). Ca2+ events: %d\n MI = %.2f, MU\\_shuffle = %.3f, SIGMA\\_shuffle = %.3f, MI\\_Zscore = %.1f', i, length(spike_t_good), Cell_IC(3:6,i)), 'FontSize', 10);
@@ -620,7 +661,7 @@ for i = g_cell
         delete(h);
     end
     
-    if mouse.plot_opts.Plot_FiringRate_Smooth_Thres
+    if mouse.plot_opt.Plot_FiringRate_Smooth_Thres
         if Cell_IC(2,i)
             h = figure('Position', params_main.Screensize);
             DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq_filt_norm_thres,0,mouse.x,mouse.y,mouse.bin_size,Options.x_kcorr,spike_t_good);
@@ -714,7 +755,7 @@ for map = g_cell
         N_freq_filt_true = N_freq_filt2.*mask_wfield(:,:,mask_field)/max(max(mask_wfield(:,:,mask_field)));
         MapFields(:,:,wfields-n_wfield+mask_field) = N_freq_filt_true;
         
-        if mouse.plot_opts.Plot_FiringRate_Fields
+        if mouse.plot_opt.Plot_FiringRate_Fields
             h = figure('Position', params_main.Screensize);
             DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq_filt_true, 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,[spike_in_field{mask_field,:}]);
             title(sprintf('Firing rate of cell %d field %d Crit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, mask_field,Fields(3:7,wfields-n_wfield+mask_field)), 'FontSize', 10);
@@ -769,7 +810,7 @@ for map = g_cell
         
         MapFieldsCorrected(:,:,wfields-n_wfield+mask_field) = N_freq_filt_norm_thres;
         
-        if mouse.plot_opts.Plot_FiringRate_Fields_Corrected
+        if mouse.plot_opt.Plot_FiringRate_Fields_Corrected
             if Fields(9,wfields-n_wfield+mask_field)
                 h = figure('Position', params_main.Screensize);
                 DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,N_freq_filt_norm_thres, 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
@@ -785,7 +826,7 @@ for map = g_cell
             end
         end
         
-        if mouse.plot_opts.Plot_WaterShedField
+        if mouse.plot_opt.Plot_WaterShedField
             h = figure('Position', params_main.Screensize);
             DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,double(mask_wfield(:,:,mask_field)), 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
             title(sprintf('WaterShed Transform of cell %d field %d ICcrit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, mask_field,Fields(3:7,wfields-n_wfield+mask_field)), 'FontSize', params_main.FontSizeTitle);
@@ -795,7 +836,7 @@ for map = g_cell
     end
     
     %watershed plot
-    if mouse.plot_opts.Plot_WaterShed
+    if mouse.plot_opt.Plot_WaterShed
         h = figure('Position', params_main.Screensize);
         DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,double(L), 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
         title(sprintf('WaterShed Transform of cell %d Crit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, Cell_IC(2:6,map)), 'FontSize', params_main.FontSizeTitle);
@@ -1040,7 +1081,7 @@ if ~isempty(MapFieldsIC)
     %         % plot for every field
     %         x_field = x_field-mouse.bin_size*(x_shift);
     %         y_field = y_field-mouse.bin_size*(y_shift);
-    %         if mouse.plot_opts.Plot_Field
+    %         if mouse.plot_opt.Plot_Field
     %             h = figure('Position', params_main.Screensize);
     %             DrawHeatMapModSphynx(Options,1,1,1,0,0,0, MapFieldsIC(:,:,field),max_N_freq_filt_norm_thres, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr,spike_t_good);
     %             title(sprintf('Activity of %d cell, field %d \n inform %d, crit %d (all entries: %d, entries with Ca2+: %d)',SpikeFieldsStruct(field).cell,SpikeFieldsStruct(field).fields,SpikeFieldsStruct(field).inform,SpikeFieldsStruct(field).crit,SpikeFieldsStruct(field).n_entries_field,SpikeFieldsStruct(field).n_good_line), 'FontSize', params_main.FontSizeTitle);

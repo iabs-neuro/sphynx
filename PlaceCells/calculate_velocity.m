@@ -14,9 +14,8 @@ function [mouse] = calculate_velocity(mouse)
     vel = zeros(1, mouse.duration_frames);
     
     % Вычисление скорости
-    for i = 2:session.duration_frames
-        vel(i) = sqrt((mouse.x(i) - mouse.x(i-1))^2 + (mouse.y(i) - mouse.y(i-1))^2) ...
-                 / mouse.behav_opt.pxl2sm * mouse.framerate;
+    for i = 2:mouse.duration_frames
+        vel(i) = sqrt((mouse.x(i) - mouse.x(i-1))^2 + (mouse.y(i) - mouse.y(i-1))^2) * mouse.framerate;
     end
     vel(1) = vel(2);
     
