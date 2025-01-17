@@ -1,10 +1,10 @@
 %% paths and names
-path = 'w:\Projects\RFC\CalciumData\6_Traces\';
-sp_path = 'w:\Projects\RFC\CalciumData\6_Traces\';
+path = 'w:\Projects\FOF\ActivityData\Traces\';
+sp_path = 'w:\Projects\FOF\ActivityData\Spikes\';
 % sp_path = 'd:\Projects\СС\Spikes\';
-fname = 'RFC_F30_3D_traces.csv';
-sp_fname = 'RFC_F30_3D_spikes.csv';
-NumFirst = 20; % or [];
+fname = 'FOF_F01_1D_traces.csv';
+sp_fname = 'FOF_F01_1D_spikes.csv';
+NumFirst = 10; % or [];
 bckg_med_wind = 500;
 
 %% main
