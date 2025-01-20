@@ -19,8 +19,8 @@ function [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo, PathVideo, P
 % Created by VVP. 14.02.23
 
 if nargin<3
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\FOF\BehaviorData\1_Raw\');
-     PathOut = uigetdir('w:\Projects\FOF\BehaviorData\4_Preset\');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\MSS\Behavior\2_Combined\');
+     PathOut = uigetdir('w:\Projects\MSS\Behavior\4_Presets\');
 end
 
 % some local parameters
@@ -32,7 +32,7 @@ LineWidth.Arena = 2;
 LineWidth.Objects = 2;
 StepDefault = 10;
 
-TypeExpList = ["BowlsOpenField","NOL","Novelty OF","Round Track","Holes Track","Odor Track","Freezing Track","New Track","Complex Context","OF_Obj"];
+TypeExpList = ["Novelty OF","BowlsOpenField","NOL","Round Track","Holes Track","Odor Track","Freezing Track","New Track","Complex Context","OF_Obj"];
 ArenaGeometryOptions = ["Polygon", "Circle", "Ellipse", "O-maze"];
 
 FilenameOut = FilenameVideo(1:end-4);
@@ -42,7 +42,7 @@ PathOut = sprintf('%s\\%s_zones',PathOut, FilenameOut);
 question = questdlg('Do you want dowload Preset?', 'Important question', 'Yes','No','Yes');
 switch question
     case 'Yes'
-        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','w:\Projects\FOF\BehaviorData\4_Preset\');
+        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','w:\Projects\MSS\Behavior\4_Presets\');
         load(sprintf('%s//%s', PathPresetDownload, FilenamePresetDownload), 'Options','ArenaAndObjects');
 end
 
@@ -116,7 +116,8 @@ switch Options.ExperimentType
 %        Options.pxl2sm = 22.2; % NOF 2024 H01-10, 1 wave
 %         Options.pxl2sm = 28.1; % NOF 2024 H11-23, 2 wave
 %         Options.pxl2sm = 20.6; % NOF 2024 H26-39, 3 wave
-        Options.pxl2sm = 10.8; % feed 2024 H26-39, 3 wave
+%         Options.pxl2sm = 10.8; % feed 2024 H26-39, 3 wave
+        [Options.pxl2sm, Options.x_kcorr] = CalculatePxlInCm(Options.GoodVideoFrame);
     case 'NOL'
         Options.pxl2sm = 16.5;
     case 'Round Track'
@@ -340,7 +341,7 @@ ArenaAndObjects(1).border_y = y_arena;
 
 %% reading objects coordinates
 
-Options.ObjectsNumber = str2double(inputdlg('Specify the number of objects', 'Parameters', 1, {'2'}, 'on'));
+Options.ObjectsNumber = str2double(inputdlg('Specify the number of objects', 'Parameters', 1, {'0'}, 'on'));
 for object=1:Options.ObjectsNumber
     ObjectGeometry = questdlg('Choice geometry of object', 'Parameters', 'Polygon', 'Circle', 'Ellipse', 'Polygon');
     prmt = 0;
@@ -409,7 +410,7 @@ switch Options.ExperimentType
         prmt = 0;
         while prmt == 0
             dlg_prompt = {'Specify width of wall outside zone (cm)','Specify width of wall inside zone (cm)', 'Specify width of object zone (cm)'};
-            dlg_default_data = {'10', '10', '2.5'};
+            dlg_default_data = {'5', '7', '2.5'};
             dlg_data = inputdlg(dlg_prompt, 'Parameters', 1, dlg_default_data, 'on');
 
             Options.WidthWallOutCm = str2double(dlg_data{1});
@@ -783,15 +784,15 @@ switch Options.ExperimentType
         end
 
         % plot of all zones
-        for zone = 1:length(Zones)
-            if strcmp(Zones(zone).type, 'area')
-                IIM(:,:,1) = round((Zones(zone).maskfilled*255 + single(Options.GoodVideoFrameGray))./2);
-                IIM(:,:,2) = round(single(Options.GoodVideoFrameGray)./2);
-                IIM(:,:,3) = round(single(Options.GoodVideoFrameGray)./2);
-                imwrite(uint8(IIM), sprintf('%s\\%s_Zone_%s.png',PathOut, FilenameOut, Zones(zone).name));
-                fprintf('Saving zones masks %d/%d\n', zone, length(Zones));
-            end
-        end
+%         for zone = 1:length(Zones)
+%             if strcmp(Zones(zone).type, 'area')
+%                 IIM(:,:,1) = round((Zones(zone).maskfilled*255 + single(Options.GoodVideoFrameGray))./2);
+%                 IIM(:,:,2) = round(single(Options.GoodVideoFrameGray)./2);
+%                 IIM(:,:,3) = round(single(Options.GoodVideoFrameGray)./2);
+%                 imwrite(uint8(IIM), sprintf('%s\\%s_Zone_%s.png',PathOut, FilenameOut, Zones(zone).name));
+%                 fprintf('Saving zones masks %d/%d\n', zone, length(Zones));
+%             end
+%         end
         fprintf('Saving preset file\n');
         save(sprintf('%s\\%s',Options.PathPreset, Options.FilenamePreset),'Options','ArenaAndObjects','Zones');
         fprintf('Analyze finished\n')
