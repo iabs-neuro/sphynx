@@ -361,8 +361,9 @@ save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_pat
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MAIN CELL INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 'cell'                        - cell number (same order in trace or spike table)
 % 'trace'                       - raw cell activity signal from CaImAn
-% 'SNR_baseline'                - signal-to-noise ratio in dB calculation on raw signal Baseline-Based Method
-% 'SNR_peak'                    - signal-to-noise ratio in dB calculation on raw signal Peak Method (PSNR)
+% 'SNR_baseline'                - signal-to-noise ratio in dB calculated on raw signal Baseline-Based Method
+% 'SNR_peak'                    - signal-to-noise ratio in dB calculated on raw signal Peak Method (PSNR)
+% 'SNR'                         - average signal-to-noise ratio in dB calculated on raw signal
 % 'criterion_activity'          - 1 - if cell passed activity criteria
 % 'criterion_MI'                - 1 - if cell passed information criteria
 
@@ -387,7 +388,7 @@ save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_pat
 
 cell = struct(...
     'exp', '', 'group', '', 'id', '', 'day', '', 'trial', '', ...
-    'cell', [], 'trace', [], 'SNR_baseline', [], 'SNR_peak', [], 'criterion_activity', [], 'criterion_MI', [], ...  
+    'cell', [], 'trace', [], 'SNR', [], 'SNR_baseline', [], 'SNR_peak', [], 'criterion_activity', [], 'criterion_MI', [], ...  
     'spikes_all_count', [], 'spikes_all_frames', [], 'spikes_all_frequency', [], 'spikes_all_mean_amplitude', [], 'spikes_all_peak_amplitude', [], ...
     'spikes_in_mov_count', [],'spikes_in_mov_frames', [], 'spikes_in_mov_frequency', [],'spikes_in_mov_mean_amplitude', [], 'spikes_in_mov_peak_amplitude', [], ...
     'spikes_in_rest_count', [], 'spikes_in_rest_frames', [], 'spikes_in_rest_frequency', [], 'spikes_in_rest_mean_amplitude', [], 'spikes_in_rest_peak_amplitude', [], ... 
@@ -405,6 +406,7 @@ for ncell=1:mouse.cells_count_for_analysis
     cell(ncell).trace = file_TR(:,ncell);
     cell(ncell).SNR_baseline = snr_calculation(cell(ncell).trace, 'baseline', mouse.params_main.snr_params);
     cell(ncell).SNR_peak = snr_calculation(cell(ncell).trace, 'peak', mouse.params_main.snr_params);
+    cell(ncell).SNR = mean([cell(ncell).SNR_baseline cell(ncell).SNR_peak]);
     
     cell(ncell).spikes_all_frames = find(file_NV(:,ncell));
     cell(ncell).spikes_all_count = length(cell(ncell).spikes_all_frames);
