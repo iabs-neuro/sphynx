@@ -105,8 +105,8 @@ for part=1:BodyPartsNumber
      TempArrayY(BodyPartsTraces(part).TraceLikelihood < LikelihoodThreshold) = 0;
 
 % 07.11.24 3dmaze improved
-%     TempArrayX(TempArrayX>Options.Width*Options.x_kcorr) = Options.Width;
-%     TempArrayY(TempArrayY>Options.Height) = Options.Height;
+    TempArrayX(TempArrayX>Options.Width*Options.x_kcorr) = Options.Width;
+    TempArrayY(TempArrayY>Options.Height) = Options.Height;
     
     %TempArrayX(TempArrayX<10) = 0;
     %TempArrayY(TempArrayY<10) = 0;

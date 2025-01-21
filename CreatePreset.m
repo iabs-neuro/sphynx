@@ -19,8 +19,8 @@ function [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo, PathVideo, P
 % Created by VVP. 14.02.23
 
 if nargin<3
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\MSS\Behavior\2_Combined\');
-     PathOut = uigetdir('w:\Projects\MSS\Behavior\4_Presets\');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\HOS\BehaviorData\2_Combined\');
+     PathOut = uigetdir('w:\Projects\HOS\Behaviordata\4_Presets\');
 end
 
 % some local parameters
@@ -42,7 +42,7 @@ PathOut = sprintf('%s\\%s_zones',PathOut, FilenameOut);
 question = questdlg('Do you want dowload Preset?', 'Important question', 'Yes','No','Yes');
 switch question
     case 'Yes'
-        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','w:\Projects\MSS\Behavior\4_Presets\');
+        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','w:\Projects\HOS\Behavior\4_Presets\');
         load(sprintf('%s//%s', PathPresetDownload, FilenamePresetDownload), 'Options','ArenaAndObjects');
 end
 
@@ -341,7 +341,7 @@ ArenaAndObjects(1).border_y = y_arena;
 
 %% reading objects coordinates
 
-Options.ObjectsNumber = str2double(inputdlg('Specify the number of objects', 'Parameters', 1, {'0'}, 'on'));
+Options.ObjectsNumber = str2double(inputdlg('Specify the number of objects', 'Parameters', 1, {'1'}, 'on'));
 for object=1:Options.ObjectsNumber
     ObjectGeometry = questdlg('Choice geometry of object', 'Parameters', 'Polygon', 'Circle', 'Ellipse', 'Polygon');
     prmt = 0;
@@ -410,7 +410,7 @@ switch Options.ExperimentType
         prmt = 0;
         while prmt == 0
             dlg_prompt = {'Specify width of wall outside zone (cm)','Specify width of wall inside zone (cm)', 'Specify width of object zone (cm)'};
-            dlg_default_data = {'5', '7', '2.5'};
+            dlg_default_data = {'10', '10', '3'};
             dlg_data = inputdlg(dlg_prompt, 'Parameters', 1, dlg_default_data, 'on');
 
             Options.WidthWallOutCm = str2double(dlg_data{1});

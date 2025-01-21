@@ -91,7 +91,7 @@ Distance = zeros(1,FilesNumber);
 Velocity = zeros(1,FilesNumber);
 
 %% main part
-for file = 4:length(FileNames)
+for file = 1:length(FileNames)
     
     FilenameVideo = sprintf('%s_%s.mp4', ExpID, FileNames{file});
     FilenameDLC = sprintf('%s_%sDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv', ExpID, FileNames{file});
