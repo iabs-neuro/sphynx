@@ -1,6 +1,6 @@
 %% paths and names
 
-timestamps_folder = 'c:\Users\1\YandexDisk\_Projects\MSS\CalciumData\TimeStampsSep\';
+timestamps_folder = 'c:\Users\1\YandexDisk\_Projects\MSS\CalciumData\TimeStampsSepAll\';
 traces_folder = 'c:\Users\1\YandexDisk\_Projects\MSS\CalciumData\6_Traces\';
 output_folder = 'c:\Users\1\YandexDisk\_Projects\MSS\CalciumData\6_Traces_sep\';
 
@@ -31,19 +31,19 @@ end
 %     'D01', 'D03', 'D04', 'D07', 'D08', 'D11', 'D14', 'D17'};
 
 % MSS
+
 filenames = {
-    'F08', 'F10', 'F11', 'F14', 'F26', 'F28', 'F31', 'F35', 'F36', 'F37', ...
-    'H31', 'D01', 'F01', 'F04', 'F09', 'F12', 'F29', 'F38', 'F40', 'F48', ...
-    'F52', 'H27', 'H32', 'F05', 'F06', 'F15', 'F20', 'F30', 'F34', 'F43', ...
-    'F53', 'F54', 'H26', 'H33'
+    'F08', 'F10', 'F11', 'F14', 'F26', 'F28', 'F31', 'F35', 'F36', 'F37', 'H31', 'D01', ...
+    'F01', 'F04', 'F09', 'F12', 'F29', 'F38', 'F40', 'F48', 'F52', 'H27', 'H32', ...
+    'F05', 'F06', 'F15', 'F20', 'F30', 'F34', 'F43', 'F53', 'F54', 'H26', 'H33'
     };
 
 timestamps_count_mouse = zeros(1, length(filenames));
 
 %% main part
 
-for file = 1:length(filenames)
-    
+% for file = 1:length(filenames)
+for file = 15:23
     mask = sprintf('MSS_%s_*_Mini_TS.csv', filenames{file});
     mask_traces = sprintf('MSS_%s_*_traces.csv', filenames{file});
     
@@ -84,6 +84,8 @@ for file = 1:length(filenames)
     end
     timestamps_count_mouse(file) = sum(timestamp_counts);
     
+%     % for MSS Spaced
+%     timestamp_counts(1:end-1) = 4000;
     
     if ~isfile(traces_path)
         error('Файл трейсов %s не найден в папке %s.', traces_file, traces_folder);
