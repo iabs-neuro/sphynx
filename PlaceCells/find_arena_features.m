@@ -1,4 +1,4 @@
-function mouse = find_arena_border(mouse)
+function mouse = find_arena_features(mouse)
 
 % ищет крайние точки границы арены
 [row, col] = find(mouse.arena_opt(1).maskfilled == 1);

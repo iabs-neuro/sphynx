@@ -1,4 +1,7 @@
-function [n_wfield,mask_wfield, spike_in_field] = WaterShedField(L, spike_t_good, x_int_sm, y_int_sm, bin_size_x, x_shift,y_shift) 
+function [n_wfield, mask_wfield, spike_in_field] = WaterShedField(L, spike_t_good, x_int_sm, y_int_sm, bin_size_x)
+
+x_shift = 0;
+y_shift = 0;
 
 n_wfield = double(max(max(L))); %number of fields in current cell
 % wfields=wfields+n_wfield; %number of all fields 
