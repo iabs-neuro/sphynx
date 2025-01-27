@@ -533,7 +533,7 @@ Acts(5).ActArrayRefine = Acts(5).ActArrayRefine';
 % correct headdirection
 CenterHead.X = BodyPartsTracesMainX(Point.HeadCenter,:);
 CenterHead.Y = BodyPartsTracesMainY(Point.HeadCenter,:);
-[HeadDirection,~] = cart2pol(BodyPartsTracesMainX(Point.HeadCenter,:)-CenterHead.X,BodyPartsTracesMainY(Point.HeadCenter,:)-CenterHead.Y);
+[HeadDirection,~] = cart2pol(BodyPartsTracesMainX(Point.MiniscopeUCLA,:)-CenterHead.X,BodyPartsTracesMainY(Point.MiniscopeUCLA,:)-CenterHead.Y);
 HeadDirection = smooth(HeadDirection,Options.FrameRate,'sgolay',DegreeSmoothSGolay)';
 
 % calculation coordinate features during locomotion
@@ -790,11 +790,6 @@ end
 AngelView = 20; % in degrees
 LengthViewCm = 30; % in cm
 LengthView = LengthViewCm*Options.pxl2sm;
-
-CenterHead.X = BodyPartsTracesMainX(Point.HeadCenter,:);
-CenterHead.Y = BodyPartsTracesMainY(Point.HeadCenter,:);
-[HeadDirection,~] = cart2pol(BodyPartsTracesMainX(1,:)-CenterHead.X,BodyPartsTracesMainY(1,:)-CenterHead.Y);
-HeadDirection = smooth(HeadDirection,Options.FrameRate,'sgolay',DegreeSmoothSGolay)';
 
 View.Direction.L = HeadDirection + AngelView/180*pi;
 View.Direction.R = HeadDirection - AngelView/180*pi;
