@@ -1,4 +1,4 @@
-function [N_ideal, mask] = ConvBorderFix(N_orig,mask_orig, kernel_size, kernel_sigma)
+function [N_ideal, mask] = ConvBorderFix(N_orig, mask_orig, kernel_size, kernel_sigma)
 % Two dimensional convolution with Gauss kernel and constant summ of matrix
 % 27.04.24 kernel size and sigma added
 % TO DO make for different sizes correct, now only for 3x3
