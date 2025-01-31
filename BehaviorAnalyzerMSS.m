@@ -34,9 +34,9 @@ DegreeSmoothSGolayDefault = 3;          % length of window for smoothing
 BodyPartsCenterNames = {'mass centre' 'mass center' 'bodycenter' 'center'};
 BodyPartsTailbaseNames = {'tailbase' 'Tailbase' 'Tail base' 'tail base'};
 
-PlotOption.main = 1;
-PlotOption.acts = 1;
-PlotOption.track = 1;
+PlotOption.main = 0;
+PlotOption.acts = 0;
+PlotOption.track = 0;
 
 MarkSize = 3;
 LineWidth.Traces.Original = 2;
@@ -74,7 +74,8 @@ end
 load(sprintf('%s//%s', PathPreset, FilenamePreset), 'Options','Zones');
 
 Options.MiddleCenterCm = 20;
-Options.StatusBodyPartThreshold = 90;                                   % threshold for missing bodyparts
+Options.StatusBodyPartThreshold = 98;                                   % threshold for missing bodyparts
+Options.LikelihoodThreshold = 0.6;
 
 % reading video file
 readerobj = VideoReader(sprintf('%s%s', PathVideo, FilenameVideo));
@@ -158,7 +159,7 @@ n_frames = EndTime-StartTime+1;                                 % number of fram
 time = (1:n_frames)/Options.FrameRate;
 frames = linspace(1, n_frames, n_frames);
 
-% save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
+save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% all body parts detection
 
@@ -190,8 +191,9 @@ for part=1:BodyPartsNumber
     BodyPartsTraces(part).PercentNaN = mean([round(sum(isnan(BodyPartsTraces(part).TraceOriginal.X))/n_frames*100,2) round(sum(isnan(BodyPartsTraces(part).TraceOriginal.Y))/n_frames*100,2)]);
     BodyPartsTraces(part).PercentLikeliHoodSubThreshold = round(sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100,2);
     
-    if sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100 > Options.StatusBodyPartThreshold
-        disp(['Bodypart ', BodyPartsTraces(part).BodyPartName, ' not found. Percent undetected timestamps: ', num2str(sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100)]);
+    %% ToDo threshold
+    if sum(BodyPartsTraces(part).TraceLikelihood < 0.1)/n_frames*100 > 90
+        disp(['Bodypart ', BodyPartsTraces(part).BodyPartName, ' not found. Percent undetected timestamps: ', num2str(sum(BodyPartsTraces(part).TraceLikelihood < 0.1)/n_frames*100)]);
         BodyPartsTraces(part).Status = 'NotFound';
         continue;
     else
@@ -449,7 +451,7 @@ saveas(h, sprintf('%s\\%s_BodyParts_speeds.fig', PathOut,Filename));
 saveas(h, sprintf('%s\\%s_BodyParts_speeds.png', PathOut,Filename));
 delete(h);
 
-save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
+% save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% Acts definition
 Acts = struct('ActName', [], 'ActArray', [],'ActArrayRefine', [], 'ActNumber', [], 'ActPercent', [], 'ActDistr', [], 'ActMeanTime', [],'ActMeanSTDTime', [], 'ActMedianTime', [], 'ActMedianMADTime', []);
@@ -532,11 +534,19 @@ end
 Acts(5).ActArrayRefine = Acts(5).ActArrayRefine';
 
 % correct headdirection
-% Point.HeadCenter = find(strcmp(BodyPartsNames, "headcenter"),1);
 CenterHead.X = BodyPartsTracesMainX(Point.HeadCenter,:);
 CenterHead.Y = BodyPartsTracesMainY(Point.HeadCenter,:);
-[HeadDirection,~] = cart2pol(BodyPartsTracesMainX(Point.HeadCenter,:)-CenterHead.X,BodyPartsTracesMainY(Point.HeadCenter,:)-CenterHead.Y);
-HeadDirection = smooth(HeadDirection,Options.FrameRate,'sgolay',DegreeSmoothSGolay)';
+
+Point.HD = Point.MiniscopeUCLA;
+if isempty(Point.HD)
+    Point.HD = Point.Nose;
+end
+
+HeadDirection = [];
+if ~isempty(Point.HD)
+    [HeadDirection,~] = cart2pol(BodyPartsTracesMainX(Point.HD,:)-CenterHead.X,BodyPartsTracesMainY(Point.HD,:)-CenterHead.Y);
+    HeadDirection = smooth(HeadDirection,Options.FrameRate,'sgolay',DegreeSmoothSGolay)';
+end
 
 % calculation coordinate features during locomotion
 xlocomotion = MouseCenterX'.*Acts(3).ActArrayRefine;
@@ -580,10 +590,11 @@ for line = 1:size(Acts,2)
     Acts(line).ActMedianMADTime = round(mad(Acts(line).ActDistr),2)/Options.FrameRate;
     Acts(line).Distance = round(mean(BodyPartsTraces(Point.Center).VelocitySmoothed(logical(Acts(line).ActArrayRefine)))*time(end)*Acts(line).ActPercent/10000,2);
     Acts(line).ActMeanDistance = Acts(line).Distance/Acts(line).ActNumber;
-    histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
-    title(sprintf('Histogram of acts duration time: %s', string(Acts(line).ActName)));
-    saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
-    delete(gcf);
+    Acts(line).ActVelocity = Acts(line).Distance/(Acts(line).ActMeanTime*Acts(line).ActNumber)*100;
+%     histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
+%     title(sprintf('Histogram of acts duration time: %s', string(Acts(line).ActName)));
+%     saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
+%     delete(gcf);
 end
 
 h=figure;

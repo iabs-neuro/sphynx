@@ -1,5 +1,6 @@
 function combinedFrame = append_graph_to_frame(videoFrame, graphImage, graphHeightRatio)
-    % Приведение размеров графика к ширине видео и 10% высоты
+
+    % Приведение размеров графика к ширине видео и graphHeightRatio % высоты
     videoHeight = size(videoFrame, 1);
     videoWidth = size(videoFrame, 2);
     
