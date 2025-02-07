@@ -30,22 +30,24 @@ end
 % filenames = {
 %     'D01', 'D03', 'D04', 'D07', 'D08', 'D11', 'D14', 'D17'};
 
-% MSS
+% % MSS
+% filenames = {
+%     'F08', 'F10', 'F11', 'F14', 'F26', 'F28', 'F31', 'F35', 'F36', 'F37', 'H31', 'D01', ...
+%     'F01', 'F04', 'F09', 'F12', 'F29', 'F38', 'F40', 'F48', 'F52', 'H27', 'H32', ...
+%     'F05', 'F06', 'F15', 'F20', 'F30', 'F34', 'F43', 'F53', 'F54', 'H26', 'H33'
+%     };
 
+% BOF
 filenames = {
-    'F08', 'F10', 'F11', 'F14', 'F26', 'F28', 'F31', 'F35', 'F36', 'F37', 'H31', 'D01', ...
-    'F01', 'F04', 'F09', 'F12', 'F29', 'F38', 'F40', 'F48', 'F52', 'H27', 'H32', ...
-    'F05', 'F06', 'F15', 'F20', 'F30', 'F34', 'F43', 'F53', 'F54', 'H26', 'H33'
-    };
+    'H02' 'H03' 'H04' 'H06' 'H07' 'H10' 'H11' 'H12' 'H13' 'H14' 'H15' 'H16' 'H17' 'H19' 'H22' 'H26' 'H27' 'H31' 'H32' 'H33' 'H39'};
 
 timestamps_count_mouse = zeros(1, length(filenames));
 
 %% main part
 
-% for file = 1:length(filenames)
-for file = 15:23
-    mask = sprintf('MSS_%s_*_Mini_TS.csv', filenames{file});
-    mask_traces = sprintf('MSS_%s_*_traces.csv', filenames{file});
+for file = 1:length(filenames)
+    mask = sprintf('BOF_%s_*_Mini_TS.csv', filenames{file});
+    mask_traces = sprintf('BOF_%s_*_traces.csv', filenames{file});
     
     % Получение списка файлов с раздельными таймстемпами
     timestamp_files_sep = dir(fullfile(timestamps_folder, mask));
@@ -82,11 +84,8 @@ for file = 15:23
         
         timestamp_counts(i) = line_count;
     end
-    timestamps_count_mouse(file) = sum(timestamp_counts);
-    
-%     % for MSS Spaced
-%     timestamp_counts(1:end-1) = 4000;
-    
+    timestamps_count_mouse(file) = sum(timestamp_counts);    
+   
     if ~isfile(traces_path)
         error('Файл трейсов %s не найден в папке %s.', traces_file, traces_folder);
     end
