@@ -49,9 +49,9 @@ mice = struct( ...
     'cells_active_firingrate', [], ...                                	- гистограмма частоты кальциевых событий в минуту активных нейронов
     'cells_active_firingrate_mean', zeros(1,length(Filenames)), ...   	- частота кальциевых событий в минуту активных нейронов
     'cells_active_MI_bit', [], ...                                      - гистограмма для MI активных нейронов (z-scored)
-    'cells_active_MI_bit_mean', zeros(1,length(Filenames)), ...                                 - среднее значение MI активных нейронов (z-scored)
+    'cells_active_MI_bit_mean', zeros(1,length(Filenames)), ...         - среднее значение MI активных нейронов (z-scored)
     'cells_active_MI_zscored', [], ...                              	- гистограмма для MI активных нейронов (z-scored)
-    'cells_active_MI_zscored_mean', zeros(1,length(Filenames)), ...                            	- среднее значение MI активных нейронов (z-scored)
+    'cells_active_MI_zscored_mean', zeros(1,length(Filenames)), ...     - среднее значение MI активных нейронов (z-scored)
     ...
     'space_explored', zeros(1,length(Filenames)), ...                   - процент исследованного пространства
     ...
