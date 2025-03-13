@@ -1,4 +1,4 @@
-function mouse = find_arena_border(mouse)
+function mouse = find_arena_features(mouse)
 
 % ищет крайние точки границы арены
 [row, col] = find(mouse.arena_opt(1).maskfilled == 1);
@@ -31,9 +31,9 @@ mouse.behav_opt.arena_border.right = right_coord;
 
 switch mouse.exp
     case "FOF"
-        mouse.arena_area = pi*98*98/4;
+        mouse.behav_opt.arena_area = pi*98*98/4;
     case "MSS"
-        mouse.arena_area = 44*44;
+        mouse.behav_opt.arena_area = 44*44;
 end
 
 end
