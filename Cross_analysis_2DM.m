@@ -1,29 +1,35 @@
 %% paths and filenames
 
-ExpID = 'BOF';
+ExpID = '2DM';
 
-PathMat = sprintf('w:\\Projects\\%s\\BehaviorData\\6_MAT\\', ExpID);
-PathOut = sprintf('w:\\Projects\\%s\\BehaviorData\\', ExpID);
+PathMat = sprintf('w:\\Projects\\3DM\\Comparision\\%s\\6_MAT\\', ExpID);
+PathOut = sprintf('w:\\Projects\\3DM\\Comparision\\%s\\', ExpID);
 
 FileNames = {
-    'H02_1T','H03_1T','H04_1T','H06_1T','H07_1T','H10_1T','H11_1T','H12_1T','H13_1T','H14_1T','H15_1T','H16_1T','H17_1T','H19_1T','H22_1T','H26_1T','H27_1T','H31_1T','H32_1T','H33_1T','H39_1T',...
-    'H02_2T','H03_2T','H04_2T','H06_2T','H07_2T','H10_2T','H11_2T','H12_2T','H13_2T','H14_2T','H15_2T','H16_2T','H17_2T','H19_2T','H22_2T','H26_2T','H27_2T','H31_2T','H32_2T','H33_2T','H39_2T',...
-    'H02_3T','H03_3T','H04_3T','H06_3T','H07_3T','H10_3T','H11_3T','H12_3T','H13_3T','H14_3T','H15_3T','H16_3T','H17_3T','H19_3T','H22_3T','H26_3T','H27_3T','H31_3T','H32_3T','H33_3T','H39_3T',...
-    'H02_4T','H03_4T','H04_4T','H06_4T','H07_4T','H10_4T','H11_4T','H12_4T','H13_4T','H14_4T','H15_4T','H16_4T','H17_4T','H19_4T','H22_4T','H26_4T','H27_4T','H31_4T','H32_4T','H33_4T','H39_4T',...
-    'H02_5T','H03_5T','H04_5T','H06_5T','H07_5T','H10_5T','H11_5T','H12_5T','H13_5T','H14_5T','H15_5T','H16_5T','H17_5T','H19_5T','H22_5T','H26_5T','H27_5T','H31_5T','H32_5T','H33_5T','H39_5T'
+    'AA04_1D',	'AA04_2D',	'AA04_3D',	'AA04_4D',	'AA05_1D',	'AA05_2D',  'AA05_3D',	'AA05_4D',	'AA06_1D',	'AA06_2D',	'AA06_3D',	'AA07_1D',	'AA07_2D',	'AA07_3D',	'AA08_1D',	'AA08_2D',	'AA08_3D',	'AA09_1D'	'AA09_2D',	'AA09_3D',	'AA10_1D',	'AA10_2D',	'AA10_3D',	'AA10_4D',	'AA11_1D',	'AA11_2D',	'AA11_3D',	'AA12_1D',	'AA12_2D',	'AA12_3D',	'AA12_4D',	'AA13_1D',	'AA13_2D',	'AA13_3D',	'AA14_1D',	'AA14_2D',	'AA14_3D',	'AA14_4D', ...
+    'CG05_1D',	'CG05_2D',	'CG05_3D',	'CG06_1D',	'CG06_2D',	'CG06_3D',	'CG06_4D',	'CG08_1D',	'CG08_2D',	'CG08_3D',	'CG08_4D',	'CG09_1D',	'CG09_2D',	'CG09_3D',	'CG11_1D',	'CG11_2D',	'CG11_3D',	'CG11_4D',	'CG14_1D',	'CG14_2D',	'CG14_3D',	'CG15_1D',	'CG15_2D',	'CG15_3D',	'CG15_4D',	'CG20_1D',	'CG20_2D',	'CG20_3D',	'CG22_1D',	'CG22_2D',	'CG22_3D',	'CG22_4D', ...
+    'LM01_1D',	'LM01_2D',	'LM01_3D',	'LM02_1D',	'LM02_2D',	'LM02_3D',	'LM02_4D',	'LM03_1D',	'LM03_2D',	'LM03_3D',	'LM03_4D',	'LM04_1D',	'LM04_2D',	'LM04_3D',	'LM05_1D',	'LM05_2D',	'LM05_3D',	'LM06_1D',	'LM06_2D',	'LM06_3D',	'LM06_4D',	'LM07_1D',	'LM07_2D',	'LM07_3D',	'LM08_1D',	'LM08_2D',	'LM08_3D',	'LM08_4D',	'LM09_1D',	'LM09_2D',	'LM09_3D',	'LM10_1D',	'LM10_2D',	'LM10_3D',	'LM10_4D', ...
+    'SU03_1D',	'SU03_2D',	'SU03_3D',	'SU03_4D',	'SU04_1D',	'SU04_2D',	'SU04_3D',	'SU06_1D',	'SU06_2D',	'SU06_3D',	'SU06_4D',	'SU13_1D',	'SU13_2D',	'SU13_3D',	'SU14_1D',	'SU14_2D',	'SU14_3D',	'SU14_4D',	'SU15_1D',	'SU15_2D',	'SU15_3D',	'SU15_4D',	'SU16_1D',	'SU16_2D',	'SU16_3D',	'SU19_1D',	'SU19_2D',  'SU19_3D'
     };
+
 FilesNumber = length(FileNames);
 
 mice = {
-    'H02' 'H03' 'H04' 'H06' 'H07' 'H10' 'H11' 'H12' 'H13' 'H14' 'H15' 'H16' 'H17' 'H19' 'H22' 'H26' 'H27' 'H31' 'H32' 'H33' 'H39'
+    'AA04' 'AA05' 'AA06' 'AA07' 'AA08' 'AA09' 'AA10' 'AA11' 'AA12' 'AA13' 'AA14' ...
+    'CG05' 'CG06' 'CG08' 'CG09' 'CG11' 'CG14' 'CG15' 'CG20' 'CG22' ...
+    'LM01' 'LM02' 'LM03' 'LM04' 'LM05' 'LM06' 'LM07' 'LM08' 'LM09' 'LM10' ...
+    'SU03' 'SU04' 'SU06' 'SU13' 'SU14' 'SU15' 'SU16' 'SU19' ...
     };
 
 groups = {
-    'TR' 'TR' 'TR' 'AC' 'AC' 'AC' 'TR' 'TR' 'AC' 'TR' 'AC' 'AC' 'AC' 'TR' 'TR' 'TR' 'AC' 'TR' 'TR' 'AC' 'AC'
+    'AA' 'AA' 'AA' 'AA' 'AA' 'AA' 'AA' 'AA' 'AA' 'AA' 'AA' ...
+    'CG' 'CG' 'CG' 'CG' 'CG' 'CG' 'CG' 'CG' 'CG' ...
+    'LM' 'LM' 'LM' 'LM' 'LM' 'LM' 'LM' 'LM' 'LM' 'LM' ...
+    'SU' 'SU' 'SU' 'SU' 'SU' 'SU' 'SU' 'SU'
     };
 
 % сессии в конкретном эксперименте
-session_id = {'1T' '2T' '3T' '4T' '5T'};
+session_id = {'1D_1T' '2D_1T' '3D_1T' '4D_1T'};
 
 % создание столбцов с id мышей и группой (и линией) в начале таблицы
 mice_info = table(mice(:), groups(:), 'VariableNames', {'mouse', 'group'});
@@ -38,20 +44,15 @@ for file = 1:length(FileNames)
     
     fprintf('Processing of %s_%s\n', ExpID,  FileNames{file});
     
-    load(sprintf('%s%s_%s_WorkSpace.mat', PathMat, ExpID, FileNames{file}), 'Acts', 'BodyPartsTraces', 'Point', 'Options');
-    
-    % add velocity into Acts
-    for line = 1:size(Acts,2)
-        Acts(line).ActDuration = Acts(line).ActPercent*Options.Duration/100;
-    end
-    
-    table_name = sprintf('%s_%s', ExpID, FileNames{file});
+    load(sprintf('%s%s_%s_1T_WorkSpace.mat', PathMat, ExpID, FileNames{file}), 'Acts', 'BodyPartsTraces', 'Point', 'Options');
+ 
+    table_name = sprintf('%s_%s_1T', ExpID, FileNames{file});
     AllActs(file).SessionName = table_name;
     AllActs(file).Acts = Acts;
-    Distance(file) = BodyPartsTraces(Point.Center).AverageDistance;
+    Distance(file) = round(BodyPartsTraces(Point.Center).AverageDistance*100);
     Velocity(file) = BodyPartsTraces(Point.Center).AverageSpeed;
     
-    Duration(file) = Options.Duration;
+    Duration(file) = round(Options.Duration);
     
     clear 'Acts' 'BodyPartsTraces' 'Point' 'Options';
 end
@@ -70,17 +71,14 @@ for file = 1:numFiles
     exp_acts = union(exp_acts, this_acts);
 end
 
-% необходимые метрики
-% names_metric = {'ActNumber' 'ActPercent' 'ActMeanTime' 'Distance' 'ActMeanDistance' 'ActVelocity' 'ActDuration'};
-
 %% Create Super-Duper-Yummy Table
 
 % добавить все метрики актов
 num_volume = 1;
-for act = 1:length(exp_acts)
-    for session = 1:length(session_id)
-        names_metric = behavior_acts_struct.(exp_acts{act});
-        for metric = 1:length(names_metric)
+for act = 1:length(exp_acts)    
+    names_metric = behavior_acts_struct.(exp_acts{act});
+    for metric = 1:length(names_metric)
+        for session = 1:length(session_id)
             SuperTable.Name{num_volume} = [exp_acts{act} '_' char(names_metric(metric)) '_' session_id{session}];
             SuperTable.ActID{num_volume} = exp_acts{act};
             SuperTable.TrialID{num_volume} = session_id{session};
@@ -102,6 +100,7 @@ end
 SuperTable.MetricID = strrep(SuperTable.MetricID, 'ActPercent', 'Percent');
 SuperTable.MetricID = strrep(SuperTable.MetricID, 'ActNumber', 'Count');
 SuperTable.MetricID = strrep(SuperTable.MetricID, 'ActMeanTime', 'MeanTime');
+SuperTable.MetricID = strrep(SuperTable.MetricID, 'ActDuration', 'Duration');
 
 % добавить дистанцию
 column_count = length(SuperTable.Name);
@@ -109,9 +108,9 @@ for session = 1:length(session_id)
     SuperTable.Name{column_count+1} = ['distance_' session_id{session}];
     SuperTable.ActID{column_count+1} = 'distance';
     SuperTable.TrialID{column_count+1} = session_id{session};
-    SuperTable.MetricID{column_count+1} = 'm';
+    SuperTable.MetricID{column_count+1} = 'cm';
     for mouse = 1:length(mice)
-        this_name = [mice{mouse} '_' session_id{session}];
+        this_name = [mice{mouse} '_' session_id{session}(1:end-3)];
         session_name = [ExpID '_' mice{mouse} '_' session_id{session}];
         session_idx = find(strcmp({AllActs.SessionName}, session_name));
         if any(strcmp({AllActs.SessionName}, session_name))
@@ -131,7 +130,7 @@ for session = 1:length(session_id)
     SuperTable.TrialID{column_count+1} = session_id{session};
     SuperTable.MetricID{column_count+1} = 'cm/s';
     for mouse = 1:length(mice)
-        this_name = [mice{mouse} '_' session_id{session}];
+        this_name = [mice{mouse} '_' session_id{session}(1:end-3)];
         session_name = [ExpID '_' mice{mouse} '_' session_id{session}];
         session_idx = find(strcmp({AllActs.SessionName}, session_name));
         if any(strcmp({AllActs.SessionName}, session_name))
@@ -150,7 +149,7 @@ for session = 1:length(session_id)
     SuperTable.TrialID{column_count+1} = session_id{session};
     SuperTable.MetricID{column_count+1} = 's';
     for mouse = 1:length(mice)
-        this_name = [mice{mouse} '_' session_id{session}];
+        this_name = [mice{mouse} '_' session_id{session}(1:end-3)];
         session_name = [ExpID '_' mice{mouse} '_' session_id{session}];
         session_idx = find(strcmp({AllActs.SessionName}, session_name));
         if any(strcmp({AllActs.SessionName}, session_name))
@@ -163,6 +162,9 @@ for session = 1:length(session_id)
 end
 
 %% сохрание таблицы целиком
+
+% SuperTable.Data(isnan(SuperTable.Data)) = 0;
+
 % создание и сохранение итоговой таблицы
 SuperTable.Table = array2table(SuperTable.Data, 'VariableNames', SuperTable.Name);
 SuperTable.Table = [mice_info, SuperTable.Table];
@@ -175,6 +177,7 @@ writetable(SuperTable.Table, sprintf('%s\\%s_Behavior.csv',PathOut, ExpID));
 %% %%%%%%%% составление супер-четкой таблицы %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% сохранение типа "1 лист = 1 сессия"
+
 for session = 1:length(session_id)
     
     session_idx = find(strcmp(SuperTable.TrialID, session_id{session}));
@@ -192,11 +195,23 @@ for session = 1:length(session_id)
         [cell(1, size(mice_info,2)) SuperTable.TrialID(:,session_idx)]; ...
         [mice_info.Properties.VariableNames SuperTable.MetricID(:,session_idx)]; ...
         [table2cell(mice_info_sorted) data_cell] ...
-        ];
-    
+        ];    
+
     writecell(full_table, sprintf('%s\\%s_Behavior_sorted_session.xlsx',PathOut, ExpID), 'Sheet', sprintf('%s', session_id{session}));
 end
 
+% вся таблица в последний лист
+[mice_info_sorted, Idx] = sortrows(mice_info, 'group');
+data_cell = num2cell(SuperTable.Data(Idx,:));
+
+MegaFullTable = [ ...
+    [cell(1, size(mice_info,2)) SuperTable.ActID]; ...
+    [cell(1, size(mice_info,2)) SuperTable.TrialID]; ...
+    [mice_info.Properties.VariableNames SuperTable.MetricID]; ...
+    [table2cell(mice_info_sorted) data_cell] ...
+    ];
+
+writecell(MegaFullTable, sprintf('%s\\%s_Behavior_sorted_session.xlsx',PathOut, ExpID), 'Sheet', 'All');
 
 %% сохранение типа "1 лист = 1 акт"
 

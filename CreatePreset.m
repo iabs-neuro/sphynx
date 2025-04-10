@@ -19,11 +19,12 @@ function [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo, PathVideo, P
 % Created by VVP. 14.02.23
 
 if nargin<3
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\HOS\BehaviorData\2_Combined\');
-     PathOut = uigetdir('w:\Projects\HOS\Behaviordata\4_Presets\');
+    %%
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\3DM\BehaviorData\2_Combined\');
+     PathOut = uigetdir('w:\Projects\3DM\BehaviorData\3_Preset\', 'Pick a Directory for outfiles');
 end
 
-% some local parameters
+%% some local parameters
 NumPointsForPlotBorders = 20000;
 StepN = 0.001;
 Color.Arena = 'k';
@@ -32,7 +33,7 @@ LineWidth.Arena = 2;
 LineWidth.Objects = 2;
 StepDefault = 10;
 
-TypeExpList = ["Novelty OF","BowlsOpenField","NOL","Round Track","Holes Track","Odor Track","Freezing Track","New Track","Complex Context","OF_Obj"];
+TypeExpList = ["3DM", "BowlsOpenField","Novelty OF","NOL","Round Track","Holes Track","Odor Track","Freezing Track","New Track","Complex Context","OF_Obj"];
 ArenaGeometryOptions = ["Polygon", "Circle", "Ellipse", "O-maze"];
 
 FilenameOut = FilenameVideo(1:end-4);
@@ -42,7 +43,7 @@ PathOut = sprintf('%s\\%s_zones',PathOut, FilenameOut);
 question = questdlg('Do you want dowload Preset?', 'Important question', 'Yes','No','Yes');
 switch question
     case 'Yes'
-        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','w:\Projects\HOS\Behavior\4_Presets\');
+        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','w:\Projects\3DM\BehaviorData\3_Preset\');
         load(sprintf('%s//%s', PathPresetDownload, FilenamePresetDownload), 'Options','ArenaAndObjects');
 end
 
@@ -104,39 +105,39 @@ while prmt==0
 end
 
 %% 
-switch Options.ExperimentType
-    case 'BowlsOpenField'
-        [Options.pxl2sm, Options.x_kcorr] = CalculatePxlInCm(Options.GoodVideoFrame);
-%         Options.pxl2sm = 9.3; % BOF 2024 1T
-%        Options.pxl2sm = ;  % BOF 2024 2T
-    case 'Complex Context'
-        Options.pxl2sm = 6.2;
-    case 'Novelty OF'
+% switch Options.ExperimentType
+%     case 'BowlsOpenField'
+%         [Options.pxl2sm, Options.x_kcorr] = CalculatePxlInCm(Options.GoodVideoFrame);
+% %         Options.pxl2sm = 9.3; % BOF 2024 1T
+% %        Options.pxl2sm = ;  % BOF 2024 2T
+%     case 'Complex Context'
+%         [Options.pxl2sm, Options.x_kcorr] = CalculatePxlInCm(Options.GoodVideoFrame);
+%     case 'Novelty OF'
 %         Options.pxl2sm = 350/44;
 %        Options.pxl2sm = 22.2; % NOF 2024 H01-10, 1 wave
 %         Options.pxl2sm = 28.1; % NOF 2024 H11-23, 2 wave
 %         Options.pxl2sm = 20.6; % NOF 2024 H26-39, 3 wave
 %         Options.pxl2sm = 10.8; % feed 2024 H26-39, 3 wave
         [Options.pxl2sm, Options.x_kcorr] = CalculatePxlInCm(Options.GoodVideoFrame);
-    case 'NOL'
-        Options.pxl2sm = 16.5;
-    case 'Round Track'
-        Options.pxl2sm = 1;
-    case 'Holes Track'
-        Options.pxl2sm = 95/4;
-    case 'Odor Track'
-        Options.pxl2sm = 95/4;
-    case 'Freezing Track'
-        Options.pxl2sm = 1;
-        Options.TailHeight = 22;
-        Options.WidthReal = 29;
-        Options.HeightReal = 24;
-    case "OF_Obj"
-        Options.pxl2sm = 5.9;
-    case 'New Track'
-        Options.pxl2sm = str2double(inputdlg('Specify the number of pixels in 1 cm', 'Parameters', 1, {'8'}, 'on'));
-        % create box from user
-end
+%     case 'NOL'
+%         Options.pxl2sm = 16.5;
+%     case 'Round Track'
+%         Options.pxl2sm = 1;
+%     case 'Holes Track'
+%         Options.pxl2sm = 95/4;
+%     case 'Odor Track'
+%         Options.pxl2sm = 95/4;
+%     case 'Freezing Track'
+%         Options.pxl2sm = 1;
+%         Options.TailHeight = 22;
+%         Options.WidthReal = 29;
+%         Options.HeightReal = 24;
+%     case "OF_Obj"
+%         Options.pxl2sm = 5.9;
+%     case 'New Track'
+%         Options.pxl2sm = str2double(inputdlg('Specify the number of pixels in 1 cm', 'Parameters', 1, {'8'}, 'on'));
+%         % create box from user
+% end
 
 %% rescale downloaded preset to current video
 if strcmp(question, 'Yes')
@@ -341,7 +342,7 @@ ArenaAndObjects(1).border_y = y_arena;
 
 %% reading objects coordinates
 
-Options.ObjectsNumber = str2double(inputdlg('Specify the number of objects', 'Parameters', 1, {'1'}, 'on'));
+Options.ObjectsNumber = str2double(inputdlg('Specify the number of objects', 'Parameters', 1, {'0'}, 'on'));
 for object=1:Options.ObjectsNumber
     ObjectGeometry = questdlg('Choice geometry of object', 'Parameters', 'Polygon', 'Circle', 'Ellipse', 'Polygon');
     prmt = 0;
@@ -405,7 +406,7 @@ switch Options.ExperimentType
         ArenaAndObjects(1).point_y = y_ar;
         save(sprintf('%s\\%s',Options.PathPreset, Options.FilenamePreset),'Options','ArenaAndObjects');
 
-    case {'BowlsOpenField', 'Round Track', 'Holes Track', 'Odor Track', 'Novelty OF', 'New Track', 'Complex Context', 'NOL','OF_Obj'}
+    case {'3DM', 'BowlsOpenField', 'Round Track', 'Holes Track', 'Odor Track', 'Novelty OF', 'New Track', 'Complex Context', 'NOL','OF_Obj'}
         Zones = struct('name',[],'type',[], 'maskfilled', []);
         prmt = 0;
         while prmt == 0

@@ -1,4 +1,7 @@
 %% только видео
+
+TotalRealTime = 1200;
+
 % Выберите видео файлы
 [filenames, pathname] = uigetfile({'*.avi;*.mp4;*.m4v;*.tif', 'Video Files (*.avi, *.mp4, *.m4v, *.tif)'}, 'Выберите видео файлы', 'MultiSelect', 'on', 'd:\Projects\H_mice\RawCombineVideo\');
 if isequal(filenames, 0) || isequal(pathname, 0)
@@ -16,6 +19,9 @@ totalFrames = cell(size(filenames));
 totalDuration = cell(size(filenames));
 totalFramerate = cell(size(filenames));
 realFramerate = cell(size(filenames));
+totalBitsPerPixel = cell(size(filenames));
+totalHeight = cell(size(filenames));
+totalWidth = cell(size(filenames));
 
 % Суммарное количество кадров
 TotalTotalFrames = 0;
@@ -39,7 +45,7 @@ for i = 1:length(filenames)
         totalFrames{i} = numFrames;
         totalDuration{i} = duration;
         totalFramerate{i} = framerate;
-        realFramerate{i} = numFrames / 300;
+        realFramerate{i} = numFrames / TotalRealTime;
         
     else  % Если файл - видео
         % Создаем объект для чтения видео
@@ -49,7 +55,10 @@ for i = 1:length(filenames)
         totalFrames{i} = videoObj.NumFrames;
         totalDuration{i} = videoObj.Duration;
         totalFramerate{i} = videoObj.Framerate;
-        realFramerate{i} = totalFrames{i} / 300;
+        totalBitsPerPixel{i} = videoObj.BitsPerPixel;
+        totalHeight{i} = videoObj.Height;
+        totalWidth{i} = videoObj.Width;
+        realFramerate{i} = totalFrames{i} / TotalRealTime;
     end
     
     % Выводим результат для текущего файла
@@ -78,6 +87,7 @@ fileExt = cellfun(@(x) x(end-2:end), filenames, 'UniformOutput', false);
 if all(strcmp(fileExt, 'csv'))
     % Обработка CSV файлов
     totalRows = cell(size(filenames));
+    totalCols = cell(size(filenames));
     totalTime = cell(size(filenames));
     TotalTotalRows = 0;
     
@@ -90,6 +100,7 @@ if all(strcmp(fileExt, 'csv'))
         csvData = readtable(csvPath);
         csvDataArray = table2array(csvData);
         totalRows{i} = height(csvData);
+        totalCols{i} = width(csvData);
         totalTime{i} = (csvDataArray(end)-csvDataArray(1))/10000000/60; % in minutes
         TotalTotalRows = TotalTotalRows + totalRows{i};
         
@@ -120,7 +131,7 @@ elseif all(strcmp(fileExt, 'avi') | strcmp(fileExt, 'mp4'))
         totalDuration{i} = videoObj.Duration;
         totalFramerate{i} = videoObj.Framerate;
         TotalTotalFrames = TotalTotalFrames + totalFrames{i};
-        realFramerate{i} = totalFrames{i} / 600;
+        realFramerate{i} = totalFrames{i} / TotalRealTime;
         
         % Выводим результат для текущего видео
         disp(['Для видео ' filenames{i} ' количество кадров: ' num2str(totalFrames{i})]);
