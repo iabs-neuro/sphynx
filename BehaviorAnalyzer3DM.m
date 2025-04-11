@@ -75,11 +75,13 @@ end
 load(sprintf('%s//%s', PathPreset, FilenamePreset), 'Options', 'Zones', 'tunnels');
 
 Options.MiddleCenterCm = 20;
-Options.StatusBodyPartThreshold = 99.5;                                   % threshold for missing bodyparts
+Options.StatusBodyPartThreshold = 98;                                   % threshold for missing bodyparts
 Options.LikelihoodThreshold = 0.6;
 
 % reading video file
 readerobj = VideoReader(sprintf('%s%s', PathVideo, FilenameVideo));
+
+Options.FrameRate = readerobj.FrameRate;
 
 % reading videotracking file
 file = readtable(sprintf('%s%s', PathDLC,FilenameDLC));
@@ -284,13 +286,6 @@ BodyPartsNumber = length(BodyPartsNames);
 % searching all bodyparts
 Point = find_bodyPart(BodyPartsNames);
 
-if isempty(Point.Nose)
-    BodyPartsTracesMainX(end+1,:) = (BodyPartsTracesMainX(Point.LeftEar,:)+BodyPartsTracesMainX(Point.RightEar,:))/2;
-    BodyPartsTracesMainY(end+1,:) = (BodyPartsTracesMainY(Point.LeftEar,:)+BodyPartsTracesMainY(Point.RightEar,:))/2;
-    Point.Nose = size(BodyPartsTracesMainX,1);
-end
-
-
 % add bottom and start zones in tunnels structure
 tunnels.count = length(tunnels.mask);
 tunnels.mask{tunnels.count+2} = Zones(7).maskfilled;
@@ -369,7 +364,7 @@ for frame = 1:n_frames
         tunnels.act(frame) = queue(2);
     end
 end
-tunnels.act_refined = round(medfilt1(tunnels.act, Options.FrameRate*tunnel_window_size));
+tunnels.act_refined = round(medfilt1(tunnels.act, round(Options.FrameRate*tunnel_window_size)));
 tunnels.act_refined = max(1, min(32, tunnels.act_refined));
 
 % plot arms indexes
@@ -805,7 +800,7 @@ switch RearMode
                 TempArray(i) = TempArray(i) + sqrt((BodyPartsTracesMainX(Point.Center,i)-BodyPartsTracesMainX(part,i))^2 + (BodyPartsTracesMainY(Point.Center,i)-BodyPartsTracesMainY(part,i))^2);
             end
         end
-        TempArraySmooth = smooth(TempArray, Options.FrameRate);
+        TempArraySmooth = smooth(TempArray, round(Options.FrameRate));
         Acts(5).ActArray = double(TempArraySmooth < RearsThreshold.AllBodyParts);
     case 'TailbasePaws'
         for i=1:n_frames
@@ -832,7 +827,7 @@ end
 HeadDirection = [];
 if ~isempty(Point.HD)
     [HeadDirection,~] = cart2pol(BodyPartsTracesMainX(Point.HD,:)-CenterHead.X,BodyPartsTracesMainY(Point.HD,:)-CenterHead.Y);
-    HeadDirection = smooth(HeadDirection,Options.FrameRate,'sgolay',DegreeSmoothSGolay)';
+    HeadDirection = smooth(HeadDirection,round(Options.FrameRate),'sgolay',DegreeSmoothSGolay)';
 end
 
 % calculation coordinate features during locomotion
@@ -1076,22 +1071,22 @@ dz = diff(MouseCenterZ);
 dt = diff(time);
 velocity_z = dz ./ dt;
 velocity_z = [0, velocity_z]';
-velocity_z_smooth = smooth(velocity_z,Options.FrameRate,'sgolay',3);
+velocity_z_smooth = smooth(velocity_z,round(Options.FrameRate),'sgolay',3);
 
 % acts calculation
 Acts(end+1).ActName = 'mouse_goes_straight';
 Acts(end).ActArray = double(velocity_z_smooth == 0);
-[Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.FrameRate, Options.FrameRate);
+[Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, round(Options.FrameRate), round(Options.FrameRate));
 Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
 
 Acts(end+1).ActName = 'mouse_goes_up';
 Acts(end).ActArray = double(velocity_z_smooth > 0);
-[Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.FrameRate, Options.FrameRate);
+[Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, round(Options.FrameRate), round(Options.FrameRate));
 Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
 
 Acts(end+1).ActName = 'mouse_goes_down';
 Acts(end).ActArray = double(velocity_z_smooth < 0);
-[Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.FrameRate, Options.FrameRate);
+[Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, round(Options.FrameRate), round(Options.FrameRate));
 Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
 
 % plot vel
@@ -1121,7 +1116,7 @@ for line = 1:size(Acts,2)
     Acts(line).Distance = round(mean(BodyPartsTraces(Point.Center).VelocitySmoothed(logical(Acts(line).ActArrayRefine)))*time(end)*Acts(line).ActPercent/10000,2);
     Acts(line).ActMeanDistance = round(Acts(line).Distance/Acts(line).ActNumber,2);
     Acts(line).ActVelocity = round(Acts(line).Distance/(Acts(line).ActMeanTime*Acts(line).ActNumber)*100,2);
-    Acts(line).ActDuration = round(Acts(line).ActPercent*Options.Duration/100,2);
+    Acts(line).ActDuration = round(Acts(line).ActPercent*session.duration_total/100,2);
 %     histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
 %     title(sprintf('Histogram of acts duration time: %s', strrep(string(Acts(line).ActName), '_', '\_')));
 %     saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));

@@ -15,10 +15,10 @@ behavior_act_params = struct(...
 'middle_zone',                  ["ActPercent" "Distance"], ...                  % промежуточная зона:       [процент, дистанция]
 ... % 'centertrue',                   ["ActNumber" "ActPercent" "Distance"], ...      % центральная зона:         [кол-во, процент, дистанция]
 'center',                       ["ActNumber" "ActPercent" "Distance"], ...      % пристеночная зона:        [кол-во, процент, дистанция]
-'corners',                      ["ActPercent" "Distance"], ...                  % зона углов:               [процент, дистанция]
+'corners',                      "ActPercent", ...                               % зона углов:               [процент, дистанция]
 ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% UNSPECIFIC ACTS %%%%%%%%%%%%%%%%%%%%
 'freezing',                     "ActPercent", ...                               % замирания:                [процент]
-'rear',                         "ActNumber", ...                                % стойки:                   [кол-во]
+... % 'rear',                         "ActNumber", ...                                % стойки:                   [кол-во]
 ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:BOF %%%%%%%%%%%%% 
 'bowlinside',                   ["ActDuration" "ActPercent"], ...               % мышь в миске:                                         [длительность, процент]
 'bowlinteraction',              ["ActDuration" "ActPercent"], ...               % любое взаимодействие с миской:                        [длительность, процент]
@@ -51,7 +51,38 @@ behavior_act_params = struct(...
 'rest_in_middle_zone',          "ActNumber", ...                                % остановка в промежуточной зоне:                       [кол-во]
 'loc_in_middle_zone',           "ActNumber", ...                                % быстрая побежка в промежуточной зоне:                 [кол-во]
 'rest_in_center',               "ActNumber", ...                                % остановка в центральной зоне:                         [кол-во]
-'loc_in_center',                "ActNumber" ...                                 % быстрая побежка в центральной зоне:                   [кол-во]
+'loc_in_center',                "ActNumber", ...                                % быстрая побежка в центральной зоне:                   [кол-во]
+... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:3DM %%%%%%%%%%%%%
+'start_box',                  	["ActNumber" "ActPercent"], ...                 % стартовая зона:                                       [кол-во, процент]
+'arms',                       	["ActNumber" "ActPercent" "Distance"], ...     	% все рукава:                                          	[кол-во, процент, дистанция]
+'straight_arms',               	["ActNumber" "ActPercent" "Distance"], ...     	% прямые рукава:                                       	[процент, дистанция]
+'sloping_arms',                	["ActNumber" "ActPercent" "Distance"], ...     	% наклонные рукава:                                   	[процент, дистанция]
+'slope_down_arms',             	["ActNumber" "ActPercent" "Distance"], ...     	% наклонные вниз рукава:                               	[процент, дистанция]
+'slope_up_arms',              	["ActNumber" "ActPercent" "Distance"], ...     	% наклонные вверх рукава:                              	[процент, дистанция]
+... 
+'rest_in_straight_arms',       	"ActNumber", ...                                % остановка в прямых рукавах:                           [кол-во]
+'loc_in_straight_arms',       	"ActNumber", ...                                % быстрая побежка в прямых рукавах:                    	[кол-во]
+'walk_in_straight_arms',       	"ActNumber", ...                                % медленная побежка в прямых рукавах:                  	[кол-во]
+'freez_in_straight_arms',      	"ActNumber", ...                                % замирания в прямых рукавах:                           [кол-во]
+... 
+'rest_in_sloping_arms',       	"ActNumber", ...                                % остановка в наклонных рукавах:                       	[кол-во]
+'loc_in_sloping_arms',       	"ActNumber", ...                                % быстрая побежка в наклонных рукавах:                 	[кол-во]
+'walk_in_sloping_arms',       	"ActNumber", ...                                % медленная побежка в наклонных рукавах:               	[кол-во]
+'freez_in_sloping_arms',      	"ActNumber", ...                                % замирания в наклонных рукавах:                       	[кол-во]
+... 
+'rest_in_slope_down_arms',     	"ActNumber", ...                                % остановка в наклонных вниз рукавах:                  	[кол-во]
+'loc_in_slope_down_arms',      	"ActNumber", ...                                % быстрая побежка в наклонных вниз рукавах:            	[кол-во]
+'walk_in_slope_down_arms',     	"ActNumber", ...                                % медленная побежка в наклонных вниз рукавах:          	[кол-во]
+'freez_in_slope_down_arms',    	"ActNumber", ...                                % замирания в наклонных вниз рукавах:                  	[кол-во]
+...
+'rest_in_slope_up_arms',       	"ActNumber", ...                                % остановка в наклонных вверх рукавах:                 	[кол-во]
+'loc_in_slope_up_arms',       	"ActNumber", ...                                % быстрая побежка в наклонных вверх рукавах:           	[кол-во]
+'walk_in_slope_up_arms',       	"ActNumber", ...                                % медленная побежка в наклонных вверх рукавах:         	[кол-во]
+'freez_in_slope_up_arms',      	"ActNumber", ...                                % замирания в наклонных вверх рукавах:                	[кол-во]
+... 
+'mouse_goes_straight',        	["ActPercent" "Distance"], ...                  % животное перемещается в плоскости (X,Y):             	[процент, дистанция]
+'mouse_goes_up',                ["ActPercent" "Distance"], ...                  % животное перемещается с набором высоты:             	[процент, дистанция]
+'mouse_goes_down',              ["ActPercent" "Distance"] ...                  % животное перемещается со снижением высоты:          	[процент, дистанция]
     );
 
 
