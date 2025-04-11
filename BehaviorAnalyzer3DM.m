@@ -75,7 +75,7 @@ end
 load(sprintf('%s//%s', PathPreset, FilenamePreset), 'Options', 'Zones', 'tunnels');
 
 Options.MiddleCenterCm = 20;
-Options.StatusBodyPartThreshold = 95;                                   % threshold for missing bodyparts
+Options.StatusBodyPartThreshold = 99.5;                                   % threshold for missing bodyparts
 Options.LikelihoodThreshold = 0.6;
 
 % reading video file
@@ -284,6 +284,13 @@ BodyPartsNumber = length(BodyPartsNames);
 % searching all bodyparts
 Point = find_bodyPart(BodyPartsNames);
 
+if isempty(Point.Nose)
+    BodyPartsTracesMainX(end+1,:) = (BodyPartsTracesMainX(Point.LeftEar,:)+BodyPartsTracesMainX(Point.RightEar,:))/2;
+    BodyPartsTracesMainY(end+1,:) = (BodyPartsTracesMainY(Point.LeftEar,:)+BodyPartsTracesMainY(Point.RightEar,:))/2;
+    Point.Nose = size(BodyPartsTracesMainX,1);
+end
+
+
 % add bottom and start zones in tunnels structure
 tunnels.count = length(tunnels.mask);
 tunnels.mask{tunnels.count+2} = Zones(7).maskfilled;
@@ -309,7 +316,7 @@ for frame = 1:2000
     end    
 end
 
-histogram(start_tunnel,length(unique(start_tunnel)));
+histogram(start_tunnel,1:6);
 saveas(gcf, sprintf('%s\\%s_Start_point.png', PathOut, Filename));
 delete(gcf);
 
