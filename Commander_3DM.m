@@ -29,6 +29,8 @@ FileNames = {
 
 FilesNumber = length(FileNames);
 
+% incorrect framerate
+filess = [16 23 30 37 49 56 58 69 71 78 90 97 104 111];
 %% main part
 
 Distance = zeros(1,FilesNumber);
@@ -42,8 +44,8 @@ Height = zeros(1,FilesNumber);
 AllActs = struct('SessionName', '',  'Acts', []);
 
 %%
-for file = 2:length(FileNames)
-    
+% for file = 91:length(FileNames)
+for file = filess
     FilenameVideo = sprintf('3DM_%s.mp4', FileNames{file});
     FilenameDLC = sprintf('3DM_%sDLC_Resnet101_3DMMar25shuffle3_snapshot_370.csv',FileNames{file});
     FilenamePreset = '3DM_Tunnels_Preset2.mat';
@@ -73,5 +75,5 @@ for file = 2:length(FileNames)
     Height_down(file) = session.total_height_down;
     Height(file) = session.total_height;
     
-    clear 'Acts' 'BodyPartsTraces' 'Point' 'Options';
+    clear 'Acts' 'session';
 end
