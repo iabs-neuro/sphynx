@@ -36,6 +36,7 @@ function [velocity, mean_velocity, total_distance, total_height_up, total_height
     velocity = [0, velocity]; % Добавляем нулевую скорость в начальный момент
     
     velocity = smooth(velocity,SmoothWindow,'sgolay',3);
+    velocity = max(0, min(50, velocity));
     
     % Средняя скорость за весь период
     mean_velocity = mean(velocity(2:end)); % Исключаем начальный нуль

@@ -33,11 +33,11 @@ DegreeDerivatives = 3;                  % how many derivatives of coordinates ar
 DegreeSmoothSGolayDefault = 3;          % length of window for smoothing
 BodyPartsCenterNames = {'mass centre' 'mass center' 'bodycenter' 'center'};
 BodyPartsTailbaseNames = {'tailbase' 'Tailbase' 'Tail base' 'tail base'};
-tunnel_window_size = 3;                 % in seconds to smooth 3DM
+tunnel_window_size = 1;                 % in seconds to smooth 3DM
 
 PlotOption.main = 1;
-PlotOption.acts = 0;
-PlotOption.track = 0;
+PlotOption.acts = 1;
+PlotOption.track = 1;
 
 MarkSize = 3;
 LineWidth.Traces.Original = 2;
@@ -77,6 +77,7 @@ load(sprintf('%s//%s', PathPreset, FilenamePreset), 'Options', 'Zones', 'tunnels
 Options.MiddleCenterCm = 20;
 Options.StatusBodyPartThreshold = 98;                                   % threshold for missing bodyparts
 Options.LikelihoodThreshold = 0.6;
+Options.VelocityMax = 50;                                               % threshold for maxima velocity
 
 % reading video file
 readerobj = VideoReader(sprintf('%s%s', PathVideo, FilenameVideo));
@@ -203,13 +204,13 @@ for part=1:BodyPartsNumber
         BodyPartsTraces(part).Status = 'Good';
     end
 
-    TempArrayInt.X = interp1(frames(TempArrayX ~=0), TempArrayX(TempArrayX ~=0), find(TempArrayX == 0), 'pchip');
-    TempArrayInt.Y = interp1(frames(TempArrayY ~=0), TempArrayY(TempArrayY ~=0), find(TempArrayY == 0), 'pchip');
+    TempArrayInt.X = interp1(frames(TempArrayX ~=0), TempArrayX(TempArrayX ~=0), find(TempArrayX == 0), 'pchip', 'extrap');
+    TempArrayInt.Y = interp1(frames(TempArrayY ~=0), TempArrayY(TempArrayY ~=0), find(TempArrayY == 0), 'pchip', 'extrap');
     
     TempArrayInt.X(TempArrayInt.X<1) = 1;
     TempArrayInt.Y(TempArrayInt.Y<1) = 1;
     
-    TempArrayInt.X(TempArrayInt.X>Options.Width*Options.x_kcorr) = Options.Width;
+    TempArrayInt.X(TempArrayInt.X>fix(Options.Width*Options.x_kcorr)) = fix(Options.Width*Options.x_kcorr);
     TempArrayInt.Y(TempArrayInt.Y>Options.Height) = Options.Height;
     
     TempArrayX(TempArrayX == 0) = TempArrayInt.X;
@@ -225,12 +226,15 @@ for part=1:BodyPartsNumber
     DegreeSmoothSGolay = min(SmoothWindow-1, DegreeSmoothSGolayDefault);
     BodyPartsTraces(part).TraceSmoothed.X = smooth(BodyPartsTraces(part).TraceInterpolated.X,SmoothWindow,'sgolay',DegreeSmoothSGolay);
     BodyPartsTraces(part).TraceSmoothed.Y = smooth(BodyPartsTraces(part).TraceInterpolated.Y,SmoothWindow,'sgolay',DegreeSmoothSGolay);
+%     BodyPartsTraces(part).TraceSmoothed.X = smooth(BodyPartsTraces(part).TraceInterpolated.X,SmoothWindow,'rloess');
+%     BodyPartsTraces(part).TraceSmoothed.Y = smooth(BodyPartsTraces(part).TraceInterpolated.Y,SmoothWindow,'rloess');    
+    
     
     BodyPartsTraces(part).TraceSmoothed.X(BodyPartsTraces(part).TraceSmoothed.X<1) = 1;
     BodyPartsTraces(part).TraceSmoothed.Y(BodyPartsTraces(part).TraceSmoothed.Y<1) = 1;
     
-    BodyPartsTraces(part).TraceSmoothed.X(BodyPartsTraces(part).TraceSmoothed.X>Options.Width*Options.x_kcorr) = 1;
-    BodyPartsTraces(part).TraceSmoothed.Y(BodyPartsTraces(part).TraceSmoothed.Y>Options.Height) = 1;
+    BodyPartsTraces(part).TraceSmoothed.X(BodyPartsTraces(part).TraceSmoothed.X>fix(Options.Width*Options.x_kcorr)) = fix(Options.Width*Options.x_kcorr);
+    BodyPartsTraces(part).TraceSmoothed.Y(BodyPartsTraces(part).TraceSmoothed.Y>Options.Height) = Options.Height;
     
     switch TraceOption
         case 'Original'
@@ -302,7 +306,7 @@ tunnels.act = zeros(1,n_frames);
 
 % create start queue
 start_tunnel = [];
-for frame = 1:2000
+for frame = 1:500
 %     tunnel_this_frame = [];
     for tunnel = 1:tunnels.count
         if tunnels.mask{tunnel, 1}(round(BodyPartsTracesMainY(Point.Center,frame)), round(BodyPartsTracesMainX(Point.Center,frame)/Options.x_kcorr))
@@ -311,36 +315,43 @@ for frame = 1:2000
     end    
 end
 
-histogram(start_tunnel,1:6);
+histogram(start_tunnel,'BinMethod','integer');
 saveas(gcf, sprintf('%s\\%s_Start_point.png', PathOut, Filename));
 delete(gcf);
 
-filtered_values = start_tunnel(start_tunnel >= 1 & start_tunnel <= 6);
-[unique_values, ~, ic] = unique(filtered_values);
+[unique_values, ~, ~] = unique(start_tunnel);
 % counts = accumarray(ic, 1);
+
 % [~, max_idx] = max(counts);
 % most_frequent = unique_values(max_idx);
 
-if any(ismember(unique_values,2))
-    most_frequent = 2;
-elseif  any(ismember(unique_values,3))
-    most_frequent = 3;
-elseif  any(ismember(unique_values,4))
-    most_frequent = 4;
-elseif  any(ismember(unique_values,5))
-    most_frequent = 5;
-elseif  any(ismember(unique_values,6))
-    most_frequent = 6;
-else
+% if any(ismember(unique_values,2))
+%     most_frequent = 2;
+% elseif  any(ismember(unique_values,3))
+%     most_frequent = 3;
+% elseif  any(ismember(unique_values,4))
+%     most_frequent = 4;
+% elseif  any(ismember(unique_values,5))
+%     most_frequent = 5;
+% elseif  any(ismember(unique_values,6))
+%     most_frequent = 6;
+% else
+%     most_frequent = [];
+% end
+
+most_frequent = find(ismember(2:32, unique_values), 1, 'first');
+if isempty(most_frequent)
     most_frequent = [];
+else
+    most_frequent = most_frequent + 1; % так как ищем начиная с 2
 end
 
 if isempty(most_frequent)
     fprintf('Стартовый рукав: %d\n', 1);
-    queue = [0,1,2];
+    queue = [0,0,1,2,2];
 else
     fprintf('Стартовый рукав: %d\n', most_frequent);
-    queue = [most_frequent-1,most_frequent,most_frequent+1];
+    queue = [most_frequent-2, most_frequent-1,most_frequent,most_frequent+1, most_frequent+2];
 end
 
 for frame = 1:n_frames  
@@ -354,17 +365,17 @@ for frame = 1:n_frames
         
         tunnel_this_frame_real = intersect(queue, tunnel_this_frame);
         if isempty(tunnel_this_frame_real)
-            tunnels.act(frame) = queue(2);
+            tunnels.act(frame) = queue(3);
         else
             tunnels.act(frame) = min(tunnel_this_frame_real);
         end
-        queue = [tunnels.act(frame)-1,tunnels.act(frame),tunnels.act(frame)+1];
+        queue = [tunnels.act(frame)-2,tunnels.act(frame)-1,tunnels.act(frame),tunnels.act(frame)+1,tunnels.act(frame)+2];
         
     else
-        tunnels.act(frame) = queue(2);
+        tunnels.act(frame) = queue(3);
     end
 end
-tunnels.act_refined = round(medfilt1(tunnels.act, round(Options.FrameRate*tunnel_window_size)));
+tunnels.act_refined = round(medfilt1(tunnels.act, round(Options.FrameRate*tunnel_window_size), 'truncate'));
 tunnels.act_refined = max(1, min(32, tunnels.act_refined));
 
 % plot arms indexes
@@ -450,14 +461,44 @@ for frame = 1:n_frames
     
 end
 
+% [Velocity, session.mean_velocity, session.total_distance, session.total_height_up, session.total_height_down, session.total_height] = analyze_movement_3D(MouseCenterX/10, MouseCenterY/10, MouseCenterZ/10, time, Options.SmoothWindowBigInFrames);
+% nonvalid =  Velocity > Options.VelocityMax;
+% 
+% Velocity = smooth(Velocity,Options.SmoothWindowBigInFrames,'sgolay',3);
+% Velocity = max(0, min(Options.VelocityMax, Velocity));
+% 
+% TempArrayX = MouseCenterX;
+% TempArrayY = MouseCenterY;
+% TempArrayZ = MouseCenterZ;
+%     
+% TempArrayX(nonvalid) = -1;
+% TempArrayY(nonvalid) = -1;
+% TempArrayZ(nonvalid) = -1;
+% 
+% TempArrayInt.MouseCenterX = interp1(frames(TempArrayX ~=-1), TempArrayX(TempArrayX ~=-1), find(TempArrayX == -1), 'pchip', 'extrap');
+% TempArrayInt.MouseCenterY = interp1(frames(TempArrayY ~=-1), TempArrayY(TempArrayY ~=-1), find(TempArrayY == -1), 'pchip', 'extrap');
+% TempArrayInt.MouseCenterZ = interp1(frames(TempArrayZ ~=-1), TempArrayZ(TempArrayZ ~=-1), find(TempArrayZ == -1), 'pchip', 'extrap');
+% 
+% TempArrayX(TempArrayX == -1) = TempArrayInt.X;
+% TempArrayY(TempArrayY == -1) = TempArrayInt.Y;
+% TempArrayZ(TempArrayZ == -1) = TempArrayInt.Z;
+% 
+% MouseCenterX = TempArrayX;
+% MouseCenterY = TempArrayY;
+% MouseCenterZ = TempArrayZ;
+    
 % prepairing coordinates
-MouseCenterX = MouseCenterX/10;
-MouseCenterY = MouseCenterY/10;
-MouseCenterZ = MouseCenterZ/10;
+MouseCenterX(MouseCenterX<min(tunnels.corner3D(:,1))) = min(tunnels.corner3D(:,1));
+MouseCenterY(MouseCenterY<min(tunnels.corner3D(:,2))) = min(tunnels.corner3D(:,2));
+MouseCenterZ(MouseCenterZ<min(tunnels.corner3D(:,3))) = min(tunnels.corner3D(:,3));
+    
+MouseCenterX(MouseCenterX>max(tunnels.corner3D(:,1))) = max(tunnels.corner3D(:,1));
+MouseCenterY(MouseCenterY>max(tunnels.corner3D(:,2))) = max(tunnels.corner3D(:,2));
+MouseCenterZ(MouseCenterZ>max(tunnels.corner3D(:,3))) = max(tunnels.corner3D(:,3));
 
 % Параметры фильтра Савицкого-Голая
-window_size = 51;      % Размер окна фильтра (50 кадров)
-polynomial_order = 3;  % Порядок полинома
+window_size = 51;
+polynomial_order = 3;
 
 % Применение фильтра к каждой координате
 MouseCenterX_smoothed = sgolayfilt(MouseCenterX, polynomial_order, window_size);
@@ -465,24 +506,19 @@ MouseCenterY_smoothed = sgolayfilt(MouseCenterY, polynomial_order, window_size);
 MouseCenterZ_smoothed = sgolayfilt(MouseCenterZ, polynomial_order, window_size);
 
 % Наложение ограничений на значения
-% Для X: [0, 700]
-MouseCenterX_smoothed = max(0, min(700, MouseCenterX_smoothed));
-
-% Для Y: [0, 680]
-MouseCenterY_smoothed = max(0, min(680, MouseCenterY_smoothed));
-
-% Для Z: [0, 570]
-MouseCenterZ_smoothed = max(0, min(570, MouseCenterZ_smoothed));
+MouseCenterX_smoothed = max(min(tunnels.corner3D(:,1)), min(max(tunnels.corner3D(:,1)), MouseCenterX_smoothed));
+MouseCenterY_smoothed = max(min(tunnels.corner3D(:,2)), min(max(tunnels.corner3D(:,2)), MouseCenterY_smoothed));
+MouseCenterZ_smoothed = max(min(tunnels.corner3D(:,3)), min(max(tunnels.corner3D(:,3)), MouseCenterZ_smoothed));
 
 % Обновление исходных переменных (если нужно)
-MouseCenterX = MouseCenterX_smoothed;
-MouseCenterY = MouseCenterY_smoothed;
-MouseCenterZ = MouseCenterZ_smoothed;
+MouseCenterX = MouseCenterX_smoothed/10;
+MouseCenterY = MouseCenterY_smoothed/10;
+MouseCenterZ = MouseCenterZ_smoothed/10;
 
 % support plot (X,Y)
 h = figure('Position', [300 300 1000 1000]);
 set(gcf, 'DefaultAxesFontSize', 14);
-plot(MouseCenterX, MouseCenterY, 'b', 'LineWidth', 2); hold on;
+plot(MouseCenterX, MouseCenterY, '.b', 'LineWidth', 2); hold on;
 axis equal; 
 title(sprintf('3DMaze. %s. Tracking mouse in cm, (X,Y) plane', strrep(Filename, '_', '\_')), 'FontSize', 16);
 xlabel('X, cm', 'FontSize', 14);
@@ -578,28 +614,78 @@ saveas(h, sprintf('%s\\%s_Velocity.png', PathOut, Filename));
 saveas(h, sprintf('%s\\%s_Velocity.fig', PathOut, Filename));
 delete(h);
 
-% plot velocity
-h = figure('Position', [300 300 1000 1000]);
-set(gcf, 'DefaultAxesFontSize', 14);
-% Создаем scatter plot с цветом по скорости
-scatter(MouseCenterX, MouseCenterY, 40, Velocity, 'filled', 'Marker', 'o');
+% % plot velocity
+% h = figure('Position', [300 300 1000 1000]);
+% set(gcf, 'DefaultAxesFontSize', 14);
+% % Создаем scatter plot с цветом по скорости
+% scatter(MouseCenterX, MouseCenterY, 40, Velocity, 'filled', 'Marker', 'o');
+% hold on;
+% % Соединяем точки линиями (опционально)
+% % plot(MouseCenterX, MouseCenterY, '-k', 'LineWidth', 0.5); 
+% % Настройка colorbar
+% colormap jet;
+% c = colorbar;
+% c.Label.String = 'Скорость, см/с';
+% c.FontSize = 14;
+% % Настройки осей
+% xlabel('X, см', 'FontSize', 16);
+% ylabel('Y, см', 'FontSize', 16);
+% title(sprintf('3DM. %s. Track (velocity colored)',strrep(Filename, '_', '\_')), 'FontSize', 18);
+% grid on;
+% axis equal;
+% saveas(h, sprintf('%s\\%s_Velocity_track.png', PathOut, Filename));
+% saveas(h, sprintf('%s\\%s_Velocity_track.fig', PathOut, Filename));
+% delete(h);
+
+% Создаем 2D-гистограмму скорости
+% bin_x = discretize(MouseCenterX', edges{1});
+% bin_y = discretize(MouseCenterY', edges{2});
+
+% 2. Создание бинов с явным контролем границ
+x_edges = linspace(0, 70, 71); % 70 бинов = 71 edge
+y_edges = linspace(0, 68, 69);
+
+% 3. Альтернативный вариант discretize с включением правой границы
+bin_x = discretize(MouseCenterX', x_edges, 'IncludedEdge', 'right');
+bin_y = discretize(MouseCenterY', y_edges, 'IncludedEdge', 'right');
+
+valid = (bin_x >= 0) & (bin_y >= 0);
+bin_x = bin_x(valid);
+bin_y = bin_y(valid);
+
+speed_grid = accumarray([bin_x, bin_y], Velocity(valid), [70 68], @mean, NaN)';
+count_grid = accumarray([bin_x, bin_y], 1, [70 68], @sum, 0)';
+
+% Пустые бины (менее 5 точек) делаем NaN
+speed_grid(count_grid < 3) = NaN;
+
+% Визуализация
+figure('Position', [300 300 1000 1000], 'Color', 'w');
+set(groot, 'DefaultAxesFontSize', 18);
+ax = axes('Parent', gcf);
+set(ax, 'Color', 'w', 'FontSize', 18);
 hold on;
-% Соединяем точки линиями (опционально)
-plot(MouseCenterX, MouseCenterY, '-k', 'LineWidth', 0.5); 
-% Настройка colorbar
-colormap jet;
+
+h = imagesc(x_edges, y_edges, speed_grid);
+colormap('jet');
+set(h, 'AlphaData', ~isnan(speed_grid));
+
+axis([-1 71 -1 71]);
+axis xy;
+axis equal;  % Сохраняем пропорции осей
+
 c = colorbar;
-c.Label.String = 'Скорость, см/с';
-c.FontSize = 14;
-% Настройки осей
-xlabel('X, см', 'FontSize', 16);
-ylabel('Y, см', 'FontSize', 16);
-title(sprintf('3DM. %s. Track (velocity colored)',strrep(Filename, '_', '\_')), 'FontSize', 18);
+c.Label.String = 'Скорость, см/c';
+c.FontSize = 16;
+
+xlabel('X, см', 'FontSize', 16, 'FontWeight', 'bold');
+ylabel('Y, см', 'FontSize', 16, 'FontWeight', 'bold');
+title(sprintf('3DM. %s. Velocity HeatMap', strrep(Filename, '_', '\_')), 'FontSize', 18, 'FontWeight', 'bold');
 grid on;
-axis equal;
+set(gca, 'LineWidth', 1);
 saveas(h, sprintf('%s\\%s_Velocity_track.png', PathOut, Filename));
 saveas(h, sprintf('%s\\%s_Velocity_track.fig', PathOut, Filename));
-delete(h);
+close(gcf);
 
 %% kinematogramma calculation 
 
@@ -677,10 +763,12 @@ if PlotOption.main
     open(v);
     h = waitbar(1/n_frames, sprintf('Plotting video, frame %d of %d', 0,  n_frames));
     %     for k=1:n_frames
-    for k=5000:5200
-        %         if ~mod(k,100)
+    start_frame = 1;
+    duration_second = 10;
+    for k=start_frame:start_frame + round(Options.FrameRate)*duration_second
+        if ~mod(k,10)
             h = waitbar(k/n_frames, h, sprintf('Plotting video, frame %d of %d', k,  n_frames));
-%         end
+        end
         RealFrame = read(readerobj,k+StartTime-1);
         
         % points of bodyparts in a moving frame of reference
@@ -1023,8 +1111,8 @@ end
 
 % Разделение на 3 кластера по высоте
 % Находим минимальное и максимальное значения
-min_z = min(MouseCenterZ);
-max_z = max(MouseCenterZ);
+min_z = 0;
+max_z = 57;
 
 % Вычисляем границы кластеров
 bound1 = min_z + (max_z - min_z)/3;
@@ -1109,18 +1197,20 @@ delete(h);
 for line = 1:size(Acts,2)
     [~, Acts(line).ActNumber, Acts(line).ActPercent, Acts(line).ActDistr,~,~] = RefineLine(Acts(line).ActArrayRefine, 0,0);
     Acts(line).ActPercent = round(Acts(line).ActPercent/n_frames*100,2);
-    Acts(line).ActMeanTime = round(mean(Acts(line).ActDistr),2)/Options.FrameRate;
-    Acts(line).ActMeanSTDTime = round(std(Acts(line).ActDistr),2)/Options.FrameRate;
-    Acts(line).ActMedianTime = round(median(Acts(line).ActDistr),2)/Options.FrameRate;
-    Acts(line).ActMedianMADTime = round(mad(Acts(line).ActDistr),2)/Options.FrameRate;
-    Acts(line).Distance = round(mean(BodyPartsTraces(Point.Center).VelocitySmoothed(logical(Acts(line).ActArrayRefine)))*time(end)*Acts(line).ActPercent/10000,2);
+    Acts(line).ActMeanTime = round(mean(Acts(line).ActDistr)/Options.FrameRate,2);
+    Acts(line).ActMeanSTDTime = round(std(Acts(line).ActDistr)/Options.FrameRate,2);
+    Acts(line).ActMedianTime = round(median(Acts(line).ActDistr)/Options.FrameRate,2);
+    Acts(line).ActMedianMADTime = round(mad(Acts(line).ActDistr)/Options.FrameRate,2);
+    
+    Acts(line).Distance = round(mean(Velocity(logical(Acts(line).ActArrayRefine)))*n_frames/Options.FrameRate*Acts(line).ActPercent/100);
+    
     Acts(line).ActMeanDistance = round(Acts(line).Distance/Acts(line).ActNumber,2);
     Acts(line).ActVelocity = round(Acts(line).Distance/(Acts(line).ActMeanTime*Acts(line).ActNumber)*100,2);
     Acts(line).ActDuration = round(Acts(line).ActPercent*session.duration_total/100,2);
-%     histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
-%     title(sprintf('Histogram of acts duration time: %s', strrep(string(Acts(line).ActName), '_', '\_')));
-%     saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
-%     delete(gcf);
+    histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
+    title(sprintf('Histogram of acts duration time: %s', strrep(string(Acts(line).ActName), '_', '\_')));
+    saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
+    delete(gcf);
 end
 
 h=figure;
@@ -1154,7 +1244,7 @@ delete(h);
 
 if PlotOption.acts
     colorbase = jet(BodyPartsNumber);
-    MaxPoints = 200;
+    MaxPoints = 1000;
 %     for act = 1:size(Acts,2)
     for act = [3 7 12]
 

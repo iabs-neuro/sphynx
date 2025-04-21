@@ -82,7 +82,7 @@ behavior_act_params = struct(...
 ... 
 'mouse_goes_straight',        	["ActPercent" "Distance"], ...                  % животное перемещается в плоскости (X,Y):             	[процент, дистанция]
 'mouse_goes_up',                ["ActPercent" "Distance"], ...                  % животное перемещается с набором высоты:             	[процент, дистанция]
-'mouse_goes_down',              ["ActPercent" "Distance"] ...                  % животное перемещается со снижением высоты:          	[процент, дистанция]
+'mouse_goes_down',              ["ActPercent" "Distance"] ...                   % животное перемещается со снижением высоты:          	[процент, дистанция]
     );
 
 
