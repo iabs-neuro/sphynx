@@ -4,7 +4,7 @@ ExpID = '3DM';
 
 PathVideo = 'w:\Projects\3DM\BehaviorData\2_Combined\';
 PathDLC = 'w:\Projects\3DM\BehaviorData\4_DLC\';
-PathOut = 'w:\Projects\3DM\BehaviorData\5_Behavior\';
+PathOut = 'w:\Projects\3DM\BehaviorData\5_Behavior_2\';
 PathPreset = 'w:\Projects\3DM\BehaviorData\3_Preset\';
 
 % for ALL DAYS
@@ -30,7 +30,7 @@ FileNames = {
 FilesNumber = length(FileNames);
 
 % incorrect framerate
-filess = [16 23 30 37 49 56 58 69 71 78 90 97 104 111];
+% filess = [16 23 30 37 49 56 58 69 71 78 90 97 104 111];
 %% main part
 
 Distance = zeros(1,FilesNumber);
@@ -44,8 +44,8 @@ Height = zeros(1,FilesNumber);
 AllActs = struct('SessionName', '',  'Acts', []);
 
 %%
-% for file = 91:length(FileNames)
-for file = filess
+for file = 6:length(FileNames)
+% for file = filess
     FilenameVideo = sprintf('3DM_%s.mp4', FileNames{file});
     FilenameDLC = sprintf('3DM_%sDLC_Resnet101_3DMMar25shuffle3_snapshot_370.csv',FileNames{file});
     FilenamePreset = '3DM_Tunnels_Preset2.mat';
