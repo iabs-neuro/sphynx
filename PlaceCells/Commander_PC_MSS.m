@@ -49,7 +49,7 @@ params_main = struct(...
         ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SYNCHRONIZATION OPTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         'CorrectionTrackMode', 'Bonsai',...             % different modes for correction syncronization of behavior and calcium data {'NVista', 'FC', 'Bonsai', 'none'}
         'coordinates_correction', 0,...                 % 1 if you need in interpolation and smoothing of videotracking data
-        'test_mode', 0,...                             % 0 for all cells analysis else number of n first cells
+        'test_mode', 0,...                              % 0 for all cells analysis else number of n first cells
         'start_frame', 1,...                            % frame of the first frame for analysis
         'app_frame', 1,...                              % frame of the first frame "mouse in cage" (at last paradigm od analysis - is the same frame like a srart
         'end_frame', 0,...                              % frame of the last frame for analysis
@@ -104,7 +104,7 @@ params_main = struct(...
 
 %% main
 
-for file = 115:length(FileNames)
+for file = 1:length(FileNames)
     
     fprintf('Processing of %s_%s\n', ExpID, FileNames{file});
     

@@ -8,11 +8,12 @@ function [FieldsIC] = PlaceFieldAnalyzerMSS(params_paths, params_main)
 % 04.24 spikes only in movement added
 % 12.24 structs params_paths, params_main, session, mouse and cell added
 
+
 %% manual defining parameters section
-if ~exist('params_paths', 'var') || isempty(params_paths)
+if ~exist('params_paths', 'var') || check_paths_in(params_paths)
     
     % define path for outputs
-    params_paths.pathOut = uigetdir('w:\Projects\MSS\ActivityData\PlaceCells\', 'Please specify the path to save the data');
+    params_paths.pathOut = uigetdir('w:\Projects\MSS\ActivityData\PlaceCells2\', 'Please specify the path to save the data');
     
     %loading videotracking
     [params_paths.filenameWS, params_paths.pathWS]  = uigetfile('*.mat','Please specify the mat-file from behavior analysis','w:\Projects\MSS\ActivityData\Behav_mat\');
@@ -44,7 +45,7 @@ if ~exist('params_main', 'var') || isempty(params_main)
         'PC_criterion', 'MI_vanila',...                 % method for criterion of Place Cells: 'Peak' - schuffled peak of activity, 'MI_vanila' - Mutual Information for cells,  'MI_vanila_fields' - Mutual Information for fields
         'bin_size_cm', 4,...                            % size of bins in cm
         'heatmap_border', 1,...                         % additional bins number on the edges of the HeatMaps
-        'S_sigma', 2.29,...                             % criteria for informative place cell(1.65 for p = 0.05, 2.29 for p = 0.01)
+        'S_sigma', 2.29,...                             % criteria for informative place cell(1.65 for p = 0.05, 2.29 for p = 0.01, 3,09 for p = 0.001)
         'N_shift', 1000,...                             % number of shift for random distribution
         'shift', 0.9,...                                % percent of all time occupancy for random shift
         'kernel_opt', struct(...
@@ -52,7 +53,7 @@ if ~exist('params_main', 'var') || isempty(params_main)
         'big', struct('size', 5, 'sigma', 1.5)),...     % gaussian kernel for maps smoothing
         'smooth_freq_mode', 1,...                       % 1 for smoothing activity map during MI calculation
         ...
-        'vel_opt', 0,...                                % all maps and MI calculated with respond to velocity threshold
+        'vel_opt', 0,...                                % 1 all maps and MI calculated with respond to velocity threshold
         'vel_border', 5,...                             % velocity threshold in cm/s
         ...
         'min_spike', 1,...                              % minimum number of spikes for active cell
@@ -146,10 +147,10 @@ mouse = struct(...
 'time_smoothed', []), ...               % ocuppancy map, restricted ans smoothed 
 'mask_t', [], ...                       % mask for all maps in related to unvisited bins
 'max_bin', struct( ...                  % struct of maxima in bins of different maps:
-'spike', 0, ...                        % maximum in bins of all spikes maps
-'spike_refined', 0, ...                % maximum in bins of all refined spikes maps
-'firingrate', 0, ...                   % maximum in bins of all firing rate maps
-'firingrate_refined', 0), ...          % maximum in bins of all refined firing rate maps
+'spike', 0, ...                         % maximum in bins of all spikes maps
+'spike_refined', 0, ...                 % maximum in bins of all refined spikes maps
+'firingrate', 0, ...                    % maximum in bins of all firing rate maps
+'firingrate_refined', 0), ...           % maximum in bins of all refined firing rate maps
 ...
 ...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CELL INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ...%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CELL. GENERAL %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -403,7 +404,7 @@ save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_pat
 %% description and defining struct CELL
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MOUSE INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 'exp'                         - experiment identifier (e.g. 'FOF', 'NOF', '3DM')
+% 'exp'                         - experiment identifier (e.g. 'FOF', 'NOF', '3DM' 'MSS')
 % 'group'                       - experimental group of animal (e.g. 'Control', 'FAD')
 % 'id'                          - mouse identifier (e.g. 'F01', 'H39')
 % 'day'                         - day number of registration (e.g. '1D', '6D')
