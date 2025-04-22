@@ -83,7 +83,8 @@ ExtraLinesNumber = 0;
 BodyPartsTraces = struct('BodyPartName', [],'TraceOriginal', [],'TraceLikelihood', [], 'TraceInterpolated', [], 'TraceSmoothed', [],'PercentNaN', [],'PercentLikeliHoodSubThreshold', [],'AverageDistance', [],'AverageSpeed', []);
 BodyPartsTracesMainX = zeros(BodyPartsNumber,n_frames);
 BodyPartsTracesMainY = zeros(BodyPartsNumber,n_frames);
-for part=1:BodyPartsNumber
+% for part=1:BodyPartsNumber
+for part=2:13
     BodyPartsTraces(part).BodyPartName = BodyPartsNames{part};
     BodyPartsTraces(part).TraceOriginal.X = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)));
     BodyPartsTraces(part).TraceOriginal.Y = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+1));
@@ -103,10 +104,6 @@ for part=1:BodyPartsNumber
 
      TempArrayX(BodyPartsTraces(part).TraceLikelihood < LikelihoodThreshold) = 0;
      TempArrayY(BodyPartsTraces(part).TraceLikelihood < LikelihoodThreshold) = 0;
-
-% 07.11.24 3dmaze improved
-    TempArrayX(TempArrayX>Options.Width*Options.x_kcorr) = Options.Width;
-    TempArrayY(TempArrayY>Options.Height) = Options.Height;
     
     %TempArrayX(TempArrayX<10) = 0;
     %TempArrayY(TempArrayY<10) = 0;
@@ -140,43 +137,43 @@ for part=1:BodyPartsNumber
             BodyPartsTracesMainY(part,:) = BodyPartsTraces(part).TraceSmoothed.Y;
     end
     
-%     histogram(BodyPartsTraces(part).TraceLikelihood, ceil(sqrt(length(BodyPartsTraces(part).TraceLikelihood))+1), 'BinMethod','fd');
-%     set(gca, 'YScale', 'log');
-%     title(sprintf('Body part: %s %s. Histogram of Likelihood log', IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     saveas(gcf, sprintf('%s\\BodyPartsTraces\\%s_%s_Likelihood_log.fig', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     saveas(gcf, sprintf('%s\\BodyPartsTraces\\%s_%s_Likelihood_log.png', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     delete(gcf);
-%     
-%     histogram(BodyPartsTraces(part).TraceLikelihood, ceil(sqrt(length(BodyPartsTraces(part).TraceLikelihood))+1), 'BinMethod','fd');
-%     set(gca, 'YScale');
-%     title(sprintf('Body part: %s %s. Histogram of Likelihood', IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     saveas(gcf, sprintf('%s\\BodyPartsTraces\\%s_%s_Likelihood.fig', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     saveas(gcf, sprintf('%s\\BodyPartsTraces\\%s_%s_Likelihood.png', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     delete(gcf);
-%     
-%     h = figure('Position', Screensize);
-%     plot(time,BodyPartsTraces(part).TraceOriginal.X./pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
-%     plot(time,BodyPartsTraces(part).TraceInterpolated.X./pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
-%     plot(time,BodyPartsTraces(part).TraceSmoothed.X./pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
-%     legend({'Original','Interpolated','Smoothed'});
-%     title(sprintf('Body part: %s %s. X coordinate',IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     xlabel('Time, s');
-%     ylabel('Coordinate, cm');
-%     saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_X_coordinate.png', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_X_coordinate.fig', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     delete(h);    
-%     
-%     h = figure('Position', Screensize);
-%     plot(time,BodyPartsTraces(part).TraceOriginal.Y./pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
-%     plot(time,BodyPartsTraces(part).TraceInterpolated.Y./pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
-%     plot(time,BodyPartsTraces(part).TraceSmoothed.Y./pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
-%     legend({'Original','Interpolated','Smoothed'});
-%     title(sprintf('Body part: %s %s. Y coordinate',IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     xlabel('Time, s');
-%     ylabel('Coordinate, cm');
-%     saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_Y_coordinate.png', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_Y_coordinate.fig', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-%     delete(h);
+    histogram(BodyPartsTraces(part).TraceLikelihood, ceil(sqrt(length(BodyPartsTraces(part).TraceLikelihood))+1), 'BinMethod','fd');
+    set(gca, 'YScale', 'log');
+    title(sprintf('Body part: %s %s. Histogram of Likelihood log', IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    saveas(gcf, sprintf('%s\\BodyPartsTraces\\%s_%s_Likelihood_log.fig', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    saveas(gcf, sprintf('%s\\BodyPartsTraces\\%s_%s_Likelihood_log.png', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    delete(gcf);
+    
+    histogram(BodyPartsTraces(part).TraceLikelihood, ceil(sqrt(length(BodyPartsTraces(part).TraceLikelihood))+1), 'BinMethod','fd');
+    set(gca, 'YScale');
+    title(sprintf('Body part: %s %s. Histogram of Likelihood', IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    saveas(gcf, sprintf('%s\\BodyPartsTraces\\%s_%s_Likelihood.fig', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    saveas(gcf, sprintf('%s\\BodyPartsTraces\\%s_%s_Likelihood.png', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    delete(gcf);
+    
+    h = figure('Position', Screensize);
+    plot(time,BodyPartsTraces(part).TraceOriginal.X./pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
+    plot(time,BodyPartsTraces(part).TraceInterpolated.X./pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
+    plot(time,BodyPartsTraces(part).TraceSmoothed.X./pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
+    legend({'Original','Interpolated','Smoothed'});
+    title(sprintf('Body part: %s %s. X coordinate',IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    xlabel('Time, s');
+    ylabel('Coordinate, cm');
+    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_X_coordinate.png', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_X_coordinate.fig', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    delete(h);    
+    
+    h = figure('Position', Screensize);
+    plot(time,BodyPartsTraces(part).TraceOriginal.Y./pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
+    plot(time,BodyPartsTraces(part).TraceInterpolated.Y./pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
+    plot(time,BodyPartsTraces(part).TraceSmoothed.Y./pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
+    legend({'Original','Interpolated','Smoothed'});
+    title(sprintf('Body part: %s %s. Y coordinate',IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    xlabel('Time, s');
+    ylabel('Coordinate, cm');
+    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_Y_coordinate.png', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_Y_coordinate.fig', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
+    delete(h);
 %     
 end
 %% 

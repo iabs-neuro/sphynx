@@ -8,6 +8,7 @@ if nargin<5
     [filename, path]  = uigetfile('*.*','Select video file','g:\_Projects\_OF [2023]\VT_original\');     
     pathout = path;
     method = 'division';
+    lvl = 0;
 end    
 
 FullPath = fullfile(path, filename);

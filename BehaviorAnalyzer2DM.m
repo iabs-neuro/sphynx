@@ -1,6 +1,6 @@
-function [Acts, BodyPartsTraces, Point] = BehaviorAnalyzerMSS(PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut, StartTime, EndTime, PathPreset, FilenamePreset)
-% VVP. Deep Behavior analyses tool
-% 18.09.24 Novelty Open Fields experiment, square arena, 4 objects
+function [Acts, BodyPartsTraces, Point, Options] = BehaviorAnalyzer2DM(PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut,StartTime, EndTime, PathPreset, FilenamePreset)
+% VVP. GAR. Deep Behavior analyses tool
+% 27.03.25 2DM OF experiment
 
 % Input description
 % PathVideo - path of video file
@@ -34,7 +34,7 @@ DegreeSmoothSGolayDefault = 3;          % length of window for smoothing
 BodyPartsCenterNames = {'mass centre' 'mass center' 'bodycenter' 'center'};
 BodyPartsTailbaseNames = {'tailbase' 'Tailbase' 'Tail base' 'tail base'};
 
-PlotOption.main = 0;
+PlotOption.main = 1;
 PlotOption.acts = 0;
 PlotOption.track = 0;
 
@@ -49,15 +49,15 @@ AngleDop = -pi/2;
 
 if nargin<9
     %% loading video and videotracking files
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\MSS\Behavior\2_Combined\');
-    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','w:\Projects\MSS\Behavior\3_DLC\');
-    PathOut = uigetdir('w:\Projects\MSS\Behavior\5_Behavior\', 'Pick a Directory for Outputs');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','j:\3dm\Comparasion\Open field\2_Combine\');
+    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','j:\3dm\Comparasion\Open field\4_DLC\');
+    PathOut = uigetdir('j:\3dm\Comparasion\Open field\5_Behavior\', 'Pick a Directory for Outputs');
     
     % loading preset file
     answer = questdlg('Do you have preset file?', 'Uploading files', 'Yes','No','Yes');
     switch answer
         case 'Yes'
-            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','w:\Projects\MSS\Behavior\4_Presets\');
+            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','j:\3dm\Comparasion\Open field\3_Preset\');
         case 'No'
             [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo,PathVideo,PathOut);
     end
@@ -74,8 +74,8 @@ end
 load(sprintf('%s//%s', PathPreset, FilenamePreset), 'Options','Zones');
 
 Options.MiddleCenterCm = 20;
-Options.StatusBodyPartThreshold = 98;                                   % threshold for missing bodyparts
-Options.LikelihoodThreshold = 0.6;
+Options.StatusBodyPartThreshold = 95;                                   % threshold for missing bodyparts
+Options.LikelihoodThreshold = 0.1;
 
 % reading video file
 readerobj = VideoReader(sprintf('%s%s', PathVideo, FilenameVideo));
@@ -159,7 +159,7 @@ n_frames = EndTime-StartTime+1;                                 % number of fram
 time = (1:n_frames)/Options.FrameRate;
 frames = linspace(1, n_frames, n_frames);
 
-save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
+% save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% all body parts detection
 
@@ -184,22 +184,22 @@ for part=1:BodyPartsNumber
     
     TempArrayX(TempArrayX<0) = 0;
     TempArrayY(TempArrayY<0) = 0;
-    
+
     TempArrayX(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold) = 0;
     TempArrayY(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold) = 0;
     
     BodyPartsTraces(part).PercentNaN = mean([round(sum(isnan(BodyPartsTraces(part).TraceOriginal.X))/n_frames*100,2) round(sum(isnan(BodyPartsTraces(part).TraceOriginal.Y))/n_frames*100,2)]);
     BodyPartsTraces(part).PercentLikeliHoodSubThreshold = round(sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100,2);
-    
+
     %% ToDo threshold
-    if sum(BodyPartsTraces(part).TraceLikelihood < 0.1)/n_frames*100 > 90
-        disp(['Bodypart ', BodyPartsTraces(part).BodyPartName, ' not found. Percent undetected timestamps: ', num2str(sum(BodyPartsTraces(part).TraceLikelihood < 0.1)/n_frames*100)]);
+    if sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100 > Options.StatusBodyPartThreshold
+        disp(['Bodypart ', BodyPartsTraces(part).BodyPartName, ' not found. Percent undetected timestamps: ', num2str(sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100)]);
         BodyPartsTraces(part).Status = 'NotFound';
         continue;
     else
         BodyPartsTraces(part).Status = 'Good';
     end
-    
+
     TempArrayInt.X = interp1(frames(TempArrayX ~=0), TempArrayX(TempArrayX ~=0), find(TempArrayX == 0), 'pchip');
     TempArrayInt.Y = interp1(frames(TempArrayY ~=0), TempArrayY(TempArrayY ~=0), find(TempArrayY == 0), 'pchip');
     
@@ -276,7 +276,7 @@ BodyPartsTracesMainY(points_for_delete,:) = [];
 BodyPartsTraces(points_for_delete) = [];
 BodyPartsNumber = length(BodyPartsNames);
 
-% save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
+save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% calculation kinematogramma
 
@@ -382,8 +382,8 @@ if PlotOption.main
     v.FrameRate = Options.FrameRate;
     open(v);
     h = waitbar(1/n_frames, sprintf('Plotting video, frame %d of %d', 0,  n_frames));
-%     for k=1:n_frames
-    for k=100:1100
+    for k=1:n_frames
+%     for k=1000:3000
 %         if ~mod(k,100)
             h = waitbar(k/n_frames, h, sprintf('Plotting video, frame %d of %d', k,  n_frames));
 %         end
@@ -451,7 +451,7 @@ saveas(h, sprintf('%s\\%s_BodyParts_speeds.fig', PathOut,Filename));
 saveas(h, sprintf('%s\\%s_BodyParts_speeds.png', PathOut,Filename));
 delete(h);
 
-% save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
+save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% Acts definition
 Acts = struct('ActName', [], 'ActArray', [],'ActArrayRefine', [], 'ActNumber', [], 'ActPercent', [], 'ActDistr', [], 'ActMeanTime', [],'ActMeanSTDTime', [], 'ActMedianTime', [], 'ActMedianMADTime', []);
@@ -504,7 +504,7 @@ switch FreezingMode
     case 'NoseAndCenter'
         Acts(4).ActArray = double((BodyPartsTraces(Point.Nose).VelocitySmoothed < Options.velocity_rest*2).*(BodyPartsTraces(Point.Center).VelocitySmoothed < Options.velocity_rest));
     case 'HeadAndCenter'
-        Acts(4).ActArray = double((BodyPartsTraces(Point.HeadCenter).VelocitySmoothed < Options.velocity_rest).*(BodyPartsTraces(Point.Center).VelocitySmoothed < Options.velocity_rest));      
+        Acts(4).ActArray = double((BodyPartsTraces(Point.HeadCenter).VelocitySmoothed < Options.velocity_rest).*(BodyPartsTraces(Point.Center).VelocitySmoothed < Options.velocity_rest));
 end
 [Acts(4).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(4).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
 Acts(4).ActArrayRefine = Acts(4).ActArrayRefine';
@@ -534,6 +534,7 @@ end
 Acts(5).ActArrayRefine = Acts(5).ActArrayRefine';
 
 % correct headdirection
+Point.HeadCenter = find(strcmp(BodyPartsNames, "headcenter"),1);
 CenterHead.X = BodyPartsTracesMainX(Point.HeadCenter,:);
 CenterHead.Y = BodyPartsTracesMainY(Point.HeadCenter,:);
 
@@ -554,11 +555,29 @@ ylocomotion = MouseCenterY'.*Acts(3).ActArrayRefine;
 xlocomotion(xlocomotion == 0) = NaN;
 ylocomotion(ylocomotion == 0) = NaN;
 
+
 %% Task-specific Acts 
 
-ZonesOption.NameZone = {'ArenaCornersAllRealOut' 'ArenaWallsAllRealOut' 'Center'};
+% middle-area defining
+Options.MiddleCenterCm = 20;
+Options.MiddleCenterPxl = Options.MiddleCenterCm*Options.pxl2sm;
+
+TempMask = single(~Zones(strcmp({Zones.name}, 'Center')).maskfilled);
+TempMask = bwdist(TempMask);
+TempMask(TempMask >= Options.MiddleCenterPxl) = 0;
+TempMask(TempMask>0) = 1;
+
+Zones(end+1).name = 'CenterMiddle';
+Zones(end).type = 'area';
+Zones(end).maskfilled = TempMask;
+
+Zones(end+1).name = 'CenterTrue';
+Zones(end).type = 'area';
+Zones(end).maskfilled = single(Zones(strcmp({Zones.name}, 'Center')).maskfilled) - single(Zones(strcmp({Zones.name}, 'CenterMiddle')).maskfilled);
+
+ZonesOption.NameZone = {'WallsAndCornersRealOut' 'CenterMiddle' 'CenterTrue'};
 ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter'};
-ZonesOption.NameAct = {'corners' 'walls' 'center'};
+ZonesOption.NameAct = {'walls' 'middle_zone' 'center'};
 ZonesOption.NumBodyPart = [Point.Center Point.Center Point.Center];
 
 ZonesOption.NumZone = zeros(1,length(ZonesOption.NameZone));
@@ -571,12 +590,30 @@ for zone = 1:length(ZonesOption.NameZone)
     Acts(end).Zone = ZonesOption.NumZone(zone);
     Acts(end).ActArray = zeros(n_frames,1);
     for i=1:n_frames
-        if Zones(ZonesOption.NumZone(zone)).maskfilled(round(BodyPartsTracesMainY(ZonesOption.NumBodyPart(zone),i)), round(BodyPartsTracesMainX(ZonesOption.NumBodyPart(zone),i)))
+        if Zones(ZonesOption.NumZone(zone)).maskfilled(round(BodyPartsTracesMainY(ZonesOption.NumBodyPart(zone),i)), round(BodyPartsTracesMainX(ZonesOption.NumBodyPart(zone),i)/Options.x_kcorr))
             Acts(end).ActArray(i,1) = 1;
         end
     end
     [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
     Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
+end
+
+% rests in zones acts
+for act = 1:length(Acts)
+    if ~isempty(Acts(act).Zone)
+        Acts(end+1).ActName = ['rest_in_' Acts(act).ActName];
+        Acts(end).ActArray = Acts(strcmp({Acts.ActName}, 'rest')).ActArrayRefine.*Acts(act).ActArrayRefine;
+        [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
+        Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
+        Acts(end).Zone = Acts(act).Zone;
+        
+        Acts(end+1).ActName = ['loc_in_' Acts(act).ActName];
+        Acts(end).ActArray = Acts(strcmp({Acts.ActName}, 'locomotion')).ActArrayRefine.*Acts(act).ActArrayRefine;
+        [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
+        Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
+        Acts(end).Zone = Acts(act).Zone;
+        
+    end
 end
 
 %% act's statistics
@@ -589,12 +626,13 @@ for line = 1:size(Acts,2)
     Acts(line).ActMedianTime = round(median(Acts(line).ActDistr),2)/Options.FrameRate;
     Acts(line).ActMedianMADTime = round(mad(Acts(line).ActDistr),2)/Options.FrameRate;
     Acts(line).Distance = round(mean(BodyPartsTraces(Point.Center).VelocitySmoothed(logical(Acts(line).ActArrayRefine)))*time(end)*Acts(line).ActPercent/10000,2);
-    Acts(line).ActMeanDistance = Acts(line).Distance/Acts(line).ActNumber;
-    Acts(line).ActVelocity = Acts(line).Distance/(Acts(line).ActMeanTime*Acts(line).ActNumber)*100;
-%     histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
-%     title(sprintf('Histogram of acts duration time: %s', string(Acts(line).ActName)));
-%     saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
-%     delete(gcf);
+    Acts(line).ActMeanDistance = round(Acts(line).Distance/Acts(line).ActNumber,2);
+    Acts(line).ActVelocity = round(Acts(line).Distance/(Acts(line).ActMeanTime*Acts(line).ActNumber)*100,2);
+    Acts(line).ActDuration = round(Acts(line).ActPercent*Options.Duration/100,2);
+    histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
+    title(sprintf('Histogram of acts duration time: %s', string(Acts(line).ActName)));
+    saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
+    delete(gcf);
 end
 
 h=figure;
@@ -627,10 +665,11 @@ delete(h);
 %% make separate acts videos
 
 if PlotOption.acts
-    MaxPoints = 2000;
-    
-%     for act = 1:size(Acts,2)
-    for act = [5]
+
+    MaxPoints = 20000000000;
+    for act = 1:size(Acts,2)
+%     for act = [10 12 14]
+
         fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
         v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
         v.FrameRate = Options.FrameRate;

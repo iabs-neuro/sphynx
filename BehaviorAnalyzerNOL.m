@@ -1,4 +1,4 @@
-function [Acts, BodyPartsTraces] = BehaviorAnalyzerBOF(PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut,StartTime, EndTime, PathPreset, FilenamePreset)
+function [Acts, BodyPartsTraces, Point] = BehaviorAnalyzerNOL(PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut, StartTime, EndTime, PathPreset, FilenamePreset)
 % VVP. Deep Behavior analyses tool
 
 % Input description
@@ -21,52 +21,42 @@ function [Acts, BodyPartsTraces] = BehaviorAnalyzerBOF(PathVideo, FilenameVideo,
 % extraction first
 % 'NT' for new track, manual parameters selection
 
-% all parameters
+% Parameters description and defining
+
+TraceOption = 'Smoothed';               % {'Original' 'Interpolated' 'Smoothed'} mode for timeseries processing Track2Acts
+FreezingMode = 'HeadAndCenter';         % {'AllBodyParts' 'NoseAndCenter' 'HeadAndcenter'}  mode for act freezing calculation
+RearMode = 'TailbasePaws';              % {'TailbasePaws' 'AllBodyParts'} mode for act rear calculation
+RearsThreshold.AllBodyParts = 170;      % threshold for rears definition, mode 'AllBodyParts'
+RearsThreshold.TailbasePawscm = 3.6;    % threshold for rears definition, mode 'TailbasePaws' (may be 2.3 is better)
+DegreeDerivatives = 3;                  % how many derivatives of coordinates are needed
+DegreeSmoothSGolayDefault = 3;          % length of window for smoothing
 BodyPartsCenterNames = {'mass centre' 'mass center' 'bodycenter' 'center'};
 BodyPartsTailbaseNames = {'tailbase' 'Tailbase' 'Tail base' 'tail base'};
-BodyPartsNoseNames = {'nose', 'Nose'};
-Point.LeftBodyCenter = 8;
-Point.RightBodyCenter = 9;
-Point.LeftHindLimb = 10;
-Point.RightHindLimb = 11;
-Point.LeftEar = 3;
-Point.RightEar = 4;
-TraceOption = 'Smoothed';           % 'Original' or 'Interpolated' or 'Smoothed'
-FreezingMode = 'NoseAndCenter';     % 'AllBodyParts' or 'NoseAndCenter'
-RearMode = 'TailbasePaws';          % 'TailbasePaws' or 'AllBodyParts'
-RearsThreshold.AllBodyParts = 170;
-RearsThreshold.TailbasePawscm = 3.6; % 2.3
-DegreeDerivatives = 3; % how many derivatives of coordinates are needed
-DegreeSmoothSGolayDefault = 3;
 
-% plot options
-% PlotOption.speed = 1;
-% PlotOption.space = 1;
-% PlotOption.acts = 1;
 PlotOption.main = 1;
+PlotOption.acts = 1;
+PlotOption.track = 1;
 
-% FontSize = 40;
 MarkSize = 3;
 LineWidth.Traces.Original = 2;
 LineWidth.Traces.Interpolated = 1.5;
 LineWidth.Traces.Smoothed = 1;
 VideoScale = 3;
-% VideoScaleV = 1.5;
 AngleDop = -pi/2;
 
 %% loading all data
 
 if nargin<9
     %% loading video and videotracking files
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\BOF\BehaviorData\2_Combined\');
-    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','w:\Projects\BOF\BehaviorData\3_DLC\');
-    PathOut = uigetdir('w:\Projects\BOF\BehaviorData\5_Behavior\', 'Pick a Directory for Outputs');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\NOL\BehaviorData\1_Raw\');
+    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','w:\Projects\NOL\BehaviorData\2_DLC\');
+    PathOut = uigetdir('w:\Projects\NOL\BehaviorData\4_Behavior\', 'Pick a Directory for Outputs');
     
     % loading preset file
     answer = questdlg('Do you have preset file?', 'Uploading files', 'Yes','No','Yes');
     switch answer
         case 'Yes'
-            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','w:\Projects\BOF\BehaviorData\4_Presets\');
+            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','w:\Projects\NOL\BehaviorData\3_Preset\');
         case 'No'
             [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo,PathVideo,PathOut);
     end
@@ -81,10 +71,15 @@ end
 
 % reading preset file
 load(sprintf('%s//%s', PathPreset, FilenamePreset), 'Options','Zones','ArenaAndObjects');
-Options.EnablePointThreshold = 90;
+
+Options.MiddleCenterCm = 20;
+Options.StatusBodyPartThreshold = 98;                                   % threshold for missing bodyparts
+Options.LikelihoodThreshold = 0.6;
 
 % reading video file
 readerobj = VideoReader(sprintf('%s%s', PathVideo, FilenameVideo));
+
+Options.FrameRate = readerobj.FrameRate;
 
 % reading videotracking file
 file = readtable(sprintf('%s%s', PathDLC,FilenameDLC));
@@ -103,8 +98,9 @@ end
 
 switch Options.ExperimentType
     % for DLC data
-    case {'BowlsOpenField','Novelty OF','Holes Track','Odor Track','Freezing Track','New Track','Complex Context','NOL','OF_Obj'}
-        NamesDLC = strsplit(fileDLC{2},',');
+    case {'3DM','BowlsOpenField','Novelty OF','Holes Track','Odor Track','Freezing Track','New Track','Complex Context','NOL','OF_Obj'}
+%         NamesDLC = strsplit(fileDLC{2},'.');
+        NamesDLC = fileDLC(2,:);
         BodyPartsNumber = (length(NamesDLC)-1)/3;
         BodyPartsNames = cell(1, BodyPartsNumber);
         BodyPartsOptions = zeros(1, BodyPartsNumber);
@@ -114,7 +110,8 @@ switch Options.ExperimentType
         end
     case 'Round Track'
         % for tracking markers data
-        NamesDLC = strsplit(fileDLC{1},',');
+%         NamesDLC = strsplit(fileDLC{1},',');
+        NamesDLC = fileDLC(2,:);
         BodyPartsNumber = length(NamesDLC)/2;
         BodyPartsNames = cell(1, BodyPartsNumber);
         BodyPartsOptions = zeros(1, BodyPartsNumber);
@@ -161,7 +158,7 @@ if EndTime == 0
     EndTime = size(file,1);
 end
 
-n_frames = EndTime-StartTime+1; % number of frames for pure experiment
+n_frames = EndTime-StartTime+1;                                 % number of frames for pure experiment
 time = (1:n_frames)/Options.FrameRate;
 frames = linspace(1, n_frames, n_frames);
 
@@ -169,31 +166,12 @@ save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% all body parts detection
 
-% костыль для минископных данных
-BodyPartsNumber =  13;
-BodyPartsNames(14) =  [];
-BodyPartsOptions(14) = [];
-
-% % костыль для БЕЗ минископных данных
-% BodyPartsNumber =  12;
-% BodyPartsNames(1) =  [];
-% BodyPartsOptions(1) = [];
-% BodyPartsNames(13) =  [];
-% BodyPartsOptions(13) = [];
-
 ExtraLinesNumber = 0;
-BodyPartsTraces = struct('BodyPartName', [],'TraceOriginal', [],'TraceLikelihood', [], 'TraceInterpolated', [], 'TraceSmoothed', [],'PercentNaN', [],'PercentLikeliHoodSubThreshold', [],'AverageDistance', [],'AverageSpeed', []);
+BodyPartsTraces = struct('BodyPartName', [], 'TraceOriginal', [],'TraceLikelihood', [], 'PercentNaN', [],'PercentLikeliHoodSubThreshold', [], 'Status', [], 'TraceInterpolated', [], 'TraceSmoothed', [], 'AverageDistance', [],'AverageSpeed', []);
 BodyPartsTracesMainX = zeros(BodyPartsNumber,n_frames);
 BodyPartsTracesMainY = zeros(BodyPartsNumber,n_frames);
 
 for part=1:BodyPartsNumber
-    
-    if part == 2
-        Options.LikelihoodThreshold = 0.2;
-    else
-        Options.LikelihoodThreshold = 0.95;
-    end
-    
     BodyPartsTraces(part).BodyPartName = BodyPartsNames{part};
     BodyPartsTraces(part).TraceOriginal.X = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)))*Options.x_kcorr;
     BodyPartsTraces(part).TraceOriginal.Y = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+1));
@@ -210,15 +188,23 @@ for part=1:BodyPartsNumber
     TempArrayX(TempArrayX<0) = 0;
     TempArrayY(TempArrayY<0) = 0;
     
-    BodyPartsTraces(part).PercentNaN.X = round(sum(isnan(BodyPartsTraces(part).TraceOriginal.X))/n_frames*100,2);
-    BodyPartsTraces(part).PercentNaN.Y = round(sum(isnan(BodyPartsTraces(part).TraceOriginal.Y))/n_frames*100,2);
-    BodyPartsTraces(part).PercentLikeliHoodSubThreshold = round(sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100,2);
-    
     TempArrayX(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold) = 0;
     TempArrayY(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold) = 0;
     
-    TempArrayInt.X = interp1(frames(TempArrayX ~=0), TempArrayX(TempArrayX ~=0), find(TempArrayX == 0),'pchip');
-    TempArrayInt.Y = interp1(frames(TempArrayY ~=0), TempArrayY(TempArrayY ~=0), find(TempArrayY == 0),'pchip');
+    BodyPartsTraces(part).PercentNaN = mean([round(sum(isnan(BodyPartsTraces(part).TraceOriginal.X))/n_frames*100,2) round(sum(isnan(BodyPartsTraces(part).TraceOriginal.Y))/n_frames*100,2)]);
+    BodyPartsTraces(part).PercentLikeliHoodSubThreshold = round(sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100,2);
+
+    %% ToDo threshold
+    if sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100 > Options.StatusBodyPartThreshold
+        disp(['Bodypart ', BodyPartsTraces(part).BodyPartName, ' not found. Percent undetected timestamps: ', num2str(sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100)]);
+        BodyPartsTraces(part).Status = 'NotFound';
+        continue;
+    else
+        BodyPartsTraces(part).Status = 'Good';
+    end
+    
+    TempArrayInt.X = interp1(frames(TempArrayX ~=0), TempArrayX(TempArrayX ~=0), find(TempArrayX == 0), 'pchip');
+    TempArrayInt.Y = interp1(frames(TempArrayY ~=0), TempArrayY(TempArrayY ~=0), find(TempArrayY == 0), 'pchip');
     
     TempArrayInt.X(TempArrayInt.X<1) = 1;
     TempArrayInt.Y(TempArrayInt.Y<1) = 1;
@@ -258,54 +244,49 @@ for part=1:BodyPartsNumber
             BodyPartsTracesMainY(part,:) = BodyPartsTraces(part).TraceSmoothed.Y;
     end
         
-    h = figure('Position', Screensize);
-    plot(time,BodyPartsTraces(part).TraceOriginal.X./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
-    plot(time,BodyPartsTraces(part).TraceInterpolated.X./Options.pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
-    plot(time,BodyPartsTraces(part).TraceSmoothed.X./Options.pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
-    legend({'Original','Interpolated','Smoothed'});
-    title(sprintf('Body part: %s. X coordinate',BodyPartsTraces(part).BodyPartName));
-    xlabel('Time, s');
-    ylabel('Coordinate, cm');
-    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.png', PathOut,BodyPartsTraces(part).BodyPartName));
-    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.fig', PathOut,BodyPartsTraces(part).BodyPartName));
-    delete(h);    
-    
-    h = figure('Position', Screensize);
-    plot(time,BodyPartsTraces(part).TraceOriginal.Y./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
-    plot(time,BodyPartsTraces(part).TraceInterpolated.Y./Options.pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
-    plot(time,BodyPartsTraces(part).TraceSmoothed.Y./Options.pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
-    legend({'Original','Interpolated','Smoothed'});
-    title(sprintf('Body part: %s. Y coordinate',BodyPartsTraces(part).BodyPartName));
-    xlabel('Time, s');
-    ylabel('Coordinate, cm');
-    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_Y_coordinate.png', PathOut,BodyPartsTraces(part).BodyPartName));
-    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_Y_coordinate.fig', PathOut,BodyPartsTraces(part).BodyPartName));
-    delete(h);
+    if PlotOption.track
+        h = figure('Position', Screensize);
+        plot(time,BodyPartsTraces(part).TraceOriginal.X./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
+        plot(time,BodyPartsTraces(part).TraceInterpolated.X./Options.pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
+        plot(time,BodyPartsTraces(part).TraceSmoothed.X./Options.pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
+        legend({'Original','Interpolated','Smoothed'});
+        title(sprintf('Body part: %s. X coordinate',BodyPartsTraces(part).BodyPartName));
+        xlabel('Time, s');
+        ylabel('Coordinate, cm');
+        saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.png', PathOut,BodyPartsTraces(part).BodyPartName));
+        saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.fig', PathOut,BodyPartsTraces(part).BodyPartName));
+        delete(h);
+        
+        h = figure('Position', Screensize);
+        plot(time,BodyPartsTraces(part).TraceOriginal.Y./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
+        plot(time,BodyPartsTraces(part).TraceInterpolated.Y./Options.pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
+        plot(time,BodyPartsTraces(part).TraceSmoothed.Y./Options.pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
+        legend({'Original','Interpolated','Smoothed'});
+        title(sprintf('Body part: %s. Y coordinate',BodyPartsTraces(part).BodyPartName));
+        xlabel('Time, s');
+        ylabel('Coordinate, cm');
+        saveas(h, sprintf('%s\\BodyPartsTraces\\%s_Y_coordinate.png', PathOut,BodyPartsTraces(part).BodyPartName));
+        saveas(h, sprintf('%s\\BodyPartsTraces\\%s_Y_coordinate.fig', PathOut,BodyPartsTraces(part).BodyPartName));
+        delete(h);
+    end
 end
 
-% BodyPartsNames(points_for_delete) = [];
-% BodyPartsOptions(points_for_delete) = [];
-% BodyPartsTracesMainX(points_for_delete,:) = [];
-% BodyPartsTracesMainY(points_for_delete,:) = [];
-% BodyPartsTraces(points_for_delete) = [];
-% BodyPartsNumber = length(BodyPartsNames);
+points_for_delete = find(strcmp({BodyPartsTraces.Status}, 'NotFound'));
+BodyPartsNames(points_for_delete) = [];
+BodyPartsOptions(points_for_delete) = [];
+BodyPartsTracesMainX(points_for_delete,:) = [];
+BodyPartsTracesMainY(points_for_delete,:) = [];
+BodyPartsTraces(points_for_delete) = [];
+BodyPartsNumber = length(BodyPartsNames);
 
-save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
-
-%% creat real trajectory for freezing track mode
-switch Options.ExperimentType
-    case 'Freezing Track'
-        [BodyPartsTracesMainX,BodyPartsTracesMainY] = TrackTransformer(ArenaAndObjects.point_x, ArenaAndObjects.point_y, BodyPartsTracesMainX, BodyPartsTracesMainY, Options);
-end
+% save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% calculation kinematogramma
 
-% searching central and tailbase bodyparts
-Point.Tailbase = find(strcmp(BodyPartsNames, BodyPartsTailbaseNames(ismember(BodyPartsTailbaseNames, BodyPartsNames))));
-Point.Nose = find(strcmp(BodyPartsNames, BodyPartsNoseNames(ismember(BodyPartsNoseNames, BodyPartsNames))));
+% searching all bodyparts
+Point = find_bodyPart(BodyPartsNames);
 
-if any(ismember(BodyPartsCenterNames, BodyPartsNames))
-    Point.Center = find(strcmp(BodyPartsNames, BodyPartsCenterNames(ismember(BodyPartsCenterNames, BodyPartsNames))));
+if ~isempty(Point.Center)
     MouseCenterX = BodyPartsTracesMainX(Point.Center,:);
     MouseCenterY = BodyPartsTracesMainY(Point.Center,:);
 else
@@ -323,7 +304,7 @@ BodyPartsRelativeX = (BodyPartsTracesMainX - BodyPartsTracesMainX(Point.Tailbase
 BodyPartsRelativeY = (BodyPartsTracesMainY - BodyPartsTracesMainY(Point.Tailbase,:));
 
 % convert to polar coordinates
-[BodyPartsRelativeTH,BodyPartsRelativeR]=cart2pol(BodyPartsRelativeX,BodyPartsRelativeY); 
+[BodyPartsRelativeTH,BodyPartsRelativeR]=cart2pol(BodyPartsRelativeX,BodyPartsRelativeY);
 AngleRot = BodyPartsRelativeTH(Point.Center,:);
 BodyPartsRelativeTH = wrapToPi(BodyPartsRelativeTH - AngleRot);
 BodyPartsRelativeR = BodyPartsRelativeR/Options.pxl2sm;
@@ -371,7 +352,7 @@ end
 BodyPartsAll = [BodyPartsAbsolut;BodyPartsRelativeRDiff;BodyPartsRelativeTHDiff];
 
 csvwrite(sprintf('%s\\%s_Kinematogramma.csv',PathOut,Filename), BodyPartsAll');
-save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
+% save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% video with absolut and relative coordinates
 
@@ -405,7 +386,7 @@ if PlotOption.main
     open(v);
     h = waitbar(1/n_frames, sprintf('Plotting video, frame %d of %d', 0,  n_frames));
 %     for k=1:n_frames
-    for k=1000:2000
+    for k=[1:2000 4000:5000]
 %         if ~mod(k,100)
             h = waitbar(k/n_frames, h, sprintf('Plotting video, frame %d of %d', k,  n_frames));
 %         end
@@ -473,9 +454,10 @@ saveas(h, sprintf('%s\\%s_BodyParts_speeds.fig', PathOut,Filename));
 saveas(h, sprintf('%s\\%s_BodyParts_speeds.png', PathOut,Filename));
 delete(h);
 
-save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
+% save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% Acts definition
+
 Acts = struct('ActName', [], 'ActArray', [],'ActArrayRefine', [], 'ActNumber', [], 'ActPercent', [], 'ActDistr', [], 'ActMeanTime', [],'ActMeanSTDTime', [], 'ActMedianTime', [], 'ActMedianMADTime', []);
 Options.SpeedOptions{1} = 'rest';
 Options.SpeedOptions{2} = 'walk';
@@ -525,6 +507,8 @@ switch FreezingMode
         Acts(4).ActArray = double(TempArray < Options.velocity_rest*BodyPartsNumber);
     case 'NoseAndCenter'
         Acts(4).ActArray = double((BodyPartsTraces(Point.Nose).VelocitySmoothed < Options.velocity_rest*2).*(BodyPartsTraces(Point.Center).VelocitySmoothed < Options.velocity_rest));
+    case 'HeadAndCenter'
+        Acts(4).ActArray = double((BodyPartsTraces(Point.HeadCenter).VelocitySmoothed < Options.velocity_rest).*Acts(1).ActArrayRefine);
 end
 [Acts(4).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(4).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
 Acts(4).ActArrayRefine = Acts(4).ActArrayRefine';
@@ -539,7 +523,7 @@ switch RearMode
                 TempArray(i) = TempArray(i) + sqrt((BodyPartsTracesMainX(Point.Center,i)-BodyPartsTracesMainX(part,i))^2 + (BodyPartsTracesMainY(Point.Center,i)-BodyPartsTracesMainY(part,i))^2);
             end
         end
-        TempArraySmooth = smooth(TempArray, Options.FrameRate);
+        TempArraySmooth = smooth(TempArray, round(Options.FrameRate));
         Acts(5).ActArray = double(TempArraySmooth < RearsThreshold.AllBodyParts);
     case 'TailbasePaws'
         for i=1:n_frames
@@ -553,9 +537,30 @@ end
 [Acts(5).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(5).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
 Acts(5).ActArrayRefine = Acts(5).ActArrayRefine';
 
+% correct headdirection
+Point.HeadCenter = find(strcmp(BodyPartsNames, "headcenter"),1);
+CenterHead.X = BodyPartsTracesMainX(Point.HeadCenter,:);
+CenterHead.Y = BodyPartsTracesMainY(Point.HeadCenter,:);
+
+Point.HD = Point.MiniscopeUCLA;
+if isempty(Point.HD)
+    Point.HD = Point.Nose;
+end
+
+HeadDirection = [];
+if ~isempty(Point.HD)
+    [HeadDirection,~] = cart2pol(BodyPartsTracesMainX(Point.HD,:)-CenterHead.X,BodyPartsTracesMainY(Point.HD,:)-CenterHead.Y);
+    HeadDirection = smooth(HeadDirection,round(Options.FrameRate),'sgolay',DegreeSmoothSGolay)';
+end
+
+% calculation coordinate features during locomotion
+xlocomotion = MouseCenterX'.*Acts(3).ActArrayRefine;
+ylocomotion = MouseCenterY'.*Acts(3).ActArrayRefine;
+xlocomotion(xlocomotion == 0) = NaN;
+ylocomotion(ylocomotion == 0) = NaN;
 
 %% middle-area defining
-Options.MiddleCenterCm = 20;
+
 Options.MiddleCenterPxl = Options.MiddleCenterCm*Options.pxl2sm;
 
 TempMask = single(~Zones(strcmp({Zones.name}, 'Center')).maskfilled);
@@ -571,28 +576,12 @@ Zones(end+1).name = 'CenterTrue';
 Zones(end).type = 'area';
 Zones(end).maskfilled = single(Zones(strcmp({Zones.name}, 'Center')).maskfilled) - single(Zones(strcmp({Zones.name}, 'CenterMiddle')).maskfilled);
 
-%% Acts defining by space zones
+%% Task-specific Acts 
 
-% % for 1T
-% ZonesOption.NameZone = {'WallsAndCornersRealOut' 'CenterMiddle' 'CenterTrue' 'Object1Real' 'Object1RealOut'};
-% ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'headcenter'};
-% ZonesOption.NameAct = {'walls' 'centermiddle' 'centertrue' 'bowlinside' 'bowlinteraction'};
-% ZonesOption.NumBodyPart = [13 13 13 13 5];
-
-
-if Filename(end-1) == '4'
-    % for 4T
-    ZonesOption.NameZone = {'ArenaCornersAllRealOut' 'ArenaWallsAllRealOut' 'Center' 'Object1Real' 'Object1RealOut' 'Object2Real' 'Object2RealOut'};
-    ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'headcenter' 'bodycenter' 'headcenter'};
-    ZonesOption.NameAct = {'corners' 'walls' 'center' 'bowlinside' 'bowlinteraction' 'objectinside' 'objectinteraction'};
-    ZonesOption.NumBodyPart = [13 13 13 13 5 13 5];
-else
-    % for {2,3,5}T
-    ZonesOption.NameZone = {'WallsAndCornersRealOut' 'CenterMiddle' 'CenterTrue' 'Object1Real' 'Object1RealOut' 'Object2Real' 'Object2RealOut'};
-    ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'headcenter' 'bodycenter' 'headcenter'};
-    ZonesOption.NameAct = {'walls' 'centermiddle' 'centertrue' 'bowlinside' 'bowlinteraction' 'objectinside' 'objectinteraction'};
-    ZonesOption.NumBodyPart = [13 13 13 13 5 13 5];
-end
+ZonesOption.NameZone = {'WallsAndCornersRealOut' 'CenterMiddle' 'CenterTrue' 'Object1Real' 'Object1RealOut'};
+ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'headcenter'};
+ZonesOption.NameAct = {'walls' 'centermiddle' 'centertrue' 'bowlinside' 'bowlinteraction'};
+ZonesOption.NumBodyPart = [Point.Center Point.Center Point.Center Point.Center Point.HeadCenter];
 
 ZonesOption.NumZone = zeros(1,length(ZonesOption.NameZone));
 for zone = 1:length(ZonesOption.NameZone)
@@ -608,7 +597,7 @@ for zone = 1:length(ZonesOption.NameZone)
             Acts(end).ActArray(i,1) = 1;
         end
     end
-    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.FrameRate);
+    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
     Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
 end
 
@@ -624,25 +613,7 @@ if ~isempty(IndexInteract)
     Acts(end).Zone = Acts(find(strcmp({Acts.ActName}, 'bowlinteraction'), 1)).Zone;
 end
 
-IndexInteract = find(strcmp({Acts.ActName}, 'objectinteraction'), 1);
-IndexInside = find(strcmp({Acts.ActName}, 'objectinside'), 1);
-if ~isempty(IndexInteract)
-    Acts(end+1).ActName = 'objectinteractreal';
-    Acts(end).ActArray = Acts(IndexInteract).ActArrayRefine - Acts(IndexInside).ActArrayRefine;
-    Acts(end).ActArray(Acts(end).ActArrayRefine == -1) = 0;
-    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
-    Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
-    Acts(end).Zone = Acts(find(strcmp({Acts.ActName}, 'objectinteraction'), 1)).Zone;
-end
-
-% calculation coordinate features during locomotion
-xlocomotion = MouseCenterX'.*Acts(3).ActArrayRefine;
-ylocomotion = MouseCenterY'.*Acts(3).ActArrayRefine;
-xlocomotion(xlocomotion == 0) = NaN;
-ylocomotion(ylocomotion == 0) = NaN;
-
 %% Acts entryIn entryOut object
-
 VelocityThreshold = 10;
 FramesNumAdd = 15; % for 30 fps
 FramesNumEntry = 30; % for 30 fps
@@ -823,47 +794,12 @@ for object  = 1:size(ArenaAndObjects,2)-1
             Acts(end+1).ActName = 'entryOutObjectInsideAll';
             Acts(end).ActArray = entryOutBowl.InsideAll;
             Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryOutObjectInteractAll';
+            Acts(end+1).ActName = 'entryOutObjectnteractAll';
             Acts(end).ActArray = entryOutBowl.InteractAll;
             Acts(end).ActArrayRefine = Acts(end).ActArray;
             plotact = 8;
             plotact2 = 2;
     end
-    
-    
-        h = figure;
-        plot(time, DistanceVelocitySmoothed, 'k'); hold on;
-        plot(time, Acts(9).ActArrayRefine*mean(DistanceVelocitySmoothed) , 'r'); hold on; % bowl inside
-        plot(time, CombineInteraction*(mean(DistanceVelocitySmoothed)+1) , 'b'); hold on; % bowl combined
-        plot(time, EntryInAllV*(mean(DistanceVelocitySmoothed)+2) , 'g'); hold on;
-        plot(time, EntryOutAllV*(mean(DistanceVelocitySmoothed)+2) , 'y'); hold on;
-        plot(time, EntryInAll*(mean(DistanceVelocitySmoothed)+3) , 'm'); hold on;
-        plot(time, EntryOutAll*(mean(DistanceVelocitySmoothed)+3) , 'c'); hold on;
-        legend('velocity','inside','combined','InV', 'OutV','InALL','OutALL');
-%     
-
-    
-%     h = figure;
-%     plot(time, DistanceVelocitySmoothed, 'k'); hold on;
-%     plot(time, Acts(9+plotact2).ActArrayRefine*mean(DistanceVelocitySmoothed) , 'r'); hold on; % bowl inside
-%     plot(time, CombineInteraction*(mean(DistanceVelocitySmoothed)+1) , 'b'); hold on; % bowl combined
-%     plot(time, Acts(15+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'g'); hold on;
-%     plot(time, Acts(16+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'g.'); hold on;
-%     plot(time, Acts(17+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'm'); hold on;
-%     plot(time, Acts(18+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'm.'); hold on;
-%     plot(time, Acts(19+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'c'); hold on;
-%     plot(time, Acts(20+plotact).ActArray*(mean(DistanceVelocitySmoothed)+2) , 'c.'); hold on;
-%     plot(time, Acts(21+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'y'); hold on;
-%     plot(time, Acts(22+plotact).ActArray*(mean(DistanceVelocitySmoothed)+3) , 'y.'); hold on;
-%     legend('velocity','inside','combined','entryInBowlInside', 'entryInBowlInteract',...
-%         'entryInBowlInsideAll','entryInBowlInteractAll','entryOutBowlInside', 'entryOutBowlInteract',...
-%         'entryOutBowlInsideAll', 'entryOutBowlInteractAll');
-%     title('Entry In/Out Bowl/Object');
-%     xlabel('Time, s');
-%     ylabel('Speed, cm/s');
-%     saveas(h, sprintf('%s\\%s_Entry%d.fig', PathOut,Filename, object));
-    
-%     delete(h);
 end
 
 %% object in field of view
@@ -871,11 +807,6 @@ end
 AngelView = 20; % in degrees
 LengthViewCm = 30; % in cm
 LengthView = LengthViewCm*Options.pxl2sm;
-
-CenterHead.X = BodyPartsTracesMainX(5,:);
-CenterHead.Y = BodyPartsTracesMainY(5,:);
-[HeadDirection,~] = cart2pol(BodyPartsTracesMainX(1,:)-CenterHead.X,BodyPartsTracesMainY(1,:)-CenterHead.Y);
-HeadDirection = smooth(HeadDirection,Options.FrameRate,'sgolay',DegreeSmoothSGolay)';
 
 View.Direction.L = HeadDirection + AngelView/180*pi;
 View.Direction.R = HeadDirection - AngelView/180*pi;
@@ -887,29 +818,16 @@ View.Line.R(View.Line.R<1) = 1;
 View.Line.R(View.Line.R>Options.Height) = Options.Height;
 View.Line.L(View.Line.L>Options.Height) = Options.Height;
 
-for object  = 1:size(ArenaAndObjects,2)-1
-    switch object
-        case 1
-            [BowlDirection,~] = cart2pol(BowlCenterX-CenterHead.X,BowlCenterY-CenterHead.Y);
-            
-            Acts(end+1).ActName = 'bowlInView';            
-            Acts(end).ActArray = single(abs(BowlDirection-HeadDirection) < AngelView*pi/180)';
-            Acts(end).ActArray = Acts(end).ActArray - Acts(10).ActArray;
-            Acts(end).ActArray(Acts(end).ActArray < 0) = 0;
-            Acts(end).ActArrayRefine = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
-            Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
-        case 2
-            [ObjectDirection,~] = cart2pol(ObjectCenterX-CenterHead.X,ObjectCenterY-CenterHead.Y);
-            
-            Acts(end+1).ActName = 'objectInView';            
-            Acts(end).ActArray = single(abs(ObjectDirection'-HeadDirection) < AngelView*pi/180);
-            Acts(end).ActArray = Acts(end).ActArray - Acts(10).ActArray;
-            Acts(end).ActArray(Acts(end).ActArray < 0) = 0;
-            Acts(end).ActArrayRefine = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
-            Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
-    end
-end
-    
+[BowlDirection,~] = cart2pol(BowlCenterX-CenterHead.X,BowlCenterY-CenterHead.Y);
+
+Acts(end+1).ActName = 'bowlInView';
+Acts(end).ActArray = single(abs(BowlDirection-HeadDirection) < AngelView*pi/180)';
+Acts(end).ActArray = Acts(end).ActArray - Acts(10).ActArray;
+Acts(end).ActArray(Acts(end).ActArray < 0) = 0;
+Acts(end).ActArrayRefine = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
+Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
+
+
 %% act's statistics
 
 for line = 1:size(Acts,2)
@@ -919,12 +837,14 @@ for line = 1:size(Acts,2)
     Acts(line).ActMeanSTDTime = round(std(Acts(line).ActDistr),2)/Options.FrameRate;
     Acts(line).ActMedianTime = round(median(Acts(line).ActDistr),2)/Options.FrameRate;
     Acts(line).ActMedianMADTime = round(mad(Acts(line).ActDistr),2)/Options.FrameRate;
-    Acts(line).Distance = round(mean(BodyPartsTraces(Point.Center).VelocitySmoothed(logical(Acts(line).ActArrayRefine)))*time(end)*Acts(line).ActPercent/100,2); % in cm
-    Acts(line).ActMeanDistance = Acts(line).Distance/Acts(line).ActNumber;
-    histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
-    title(sprintf('Histogram of acts duration time: %s', string(Acts(line).ActName)));
-    saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
-    delete(gcf);
+    Acts(line).Distance = round(mean(BodyPartsTraces(Point.Center).VelocitySmoothed(logical(Acts(line).ActArrayRefine)))*time(end)*Acts(line).ActPercent/10000,2);
+    Acts(line).ActMeanDistance = round(Acts(line).Distance/Acts(line).ActNumber,2);
+    Acts(line).ActVelocity = round(Acts(line).Distance/(Acts(line).ActMeanTime*Acts(line).ActNumber)*100,2);
+    Acts(line).ActDuration = round(Acts(line).ActPercent*session.duration_total/100,2);
+%     histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
+%     title(sprintf('Histogram of acts duration time: %s', strrep(string(Acts(line).ActName), '_', '\_')));
+%     saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
+%     delete(gcf);
 end
 
 h=figure;
@@ -952,108 +872,71 @@ legend('Locomotion','Other','Rest','Freezing', 'Rear');
 saveas(h, sprintf('%s\\%s_track_with_acts.png', PathOut, Filename));
 delete(h);
 
-save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
+% save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% make separate acts videos
-MaxPoints = 100;
 
-% for act = 1:size(Acts,2)
-for act = [3 4 5 7 9:32]
-    PointsLine = [];
-    fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
-    v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s_track',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
-    v.FrameRate = Options.FrameRate;
-    open(v);
-    
-    videoframes = find(Acts(act).ActArrayRefine');
-    videoframesMax = min(length(videoframes),MaxPoints);
-    
-    h = waitbar(1/videoframesMax, sprintf('Plotting video, frame %d of %d', 0,  videoframesMax));
-    for frame = 1:videoframesMax
+if PlotOption.acts
+    colorbase = jet(BodyPartsNumber);
+    MaxPoints = 200;
+%     for act = 1:size(Acts,2)
+    for act = [9:19]
+        fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
+        v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
+        v.FrameRate = Options.FrameRate;
+        open(v);
+        h = waitbar(1/n_frames, sprintf('Plotting video, frame %d of %d', 0,  n_frames));
         
-        h = waitbar(frame/videoframesMax, h, sprintf('Plotting video, frame %d of %d', frame,  videoframesMax));
+        videoframes = find(Acts(act).ActArrayRefine');
+        videoframesMax = min(length(videoframes),MaxPoints);
         
-        
-        k = videoframes(frame);
-        if isempty(Acts(act).Zone)
-            RealFrame = read(readerobj,k+StartTime-1);
-        else
-            RealFrame = round((Zones(Acts(act).Zone).maskfilled*255 + single(read(readerobj,k+StartTime-1)))./2);
-        end
-        
-        %         % points of bodyparts in a moving frame of reference
-        %         IM = BlackFrame;
-        %         for part=1:length(BodyPartsNames)
-        %             IM = insertShape(IM,'filledcircle', [BodyPartsX_polar(part,k) BodyPartsY_polar(part,k) MarkSize],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
-        %         end
-        
-        % points of bodyparts in a fixed frame of reference
-        for part=1:length(BodyPartsNames)
-            RealFrame = insertShape(RealFrame,'circle', [BodyPartsTraces(part).TraceOriginal.X(k)/Options.x_kcorr BodyPartsTraces(part).TraceOriginal.Y(k) MarkSize*2],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
-            RealFrame = insertShape(RealFrame,'filledcircle', [BodyPartsTracesMainX(part,k)/Options.x_kcorr BodyPartsTracesMainY(part,k) MarkSize],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
-        end
-        
-        % field of view
-        if Acts(act).ActName == "bowlInView" || Acts(act).ActName == "objectInView"
-            RealFrame = insertShape(RealFrame, 'Line', View.Line.L(k,:), 'LineWidth', 3, 'Color', 'red');
-            RealFrame = insertShape(RealFrame, 'Line', View.Line.R(k,:), 'LineWidth', 3, 'Color', 'red');
-        end
-        
-        % trajectory of mouse
-        if act >=9
-            PointsLine = [PointsLine k];
-            for l = 1:length(PointsLine)
-                RealFrame = insertShape(RealFrame,'filledcircle', [BodyPartsTraces(5).TraceOriginal.X(PointsLine(l))/Options.x_kcorr BodyPartsTraces(5).TraceOriginal.Y(PointsLine(l)) 2],'Color','green','LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
+        for k = videoframes(1:videoframesMax)
+            
+            if ~mod(k,10)
+                h = waitbar(k/n_frames, h, sprintf('Plotting video, frame %d of %d', k,  n_frames));
             end
+            
+            if isempty(Acts(act).Zone)
+                RealFrame = read(readerobj,k+StartTime-1);
+            else
+                RealFrame = round((Zones(Acts(act).Zone).maskfilled*255 + single(read(readerobj,k+StartTime-1)))./2);
+            end
+            
+            % field of view
+            if Acts(act).ActName == "bowlInView" || Acts(act).ActName == "objectInView"
+                RealFrame = insertShape(RealFrame, 'Line', View.Line.L(k,:), 'LineWidth', 3, 'Color', 'red');
+                RealFrame = insertShape(RealFrame, 'Line', View.Line.R(k,:), 'LineWidth', 3, 'Color', 'red');
+            end
+            
+            % points of bodyparts in a fixed frame of reference
+            for part=1:length(BodyPartsNames)
+                RealFrame = insertShape(RealFrame,'circle', [BodyPartsTraces(part).TraceOriginal.X(k)/Options.x_kcorr BodyPartsTraces(part).TraceOriginal.Y(k) MarkSize*2],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
+                RealFrame = insertShape(RealFrame,'filledcircle', [BodyPartsTracesMainX(part,k)/Options.x_kcorr BodyPartsTracesMainY(part,k) MarkSize],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
+            end
+            
+            writeVideo(v,uint8(RealFrame));
         end
-        
-        % radial velocities of bodyparts in a moving frame of reference
-        %         for part=1:length(BodyPartsNames)
-        %             if part == Point.Tailbase
-        %                 IM = insertShape(IM, 'Line', [BodyPartsX_polar(part,k) BodyPartsY_polar(part,k) BodyPartsX_polar(part,k)+BodyPartsVRX_polar(part,k) BodyPartsY_polar(part,k)+BodyPartsVRY_polar(part,k)], 'LineWidth', 4, 'Color', 'red');
-        %             else
-        %                 IM = insertShape(IM, 'Line', [BodyPartsX_polar(part,k) BodyPartsY_polar(part,k) BodyPartsX_polar(part,k)+BodyPartsVRX_polar(part,k) BodyPartsY_polar(part,k)+BodyPartsVRY_polar(part,k)], 'LineWidth', 2, 'Color', 'red');
-        %             end
-        %         end
-        
-        %         % angular velocities of bodyparts in a moving frame of reference
-        %         for part=1:length(BodyPartsNames)-2
-        %             IM = insertShape(IM, 'Line', [BodyPartsX_polar(part,k) BodyPartsY_polar(part,k) BodyPartsX_polar(part,k)+BodyPartsVTHX_polar(part,k) BodyPartsY_polar(part,k)+BodyPartsVTHY_polar(part,k)], 'LineWidth', 2, 'Color', 'yellow');
-        %         end
-        
-        %         IMM = [IM RealFrame];
-        %     imshow(IMM);
-        writeVideo(v,uint8(RealFrame));
-        %         writeVideo(v,IMM);
+        close(v);
+        delete(h);
     end
-    close(v);
-    delete(h);
+    
 end
-
 %% creating outputs table of features
 
-Features.Name = {'x', 'y', 'speed', 'bodydirection', 'headdirection', 'distanceBowl', 'x_locomotion', 'y_locomotion'};
-
+Features.Name = {'x', 'y', 'x_locomotion', 'y_locomotion', 'speed', 'bodydirection', 'headdirection'};
+for act = 1:length(Acts)
+    Features.Name{end+1} = Acts(act).ActName;
+end
 Features.Data(1:n_frames,1) = MouseCenterX';
 Features.Data(1:n_frames,2) = MouseCenterY';
-Features.Data(1:n_frames,3) = Velocity;
-Features.Data(1:n_frames,4) = AngleRot';
-Features.Data(1:n_frames,5) = HeadDirection';
-Features.Data(1:n_frames,6) = DistanceBowl';
-Features.Data(1:n_frames,7) = xlocomotion;
-Features.Data(1:n_frames,8) = ylocomotion;
-
-if ~isempty(DistanceObject)
-    Features.Data(1:n_frames,end+1) = DistanceObject';
-    Features.Name{end+1} = 'distanceObject';
-end
+Features.Data(1:n_frames,3) = xlocomotion;
+Features.Data(1:n_frames,4) = ylocomotion;
+Features.Data(1:n_frames,5) = Velocity;
+Features.Data(1:n_frames,6) = AngleRot';
+Features.Data(1:n_frames,7) = HeadDirection';
 
 for act=1:length(Acts)
     Features.Data(1:n_frames,end+1) = Acts(act).ActArrayRefine;
-end
-
-for act = 1:length(Acts)
-    Features.Name{end+1} = Acts(act).ActName;
 end
 
 Features.Table = array2table(Features.Data, 'VariableNames', Features.Name);
