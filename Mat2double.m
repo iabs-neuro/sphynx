@@ -1,6 +1,6 @@
 
-folder_path = 'w:\Projects\RFC\CalciumData\5_Filters\';
-out_path = 'w:\Projects\RFC\CalciumData\5.1_FiltersDoubled\';
+folder_path = 'C:\Users\1\YandexDisk\_Projects\3DM\CalciumData\5_Filters\';
+out_path = 'W:\Projects\3DM\Filters_Doubled\';
 mat_files = dir(fullfile(folder_path, '*.mat'));
 
 %%
