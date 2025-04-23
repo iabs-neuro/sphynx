@@ -823,7 +823,7 @@ for object  = 1:size(ArenaAndObjects,2)-1
             Acts(end+1).ActName = 'entryOutObjectInsideAll';
             Acts(end).ActArray = entryOutBowl.InsideAll;
             Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryOutObjectnteractAll';
+            Acts(end+1).ActName = 'entryOutObjectInteractAll';
             Acts(end).ActArray = entryOutBowl.InteractAll;
             Acts(end).ActArrayRefine = Acts(end).ActArray;
             plotact = 8;
@@ -831,15 +831,15 @@ for object  = 1:size(ArenaAndObjects,2)-1
     end
     
     
-%         h = figure;
-%         plot(time, DistanceVelocitySmoothed, 'k'); hold on;
-%         plot(time, Acts(9).ActArrayRefine*mean(DistanceVelocitySmoothed) , 'r'); hold on; % bowl inside
-%         plot(time, CombineInteraction*(mean(DistanceVelocitySmoothed)+1) , 'b'); hold on; % bowl combined
-%         plot(time, EntryInAllV*(mean(DistanceVelocitySmoothed)+2) , 'g'); hold on;
-%         plot(time, EntryOutAllV*(mean(DistanceVelocitySmoothed)+2) , 'y'); hold on;
-%         plot(time, EntryInAll*(mean(DistanceVelocitySmoothed)+3) , 'm'); hold on;
-%         plot(time, EntryOutAll*(mean(DistanceVelocitySmoothed)+3) , 'c'); hold on;
-%         legend('velocity','inside','combined','InV', 'OutV','InALL','OutALL');
+        h = figure;
+        plot(time, DistanceVelocitySmoothed, 'k'); hold on;
+        plot(time, Acts(9).ActArrayRefine*mean(DistanceVelocitySmoothed) , 'r'); hold on; % bowl inside
+        plot(time, CombineInteraction*(mean(DistanceVelocitySmoothed)+1) , 'b'); hold on; % bowl combined
+        plot(time, EntryInAllV*(mean(DistanceVelocitySmoothed)+2) , 'g'); hold on;
+        plot(time, EntryOutAllV*(mean(DistanceVelocitySmoothed)+2) , 'y'); hold on;
+        plot(time, EntryInAll*(mean(DistanceVelocitySmoothed)+3) , 'm'); hold on;
+        plot(time, EntryOutAll*(mean(DistanceVelocitySmoothed)+3) , 'c'); hold on;
+        legend('velocity','inside','combined','InV', 'OutV','InALL','OutALL');
 %     
 
     
@@ -919,7 +919,7 @@ for line = 1:size(Acts,2)
     Acts(line).ActMeanSTDTime = round(std(Acts(line).ActDistr),2)/Options.FrameRate;
     Acts(line).ActMedianTime = round(median(Acts(line).ActDistr),2)/Options.FrameRate;
     Acts(line).ActMedianMADTime = round(mad(Acts(line).ActDistr),2)/Options.FrameRate;
-    Acts(line).Distance = round(mean(BodyPartsTraces(Point.Center).VelocitySmoothed(logical(Acts(line).ActArrayRefine)))*time(end)*Acts(line).ActPercent/10000,2);
+    Acts(line).Distance = round(mean(BodyPartsTraces(Point.Center).VelocitySmoothed(logical(Acts(line).ActArrayRefine)))*time(end)*Acts(line).ActPercent/100,2); % in cm
     Acts(line).ActMeanDistance = Acts(line).Distance/Acts(line).ActNumber;
     histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
     title(sprintf('Histogram of acts duration time: %s', string(Acts(line).ActName)));

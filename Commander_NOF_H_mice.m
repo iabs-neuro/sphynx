@@ -87,8 +87,8 @@ for file = 1:length(FileNames)
 
     table_name = sprintf('%s_%s', 'NOF', FileNames{file});
     AllActs.(table_name) = Acts;
-    % variables calculaion
     
+    % variables calculaion    
 %     FreezingPercent(file) = Acts(4).ActPercent;
 %     FreezingNumber(file) = Acts(4).ActNumber;
 %     FreezingMeanTime(file) = Acts(4).ActMeanTime;
