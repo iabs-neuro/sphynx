@@ -33,8 +33,8 @@ behavior_act_params = struct(...
 'entryOutBowlInteractAll',      "ActNumber", ...                                % любой выход из миски после контакта:                  [кол-во]
 'bowlInView',                   "ActPercent", ...                               % миска в области зрения:                               [процент]
 ...
-'objectinside',              	["ActDuration" "ActPercent"], ...              	% мышь в объекте:                                       [длительность, процент]
-'objectinteraction',         	["ActDuration" "ActPercent"], ...              	% любое взаимодействие с объектом:                      [длительность, процент]
+'objectinside',              	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...              	% мышь в объекте:                                       [длительность, процент]
+'objectinteraction',         	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...              	% любое взаимодействие с объектом:                      [длительность, процент]
 'objectinteractreal',        	["ActDuration" "ActPercent"], ...              	% контакт с объектом:                                   [длительность, процент]
 'entryInObjectInside',       	"ActNumber", ...                                % целенаправленный подход к объекту на посидеть:        [кол-во]
 'entryInObjectInteract',     	"ActNumber", ...                                % целенаправленный подход к объекту на контакт:         [кол-во]
@@ -82,7 +82,10 @@ behavior_act_params = struct(...
 ... 
 'mouse_goes_straight',        	["ActPercent" "Distance"], ...                  % животное перемещается в плоскости (X,Y):             	[процент, дистанция]
 'mouse_goes_up',                ["ActPercent" "Distance"], ...                  % животное перемещается с набором высоты:             	[процент, дистанция]
-'mouse_goes_down',              ["ActPercent" "Distance"] ...                   % животное перемещается со снижением высоты:          	[процент, дистанция]
+'mouse_goes_down',              ["ActPercent" "Distance"], ...                   % животное перемещается со снижением высоты:          	[процент, дистанция]
+... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:NOL %%%%%%%%%%%%%
+'object_control_inside',     	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...              	% мышь в объекте:                                       [длительность, процент]
+'object_control_interaction',  	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"] ...              	% любое взаимодействие с объектом:                      [длительность, процент]
     );
 
 
