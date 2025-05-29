@@ -401,7 +401,7 @@ PlotPC(mouse, 'arena_and_track');
 
 save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
 
-%% description and defining struct CELL
+%% description and defining struct CELLS
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MOUSE INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 'exp'                         - experiment identifier (e.g. 'FOF', 'NOF', '3DM' 'MSS')
@@ -423,6 +423,7 @@ save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_pat
 % 'spikes_all_count'            - count of all Ca2+ events
 % 'spikes_all_frames'           - timestamps of all Ca2+ events ('1' in spikes table)
 % 'spikes_all_frequency'        - frequency of all Ca2+ events during session (Ca2+/min)
+% 'spikes_all_amplitude'        - all Ca2+ events amplitude 
 % 'spikes_all_mean_amplitude'   - mean all Ca2+ events amplitude 
 % 'spikes_all_peak_amplitude'   - maximum amplitude of Ca2+ events
 % 
@@ -463,8 +464,9 @@ for ncell=1:mouse.cells_count_for_analysis
     cells(ncell).spikes_all_frames = find(file_NV(:,ncell));
     cells(ncell).spikes_all_count = length(cells(ncell).spikes_all_frames);
     cells(ncell).spikes_all_frequency = round(cells(ncell).spikes_all_count/mouse.duration_min,1);
-%     cell(ncell).spikes_all_mean_amplitude = 
-%     cell(ncell).spikes_all_peak_amplitude = 
+    cells(ncell).spikes_all_amplitude = file_TR(cells(ncell).spikes_all_frames,ncell);
+%     cells(ncell).spikes_all_peak_amplitude = 
+%     cells(ncell).spikes_all_mean_amplitude = 
     
     cells(ncell).spikes_in_mov_frames = find(file_NV(:,ncell).*mouse.velocity_binary);
     cells(ncell).spikes_in_mov_count = length(cells(ncell).spikes_in_mov_frames);
@@ -477,10 +479,11 @@ for ncell=1:mouse.cells_count_for_analysis
     cells(ncell).spikes_in_rest_frequency = round(cells(ncell).spikes_in_rest_count/mouse.duration_rest_min,1);
 %     cell(ncell).spikes_in_mov_mean_amplitude = 
 %     cell(ncell).spikes_in_mov_peak_amplitude = 
-
+    
     cells(ncell).frequency_ratio_mov_rest = round(cells(ncell).spikes_in_mov_frequency/cells(ncell).spikes_in_rest_frequency,2);
     
     cells(ncell).criterion_activity = double((cells(ncell).spikes_all_count >= mouse.params_main.min_spike));
+    
 end
 
 % defining stats for cell count

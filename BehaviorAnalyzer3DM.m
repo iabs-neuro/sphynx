@@ -951,7 +951,7 @@ Acts(end).ActArray(Acts(end).ActArray < 0) = 0;
 Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
 
 h = figure('Position', [300 300 1000 1000]);
-set(gcf, 'DefaultAxesFontSize', 14);
+set(gcf, 'DefaultAxesFontSize', 34);
 plot(MouseCenterX, MouseCenterY, '.g', 'LineWidth', 2); hold on;
 plot(MouseCenterX(logical(Acts(end).ActArray)), MouseCenterY(logical(Acts(end).ActArray)), '.r', 'LineWidth', 2);
 axis equal; 

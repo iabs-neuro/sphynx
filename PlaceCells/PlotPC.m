@@ -114,7 +114,8 @@ switch mode
     case 'coordinate'
         
         % X координата
-        h = figure('Position', mouse.params_main.Screensize);
+        h = figure('Position', mouse.params_main.Screensize);        
+        set(gcf, 'DefaultAxesFontSize', mouse.params_main.FontSizeLabel);
         plot(mouse.time, mouse.x_bad, 'b');hold on;                     % Оригинальные данные
         plot(mouse.time, mouse.x, 'r');                                 % Интерполированные и сглаженные данные
         
