@@ -157,28 +157,61 @@ switch mode
         saveas(h, sprintf('%s\\%s_velocity.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
         saveas(h, sprintf('%s\\%s_velocity.fig',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
         delete(h);
-        
+       
     case 'single_spike'
-        
-        % активность нейронов
+    
+        graf_trace_ratio = 0.8;
         for ncell = 1:mouse.cells_count_for_analysis
+            h_combined = figure('Position', [1 1 mouse.params_main.Screensize(4)/(1+(1-graf_trace_ratio)/graf_trace_ratio) mouse.params_main.Screensize(4)]);
             
-            h = figure('Position', mouse.params_main.Screensize);
+            % === 2.1. Верхняя часть (80%) — карта спайков (как в исходном коде) ===
+            subplot('Position', [0.2 1-graf_trace_ratio+0.2 0.6 graf_trace_ratio-0.3]); % [left bottom width height]
+            
             plot(mouse.x,mouse.y, 'b');hold on;                                         % траектория животного
             DrawLine(mouse.x, mouse.y, mouse.velocity_binary, 1, 'g', 0, 1);hold on;    % траектория во время побежек
-            plot(mouse.x(cells(ncell).spikes_in_rest_frames),mouse.y(cells(ncell).spikes_in_rest_frames),'k*', 'MarkerSize',round(mouse.params_main.MarksizeSpikes/2), 'LineWidth',round(mouse.params_main.LineWidthSpikes/2));hold on;
+            plot(mouse.x(cells(ncell).spikes_in_rest_frames),mouse.y(cells(ncell).spikes_in_rest_frames),'k*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes);hold on;
             plot(mouse.x(cells(ncell).spikes_in_mov_frames),mouse.y(cells(ncell).spikes_in_mov_frames),'r*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes);
             
             axis(mouse.axes);
-            title(sprintf('Trajectory of mouse with n = %d (%d) Ca2+ events (in mov, red) of cell #%d', cells(ncell).spikes_all_count,cells(ncell).spikes_in_mov_count, ncell), 'FontSize', mouse.params_main.FontSizeTitle);
             xlabel('X coordinate, cm','FontSize', mouse.params_main.FontSizeLabel);
             ylabel('Y coordinate, cm','FontSize', mouse.params_main.FontSizeLabel);
             set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
-            legend({'Rest', 'Locomotion'});
+            title(sprintf('Trajectory. n = %d (%d) Ca2+ events (in mov, red). Cell #%d', cells(ncell).spikes_all_count,cells(ncell).spikes_in_mov_count, ncell), 'FontSize', mouse.params_main.FontSizeTitle);
             
-            saveas(h, sprintf('%s\\Spikes\\%s_Spikes_Cell_%d.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut,ncell));
-            delete(h);
+            legend({'Rest', 'Locomotion'}, 'FontSize', round(mouse.params_main.FontSizeTitle/2));
             
+            % === 2.2. Нижняя часть (20%) — временной график активности ===
+            subplot('Position', [0.2 0.1 0.6 1-graf_trace_ratio]);
+            
+            % Рисуем сигнал trace
+            plot(mouse.time, cells(ncell).trace, 'm', 'LineWidth', 1.5); hold on;
+            
+            % Определяем общую высоту для всех спайков (90% от максимума активности)
+            spike_level = 0.9 * max(cells(ncell).trace);
+            
+            % Отмечаем спайки покоя (чёрные звёздочки на фиксированной высоте)
+        time_rest = mouse.time(cells(ncell).spikes_in_rest_frames);
+        if ~isempty(time_rest)
+            plot(time_rest, repmat(spike_level, size(time_rest)), 'k*', ...
+                 'MarkerSize', 6, 'LineWidth', 1.5);
+        end
+        
+        % Отмечаем спайки движения (красные звёздочки на той же высоте)
+        time_mov = mouse.time(cells(ncell).spikes_in_mov_frames);
+        if ~isempty(time_mov)
+            plot(time_mov, repmat(spike_level, size(time_mov)), 'r*', ...
+                 'MarkerSize', 8, 'LineWidth', 1.5);
+        end
+            
+            % Настройки графика
+            xlabel('Time, s', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('Activity (a.u.)', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+            xlim([min(mouse.time) max(mouse.time)]);
+            box off;
+            
+            saveas(h_combined, sprintf('%s\\Spikes\\%s_Spikes_Cell_%d.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut,ncell));
+            delete(h_combined);
         end
         
     case 'all_spikes'
