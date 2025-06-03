@@ -14,19 +14,19 @@ function [FieldsIC] = PlaceFieldAnalyzerMSS(params_paths, params_main)
 if ~exist('params_paths', 'var')
     
     % define path for outputs
-    params_paths.pathOut = uigetdir('w:\Projects\NOF\ActivityData\PlaceCells\', 'Please specify the path to save the data');
+    params_paths.pathOut = uigetdir('C:\Users\User\YandexDisk\_Projects\MSS\ActivityData', 'Please specify the path to save the data');
     
     %loading videotracking
-    [params_paths.filenameWS, params_paths.pathWS]  = uigetfile('*.mat','Please specify the mat-file from behavior analysis','w:\Projects\NOF\ActivityData\MAT_behav\');
+    [params_paths.filenameWS, params_paths.pathWS]  = uigetfile('*.mat','Please specify the mat-file from behavior analysis','C:\Users\User\YandexDisk\_Projects\MSS\ActivityData\Behav_mat\');
     
     %loading spike file
-    [params_paths.filenameNV, params_paths.pathNV]  = uigetfile('*.csv','Please specify the file with spikes','w:\Projects\NOF\ActivityData\Spikes\');
+    [params_paths.filenameNV, params_paths.pathNV]  = uigetfile('*.csv','Please specify the file with spikes','C:\Users\User\YandexDisk\_Projects\MSS\ActivityData\Spikes\');
     
     %loading trace file
-    [params_paths.filenameTR, params_paths.pathTR]  = uigetfile('*.csv','Please specify the file with traces','w:\Projects\NOF\ActivityData\Traces\');
+    [params_paths.filenameTR, params_paths.pathTR]  = uigetfile('*.csv','Please specify the file with traces','C:\Users\User\YandexDisk\_Projects\MSS\ActivityData\Traces\');
     
     %loading preset file
-    [params_paths.filenamePR, params_paths.pathPR]  = uigetfile('*.mat','Please specify the preset file','w:\Projects\NOF\ActivityData\Presets\');
+    [params_paths.filenamePR, params_paths.pathPR]  = uigetfile('*.mat','Please specify the preset file','C:\Users\User\YandexDisk\_Projects\MSS\ActivityData\Presets\');
     
 end
 
@@ -394,11 +394,16 @@ PlotPC(mouse, 'velocity');
 mouse = find_arena_features(mouse);
 mouse = define_axes(mouse);
 
-% какаято путанница
-if ~exist('mouse.behav_opt.GoodVideoFrameGray', 'var')    
+% calculation rgb image
+if ~isfield(mouse.behav_opt, 'GoodVideoFrameGray')  
     mouse.behav_opt.GoodVideoFrameGray = mouse.behav_opt.GoodVideoFrame;
 end
-mouse.behav_opt.rgb_image = ind2rgb(mouse.behav_opt.GoodVideoFrameGray, gray(256));
+
+if numel(size(mouse.behav_opt.GoodVideoFrameGray)) == 3
+    mouse.behav_opt.rgb_image = mouse.behav_opt.GoodVideoFrameGray;
+else
+    mouse.behav_opt.rgb_image = ind2rgb(mouse.behav_opt.GoodVideoFrameGray, gray(256));
+end
 
 if mouse.behav_opt.ExperimentType  == "Freezing Track"
     mouse.behav_opt.rgb_image = mouse.behav_opt.GoodVideoFrame;   
