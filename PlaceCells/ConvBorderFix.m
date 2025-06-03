@@ -26,11 +26,17 @@ end
 mask_border = zeros(size(N,1),size(N,2));
 for ii=1:size(N,1)
     for jj=1:size(N,2)
+        
         if N(ii,jj) == 0 && sum(sum(mask_orig))==0
             mask_holes(ii,jj) = 1;
-        end         
-        if N(ii,jj) ~= 0 && (N(ii+1,jj+1) == 0 ||  N(ii+1,jj-1) == 0 ||  N(ii-1,jj+1) == 0 ||  N(ii-1,jj-1) == 0)
-            mask_border(ii,jj)= 1;
+        end
+        
+        % Проверяем всех 8 соседей для границ
+        if N(ii,jj) ~= 0
+            neighborhood = N(ii-1:ii+1, jj-1:jj+1);
+            if any(neighborhood(:) == 0  % Любой сосед == 0
+                mask_border(ii,jj) = 1;
+            end
         end
     end
 end

@@ -34,6 +34,8 @@ switch mouse.exp
         mouse.behav_opt.arena_area = pi*98*98/4;
     case "MSS"
         mouse.behav_opt.arena_area = 44*44;
+    case "NOF"
+        mouse.behav_opt.arena_area = 44*44;
 end
 
 end

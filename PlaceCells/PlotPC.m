@@ -102,7 +102,7 @@ switch mode
         figure;
         imshow(mouse.behav_opt.GoodVideoFrameGray); hold on;
         plot(mouse.x_track, mouse.y_track); hold on;
-        plot(mouse.arena_opt.border_x, mouse.arena_opt.border_y);
+        plot(mouse.arena_opt(1).border_x, mouse.arena_opt(1).border_y);
         
         title('Arena with trajectory', 'FontSize', mouse.params_main.FontSizeLabel);
         legend({'Trajectory', 'Arena border'});

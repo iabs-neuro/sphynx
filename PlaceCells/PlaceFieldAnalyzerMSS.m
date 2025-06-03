@@ -1,6 +1,7 @@
 function [FieldsIC] = PlaceFieldAnalyzerMSS(params_paths, params_main)
 % Place Cells and Fields Analysis 
 % Plusnin Viktor 2025
+% 
 % Short history of commites:
 % 12.20 added separate matrices for all plots(for correct gauss filtering)
 % 04.21 fitting PF by ellipse, fields geometry added
@@ -10,22 +11,22 @@ function [FieldsIC] = PlaceFieldAnalyzerMSS(params_paths, params_main)
 
 
 %% manual defining parameters section
-if ~exist('params_paths', 'var') || check_paths_in(params_paths)
+if ~exist('params_paths', 'var')
     
     % define path for outputs
-    params_paths.pathOut = uigetdir('w:\Projects\MSS\ActivityData\PlaceCells2\', 'Please specify the path to save the data');
+    params_paths.pathOut = uigetdir('w:\Projects\NOF\ActivityData\PlaceCells\', 'Please specify the path to save the data');
     
     %loading videotracking
-    [params_paths.filenameWS, params_paths.pathWS]  = uigetfile('*.mat','Please specify the mat-file from behavior analysis','w:\Projects\MSS\ActivityData\Behav_mat\');
+    [params_paths.filenameWS, params_paths.pathWS]  = uigetfile('*.mat','Please specify the mat-file from behavior analysis','w:\Projects\NOF\ActivityData\MAT_behav\');
     
     %loading spike file
-    [params_paths.filenameNV, params_paths.pathNV]  = uigetfile('*.csv','Please specify the file with spikes','w:\Projects\MSS\ActivityData\Spikes\');
+    [params_paths.filenameNV, params_paths.pathNV]  = uigetfile('*.csv','Please specify the file with spikes','w:\Projects\NOF\ActivityData\Spikes\');
     
     %loading trace file
-    [params_paths.filenameTR, params_paths.pathTR]  = uigetfile('*.csv','Please specify the file with traces','w:\Projects\MSS\ActivityData\Traces\');
+    [params_paths.filenameTR, params_paths.pathTR]  = uigetfile('*.csv','Please specify the file with traces','w:\Projects\NOF\ActivityData\Traces\');
     
     %loading preset file
-    [params_paths.filenamePR, params_paths.pathPR]  = uigetfile('*.mat','Please specify the preset file','w:\Projects\MSS\ActivityData\Presets\');
+    [params_paths.filenamePR, params_paths.pathPR]  = uigetfile('*.mat','Please specify the preset file','w:\Projects\NOF\ActivityData\Presets\');
     
 end
 
@@ -71,7 +72,7 @@ if ~exist('params_main', 'var') || isempty(params_main)
         ...
         ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SUPPORTING PLOTS AND VERBOSE PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         'verbose', 1,...                                % additional messages
-        'plot_mode', 1,...                              % main plot parameters, 0 - no one plots, 1 - basic plots, 2 - all plots
+        'plot_mode', 2,...                              % main plot parameters, 0 - no one plots, 1 - basic plots, 2 - all plots
         'Screensize', get(0, 'Screensize'),...          % screensize for all plotting 
         'axes_step', 1,...                              % in cm
         'heatmap_opt', struct('track', struct('trackp', 1, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 0),...
@@ -225,6 +226,7 @@ if mouse.params_main.plot_mode > 1
     mouse.plot_opt.Plot_FiringRate_Smooth_Thres = 1;
     mouse.plot_opt.Plot_WaterShed = 1;
     mouse.plot_opt.Plot_WaterShedField = 1;
+    mouse.plot_opt.Plot_Field = 1;
 end
 
 %% loading data
@@ -278,6 +280,7 @@ y_orig = file_VT(mouse.params_main.app_frame:mouse.params_main.end_frame, 2);
 switch mouse.params_main.CorrectionTrackMode
     case 'Bonsai'
         % session.duration_time_s = 720;
+        % !!! change 30
         session.duration_s = round(mouse.params_main.end_frame/30,2);
         session.duration_min = round(session.duration_s/mouse.params_main.MinTime,2);        
 %         mouse.TimeLine.Track = (0:session.duration_s/(size(file_VT,1)-1):session.duration_s);
@@ -391,7 +394,12 @@ PlotPC(mouse, 'velocity');
 mouse = find_arena_features(mouse);
 mouse = define_axes(mouse);
 
+% какаято путанница
+if ~exist('mouse.behav_opt.GoodVideoFrameGray', 'var')    
+    mouse.behav_opt.GoodVideoFrameGray = mouse.behav_opt.GoodVideoFrame;
+end
 mouse.behav_opt.rgb_image = ind2rgb(mouse.behav_opt.GoodVideoFrameGray, gray(256));
+
 if mouse.behav_opt.ExperimentType  == "Freezing Track"
     mouse.behav_opt.rgb_image = mouse.behav_opt.GoodVideoFrame;   
 end
@@ -511,28 +519,31 @@ save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_pat
 
 %% bin's division
 
-% transform real coordinates to bins indexex/ Now you can use x_ind, y_ind
+% transform real coordinates to bins indexes. Now you can use mouse.x_ind, mouse.y_ind
 mouse = calculate_binarized_indexes(mouse);
 
+% calculate ocuppancy_map.frame time spent in bins in frames 
 mouse.ocuppancy_map.frame = zeros(mouse.size_map(1),mouse.size_map(2));
 for d=1:mouse.duration_frames
     mouse.ocuppancy_map.frame(mouse.y_ind(d),mouse.x_ind(d)) = mouse.ocuppancy_map.frame(mouse.y_ind(d),mouse.x_ind(d))+1*mouse.velcam(d);
 end
 
-mouse.ocuppancy_map.time = mouse.ocuppancy_map.frame/mouse.framerate/mouse.params_main.TimeRate; %in minutes/seconds
+% calculate ocuppancy_map.time time spent in bins in minutes/seconds
+mouse.ocuppancy_map.time = mouse.ocuppancy_map.frame/mouse.framerate/mouse.params_main.TimeRate;
 
+% calculate ocuppancy_map.time_restricted time spent in bins in
+% minutes/seconds, excluded not enough occupied 
 mouse.ocuppancy_map.time_restricted = mouse.ocuppancy_map.time;
 mouse.ocuppancy_map.time_restricted(mouse.ocuppancy_map.time<mouse.params_main.time_min) = 0;
 
+% calculate ocuppancy_map.time_smoothed time spent in bins in minutes/seconds, smoothed
 mouse.ocuppancy_map.time_smoothed = mouse.ocuppancy_map.time_restricted;
 if mouse.params_main.time_smooth
-    [mouse.ocuppancy_map.time_smoothed,mouse.mask_t] = ConvBorderFix(mouse.ocuppancy_map.time_smoothed,0,mouse.params_main.kernel_opt.small.size,mouse.params_main.kernel_opt.small.sigma);
+    [mouse.ocuppancy_map.time_smoothed,mouse.mask_t] = convolution_with_holes(mouse.ocuppancy_map.time_smoothed,0,mouse.params_main.kernel_opt.small.size,mouse.params_main.kernel_opt.small.sigma);
 end
 
 % define explored space. Correction if % > 100
 mouse.space_explored = min(100, round(length(find(mouse.ocuppancy_map.time_smoothed>0))*mouse.params_main.bin_size_cm^2/mouse.behav_opt.arena_area*100,1));
-
-% mouse.mask_s = double(mouse.mask_t == 0);
 
 %heatmap for occupancy map
 PlotPC(mouse, 'occupancy');

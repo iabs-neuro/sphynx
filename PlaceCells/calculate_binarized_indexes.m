@@ -1,6 +1,6 @@
 function mouse = calculate_binarized_indexes(mouse)
 
-% point_origin - translation vector ib cm
+% point_origin - translation vector in cm
 
 % распаковка параметров
 heatmap_border = mouse.params_main.heatmap_border;
@@ -15,7 +15,7 @@ y = mouse.y;
 % mouse.behav_opt.arena_border.top(2)
 
 % find a Origin Point and Rotation angle for HeatMaps
-if mouse.arena_opt.geometry == "Circle" && mouse.exp == "FOF"
+if mouse.arena_opt(1).geometry == "Circle" && mouse.exp == "FOF"
     
     % для круговой арены и FOF режим только трансляции
     mouse.behav_opt.point_origin = [
@@ -23,25 +23,25 @@ if mouse.arena_opt.geometry == "Circle" && mouse.exp == "FOF"
         mouse.behav_opt.arena_border.bottom(2)/mouse.behav_opt.pxl2sm - heatmap_border*bin_size_cm
         ];
     [x_transformed, y_transformed] = coordinate_transform(x, y, mouse.behav_opt.point_origin, 0, 'translation', 'Forward');
-    [x_arena_transformed, y_arena_transformed] = coordinate_transform(mouse.arena_opt.border_x/mouse.behav_opt.pxl2sm*mouse.behav_opt.x_kcorr, mouse.arena_opt.border_y/mouse.behav_opt.pxl2sm, mouse.behav_opt.point_origin, 0, 'translation', 'Forward');
+    [x_arena_transformed, y_arena_transformed] = coordinate_transform(mouse.arena_opt(1).border_x/mouse.behav_opt.pxl2sm*mouse.behav_opt.x_kcorr, mouse.arena_opt(1).border_y/mouse.behav_opt.pxl2sm, mouse.behav_opt.point_origin, 0, 'translation', 'Forward');
     
-elseif mouse.arena_opt.geometry == "Polygon" && mouse.exp == "MSS"
+elseif mouse.arena_opt(1).geometry == "Polygon" && (mouse.exp == "MSS" || mouse.exp == "NOF")
     
     % для квадратной арены и MSS режим трансляции и поворота
     mouse.behav_opt.point_origin = [
-        mouse.arena_opt.border_separate_x{1}(1)/mouse.behav_opt.pxl2sm*mouse.behav_opt.x_kcorr ...  
-        mouse.arena_opt.border_separate_y{1}(1)/mouse.behav_opt.pxl2sm
+        mouse.arena_opt(1).border_separate_x{1}(1)/mouse.behav_opt.pxl2sm*mouse.behav_opt.x_kcorr ...  
+        mouse.arena_opt(1).border_separate_y{1}(1)/mouse.behav_opt.pxl2sm
         ];    
 %     imshow(mouse.behav_opt.GoodVideoFrame); hold on; plot(mouse.behav_opt.point_origin(1),mouse.behav_opt.point_origin(2), 'r*')
     
-    angle = find_rotation_angle([mouse.arena_opt.border_separate_y{1}(1), mouse.arena_opt.border_separate_x{1}(1)], ...
-        [mouse.arena_opt.border_separate_y{4}(1), mouse.arena_opt.border_separate_x{4}(1)]);
+    angle = find_rotation_angle([mouse.arena_opt(1).border_separate_y{1}(1), mouse.arena_opt(1).border_separate_x{1}(1)], ...
+        [mouse.arena_opt(1).border_separate_y{4}(1), mouse.arena_opt(1).border_separate_x{4}(1)]);
 
     [x_transformed1, y_transformed1] = coordinate_transform(x, y, mouse.behav_opt.point_origin, deg2rad(angle), 'both', 'Forward');
 %     plot(x_transformed1, y_transformed1);
     [x_transformed, y_transformed] = coordinate_transform(x_transformed1, y_transformed1, [-heatmap_border*bin_size_cm, -heatmap_border*bin_size_cm], 0, 'translation', 'Forward');
 
-    [x_arena_transformed, y_arena_transformed] = coordinate_transform(mouse.arena_opt.border_x/mouse.behav_opt.pxl2sm*mouse.behav_opt.x_kcorr, mouse.arena_opt.border_y/mouse.behav_opt.pxl2sm, mouse.behav_opt.point_origin, deg2rad(angle), 'both', 'Forward');
+    [x_arena_transformed, y_arena_transformed] = coordinate_transform(mouse.arena_opt(1).border_x/mouse.behav_opt.pxl2sm*mouse.behav_opt.x_kcorr, mouse.arena_opt(1).border_y/mouse.behav_opt.pxl2sm, mouse.behav_opt.point_origin, deg2rad(angle), 'both', 'Forward');
     [x_arena_transformed, y_arena_transformed] = coordinate_transform(x_arena_transformed, y_arena_transformed, [-heatmap_border*bin_size_cm, -heatmap_border*bin_size_cm], 0, 'translation', 'Forward');
     
 end

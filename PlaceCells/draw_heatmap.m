@@ -11,20 +11,22 @@ function draw_heatmap(rgb_image, opt, N_time, max_N_time, x_track, y_track, shif
 %%
 % rgb_image = mouse.behav_opt.rgb_image;
 % opt = mouse.params_main.heatmap_opt.track;
-% N_time = mouse.ocuppancy_time_smoothed;
+% N_time = mouse.ocuppancy_map.time_smoothed;
 % max_N_time = 0;
 % x_track = mouse.x_track;
 % y_track = mouse.y_track;
 % spike_t_good = [];
 % x_kcorr = mouse.behav_opt.x_kcorr;
 % bin_size = mouse.params_main.bin_size_cm*mouse.behav_opt.pxl2sm;
+% shift = mouse.shift;
 
 min_x_ind = 1;
 min_y_ind = 1;
 
-
 x_shift = shift(1);
 y_shift = shift(2);
+
+% colormap('jet');
 
 if opt.fon
     imshow(rgb_image);
@@ -81,7 +83,7 @@ else
     norm_k = max(c);
 end
 
-patch(binx,biny,c./norm_k,'FaceAlpha',trasparent, 'EdgeColor', 'none');
+patch(binx,biny,c./norm_k,'FaceAlpha', trasparent, 'EdgeColor', 'none');
 
 %adding colorbar
 clb = cell(11,1);
