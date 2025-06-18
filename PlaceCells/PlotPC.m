@@ -157,7 +157,7 @@ switch mode
         saveas(h, sprintf('%s\\%s_velocity.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
         saveas(h, sprintf('%s\\%s_velocity.fig',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
         delete(h);
-       
+       %%
     case 'single_spike'
     
         graf_trace_ratio = 0.8;
@@ -209,11 +209,25 @@ switch mode
             set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
             xlim([min(mouse.time) max(mouse.time)]);
             box off;
-            
+            % === Добавление рамки с SNR ===
+% Создаем axes для текста в правом нижнем углу
+axes('Position', [0.82 0.08 0.15 0.1], 'Visible', 'off'); % [left bottom width height]
+
+% Форматируем текст (жирный шрифт, размер)
+snr_text = sprintf('SNR = %.2f', cells(ncell).SNR);
+text(0.5, 0.5, snr_text, ...
+    'FontSize', mouse.params_main.FontSizeLabel *0.7, ...
+    'FontWeight', 'bold', ...
+    'HorizontalAlignment', 'center', ...
+    'VerticalAlignment', 'middle', ...
+    'BackgroundColor', [1 1 1], ... % белый фон
+    'EdgeColor', 'k', ... % черная рамка
+    'LineWidth', 1, ...
+    'Margin', 5); % отступ внутри рамки
             saveas(h_combined, sprintf('%s\\Spikes\\%s_Spikes_Cell_%d.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut,ncell));
             delete(h_combined);
         end
-        
+        %%
     case 'all_spikes'
         
         % all spikes from all cells
