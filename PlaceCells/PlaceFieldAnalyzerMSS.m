@@ -51,7 +51,7 @@ if ~exist('params_main', 'var') || isempty(params_main)
         'shift', 0.9,...                                % percent of all time occupancy for random shift
         'kernel_opt', struct(...
         'small', struct('size', 3, 'sigma', 1.5),...
-        'big', struct('size', 5, 'sigma', 1.5)),...     % gaussian kernel for maps smoothing
+        'big', struct('size', 5, 'sigma', 2)),...       % gaussian kernel for maps smoothing
         'smooth_freq_mode', 1,...                       % 1 for smoothing activity map during MI calculation
         ...
         'vel_opt', 0,...                                % 1 all maps and MI calculated with respond to velocity threshold
@@ -63,10 +63,10 @@ if ~exist('params_main', 'var') || isempty(params_main)
         ...
         ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TEMPORAL PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         'SmoothWindowS', 0.5,...                        % smoothing window in seconds for behavior analysis (in case non-smoothed data)
-        'time_smooth', 1,...                            % flag for smoothing of time map(occupancy map)
+        'time_smooth', 1,...                            % flag for smoothing of time map (occupancy map)
         'spike_smooth', 1,...                           % flag for smoothing of spikes map
-        'thres_spike', 0.3,...                          % threshold for spike map after smoothing
-        'thres_firing', 0.5,...                         % threshold for activity map after smoothing
+        'spike_threshold', 0.1,...                     	% threshold for spike map after smoothing (0 - no thresholding)
+        'firing_threshold', 0.5,...                    	% threshold for activity map after smoothing
         'length_line_sec', 0.5,...                      % min time for acts (in area of fields or velocity binary timeseries)
         'snr_params', struct('percentile', 50),...      % percent of signal to identify noise lvl in neurob trace
         ...
@@ -472,7 +472,7 @@ for ncell=1:mouse.cells_count_for_analysis
     cells(ncell).spikes_all_frames = find(file_NV(:,ncell));
     cells(ncell).spikes_all_count = length(cells(ncell).spikes_all_frames);
     cells(ncell).spikes_all_frequency = round(cells(ncell).spikes_all_count/mouse.duration_min,1);
-    cells(ncell).spikes_all_amplitude = file_TR(cells(ncell).spikes_all_frames,ncell);
+%     cells(ncell).spikes_all_amplitude = file_TR(cells(ncell).spikes_all_frames,ncell);
 %     cells(ncell).spikes_all_peak_amplitude = 
 %     cells(ncell).spikes_all_mean_amplitude = 
     
@@ -523,7 +523,7 @@ save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_pat
 mouse = calculate_binarized_indexes(mouse);
 
 % calculate ocuppancy_map.frame time spent in bins in frames 
-mouse.ocuppancy_map.frame = zeros(mouse.size_map(1),mouse.size_map(2));
+mouse.ocuppancy_map.frame = zeros(mouse.size_map);
 for d=1:mouse.duration_frames
     mouse.ocuppancy_map.frame(mouse.y_ind(d),mouse.x_ind(d)) = mouse.ocuppancy_map.frame(mouse.y_ind(d),mouse.x_ind(d))+1*mouse.velcam(d);
 end
@@ -552,112 +552,154 @@ save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_pat
 
 %% Maps for cell activity defining, MI calculation
 
+% description and defining struct CELLMAPS
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MOUSE INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 'exp'                         - experiment identifier (e.g. 'FOF', 'NOF', '3DM' 'MSS')
+% 'group'                       - experimental group of animal (e.g. 'Control', 'FAD')
+% 'id'                          - mouse identifier (e.g. 'F01', 'H39')
+% 'day'                         - day number of registration (e.g. '1D', '6D')
+% 'trial'                       - trial number of registration (e.g. '1T', '6T')
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SPIKE AND FIRINGRATE MAPS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 'cell'                                          	- index of cell
-% 'spike'                                           - spike map, original: count of Ca2+ events
-% 'spike_refined'                                   - spike map, refined: smoothed
-% 'spike_refined_normalized'                      	- spike map, normalized: to [0,1]
-% 'firingrate'                                      - firing rate map, original: count Ca2+ events per time
-% 'firingrate_refined'                            	- firing rate map, refined: smoothed
-% 'firingrate_refined_normalized'                 	- firing rate map, normalized: to [0,1]
-% 'trace'                                           - trace map
-% 'trace_firingrate'                                - trace firing rate map
+% 'spikes'                                          - timestamps of relevant Ca2+ events
+% 'spikes_count'                                    - count of relevant Ca2+ events
+% 'spike'                                           - spike map, original:          count of Ca2+ events
+% 'spike_smoothed'                                  - spike map, smoothed:          convolution with gauss kernel
+% 'spike_refined'                                   - spike map, refined:           spike_smoothed thresholded
+% 'spike_normalized'                                - spike map, normalized:        spike_refined normalized to [0,1]
+% 'firingrate'                                      - firing rate map, original:    count Ca2+ events per time unit
+% 'firingrate_smoothed'                             - firing rate map, smoothed:    convolution with gauss kernel
+% 'firingrate_refined'                              - firing rate map, refined:     firingrate_smoothed thresholded
+% 'firingrate_normalized'                           - firing rate map, normalized:  firingrate_refined normalized to [0,1]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MAXIMA OF MAPS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 'max_bin_spike'                                   - maximum value of spike map
+% 'max_bin_spike_refined'                          	- maximum value of spike map, smoothed and refined
+% 'max_bin_firingrate'                            	- maximum value of firing rate map
+% 'max_bin_firingrate_refined                     	- maximum value of firing rate map, smoothed and refined
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TRACE MAPS (IN DEVELOPMENT) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 'trace'                                           - trace map, original:                  raw Ca2+ activity map
+% 'trace_smoothed'                                 	- trace map, smoothed:                  convolution with gauss kernel
+% 'trace_refined'                                  	- trace map, refined:                   trace_smoothed thresholded
+% 'trace_normalized'                               	- trace map, normalized:                trace_refined normalized to [0,1]
+% 'trace_firingrate'                               	- trace firing rate map, original:      raw Ca2+ activity per time unit
+% 'trace_firingrate_smoothed'                      	- trace firing rate map, smoothed:      convolution with gauss kernel
+% 'trace_firingrate_refined'                       	- trace firing rate map, refined:       trace_firingrate_smoothed restricted
+% 'trace_firingrate_normalized'                    	- trace firing rate map, normalized:    trace_firingrate_refined normalized to [0,1]
 
 cellmaps = struct(...
-    'cell', [], 'spike', [], 'spike_refined', [], 'spike_refined_normalized', [], ...
-    'firingrate', [], 'firingrate_refined', [], 'firingrate_refined_normalized', [], ...
+    'exp', '', 'group', '', 'id', '', 'day', '', 'trial', '', ...
+    'cell', [], 'spikes', [], 'spikes_count', [], ...
+    'spike', [], 'spike_smoothed', [], 'spike_refined', [], 'spike_normalized', [], ...
+    'firingrate', [], 'firingrate_smoothed', [], 'firingrate_refined', [], 'firingrate_normalized', [], ...
     'max_bin_spike', [], 'max_bin_spike_refined', [], 'max_bin_firingrate', [], 'max_bin_firingrate_refined', [] ...
     );
 
-% searching maxima of maps values
-% mouse.max_bin.spike = 0;
-% mouse.max_bin.spike_refined = 0;
-% mouse.max_bin.firingrate = 0;
-% mouse.max_bin.firingrate_refined = 0;
+mouse.activity_map_summary.firingrate = zeros(mouse.size_map);                  % HeatMap of all activity map
+mouse.activity_map_summary.firingrate_normalized = zeros(mouse.size_map);       % HeatMap of all normalized activity map
 
-mouse.activity_map_summary.firingrate = zeros(mouse.size_map(1),mouse.size_map(2));               % HeatMap of all activity map
-mouse.activity_map_summary.firingrate_normalized = zeros(mouse.size_map(1),mouse.size_map(2));  	% HeatMap of all normalized activity map
-
-Cell_IC = zeros(2,mouse.cells_count_for_analysis);
-Cell_IC(1,1:mouse.cells_count_for_analysis)=linspace(1,mouse.cells_count_for_analysis,mouse.cells_count_for_analysis);
+% MI table
+cells_MI = zeros(7,mouse.cells_count_for_analysis);
+cells_MI(1,1:mouse.cells_count_for_analysis)=linspace(1,mouse.cells_count_for_analysis,mouse.cells_count_for_analysis);
 
 h = waitbar(1/mouse.cells_count_for_analysis, sprintf('MI calculation, cell %d of %d', 0,  mouse.cells_count_for_analysis));
-
 for ncell = mouse.cells_active
     h = waitbar(ncell/mouse.cells_count_for_analysis,h, sprintf('MI calculation, cell %d of %d', ncell,  mouse.cells_count_for_analysis));
     
+    % main mouse info
+    cellmaps(ncell).exp = mouse.exp;
+    cellmaps(ncell).id = mouse.id;
+    cellmaps(ncell).day = mouse.day;
+    cellmaps(ncell).trial = mouse.trial;
     cellmaps(ncell).cell = ncell;
     
-    spike_t = cells(ncell).spikes_all_frames;
+    % spikes of cell info
     if mouse.params_main.vel_opt
-        spike_t_good = cells(ncell).spikes_in_mov_frames;
+        cellmaps(ncell).spikes = cells(ncell).spikes_in_mov_frames;
     else
-        spike_t_good = spike_t;
+        cellmaps(ncell).spikes = cells(ncell).spikes_all_frames;
     end
+    cellmaps(ncell).spikes_count = length(cellmaps(ncell).spikes);
     
-    % spike map calculation
-    cellmaps(ncell).spike = zeros(mouse.size_map(1),mouse.size_map(2));
-    for k = 1:length(spike_t_good)
-        cellmaps(ncell).spike(mouse.y_ind(spike_t_good(k)),mouse.x_ind(spike_t_good(k))) = cellmaps(ncell).spike(mouse.y_ind(spike_t_good(k)),mouse.x_ind(spike_t_good(k))) + 1;
+    % spike map calculation, original
+    cellmaps(ncell).spike = zeros(mouse.size_map);
+    for k = 1:cellmaps(ncell).spikes_count
+        cellmaps(ncell).spike(mouse.y_ind(cellmaps(ncell).spikes(k)),mouse.x_ind(cellmaps(ncell).spikes(k))) = cellmaps(ncell).spike(mouse.y_ind(cellmaps(ncell).spikes(k)),mouse.x_ind(cellmaps(ncell).spikes(k))) + 1;
     end
-    
     cellmaps(ncell).max_bin_spike = max(cellmaps(ncell).spike(:));
+    
+    % spike map calculation, smoothed
+    if mouse.params_main.spike_smooth
+        [cellmaps(ncell).spike_smoothed, ~] = convolution_with_holes(cellmaps(ncell).spike,mouse.mask_t,mouse.params_main.kernel_opt.small.size,mouse.params_main.kernel_opt.small.sigma);
+    else
+        cellmaps(ncell).spike_smoothed = cellmaps(ncell).spike;
+    end    
+    cellmaps(ncell).max_bin_spike_refined = max(cellmaps(ncell).spike_smoothed(:));
+    
+    % spike map calculation, refined
+    cellmaps(ncell).spike_refined = cellmaps(ncell).spike_smoothed;
+    if mouse.params_main.spike_threshold        
+        cellmaps(ncell).spike_refined(cellmaps(ncell).spike_refined < mouse.params_main.spike_threshold * cellmaps(ncell).max_bin_spike_refined) = 0;
+    end    
+    
+    % spike map calculation, normalized
+    cellmaps(ncell).spike_normalized = cellmaps(ncell).spike_refined/cellmaps(ncell).max_bin_spike_refined;
+    
+    % spike map calculation, maximum value update    
     if mouse.max_bin.spike < cellmaps(ncell).max_bin_spike
         mouse.max_bin.spike =  cellmaps(ncell).max_bin_spike;
-    end
-    
-    % spike map smoothing and tresholding
-    if mouse.params_main.spike_smooth
-        [cellmaps(ncell).spike_refined, ~] = ConvBorderFix(cellmaps(ncell).spike,mouse.mask_t,mouse.params_main.kernel_opt.small.size,mouse.params_main.kernel_opt.small.sigma);
-    else
-        cellmaps(ncell).spike_refined = cellmaps(ncell).spike;
-    end
-    cellmaps(ncell).spike_refined(cellmaps(ncell).spike_refined < mouse.params_main.thres_spike * max(cellmaps(ncell).spike_refined(:))) = 0;
-    
-    cellmaps(ncell).max_bin_spike_refined = max(cellmaps(ncell).spike_refined(:));
+    end    
     if mouse.max_bin.spike_refined < cellmaps(ncell).max_bin_spike_refined
         mouse.max_bin.spike_refined = cellmaps(ncell).max_bin_spike_refined;
     end
     
-    % trace map calculation
-    cellmaps(ncell).trace = zeros(mouse.size_map(1),mouse.size_map(2));
-    for frame = 1:mouse.duration_frames
-        cellmaps(ncell).trace(mouse.y_ind(frame), mouse.x_ind(frame)) = ...
-            cellmaps(ncell).trace(mouse.y_ind(frame), mouse.x_ind(frame)) + cells(ncell).trace(frame);
-    end
-    cellmaps(ncell).trace_firingrate = cellmaps(ncell).trace ./mouse.ocuppancy_map.time_smoothed*mouse.params_main.MinTime;
-    cellmaps(ncell).trace_firingrate(isnan(cellmaps(ncell).trace_firingrate)) = 0;
-    cellmaps(ncell).trace_firingrate(isinf(cellmaps(ncell).trace_firingrate)) = 0;
+%     % trace map calculation (IN DEVELOPMENT)
+%     cellmaps(ncell).trace = zeros(mouse.size_map);
+%     for frame = 1:mouse.duration_frames
+%         cellmaps(ncell).trace(mouse.y_ind(frame), mouse.x_ind(frame)) = ...
+%             cellmaps(ncell).trace(mouse.y_ind(frame), mouse.x_ind(frame)) + cells(ncell).trace(frame);
+%     end
+%     cellmaps(ncell).trace_firingrate = cellmaps(ncell).trace./mouse.ocuppancy_map.time_smoothed*mouse.params_main.MinTime;
+%     cellmaps(ncell).trace_firingrate(isnan(cellmaps(ncell).trace_firingrate)) = 0;
+%     cellmaps(ncell).trace_firingrate(isinf(cellmaps(ncell).trace_firingrate)) = 0;
     
-    % firing rate map calculation
+    % firing rate map calculation, original
     cellmaps(ncell).firingrate = cellmaps(ncell).spike_refined./mouse.ocuppancy_map.time_smoothed*mouse.params_main.MinTime;
     cellmaps(ncell).firingrate(isnan(cellmaps(ncell).firingrate)) = 0;
-    cellmaps(ncell).firingrate(isinf(cellmaps(ncell).firingrate)) = 0;
-    
+    cellmaps(ncell).firingrate(isinf(cellmaps(ncell).firingrate)) = 0;    
     cellmaps(ncell).max_bin_firingrate = max(cellmaps(ncell).firingrate(:));
+    
+    % firing rate map calculation, smoothed
+    [cellmaps(ncell).firingrate_smoothed, ~] = convolution_with_holes(cellmaps(ncell).firingrate,mouse.mask_t,mouse.params_main.kernel_opt.big.size,mouse.params_main.kernel_opt.big.sigma);
+    cellmaps(ncell).max_bin_firingrate_refined = max(cellmaps(ncell).firingrate_smoothed(:));
+    
+  	% firing rate map calculation, tresholded
+    cellmaps(ncell).firingrate_refined = cellmaps(ncell).firingrate_smoothed;
+    if mouse.params_main.firingrate_threshold  
+        cellmaps(ncell).firingrate_refined(cellmaps(ncell).firingrate_refined < mouse.params_main.firingrate_threshold * cellmaps(ncell).max_bin_firingrate_refined) = 0;
+    end
+    
+    % firing rate map calculation, normalized
+    cellmaps(ncell).firingrate_normalized = cellmaps(ncell).firingrate_refined/cellmaps(ncell).max_bin_firingrate_refined;
+    
+    % firing rate map calculation, maximum value update       
     if mouse.max_bin.firingrate < cellmaps(ncell).max_bin_firingrate
         mouse.max_bin.firingrate =  cellmaps(ncell).max_bin_firingrate;
     end
-    
-    % firing rate map smoothing and tresholding
-    [cellmaps(ncell).firingrate_refined, ~] = ConvBorderFix(cellmaps(ncell).firingrate,mouse.mask_t,mouse.params_main.kernel_opt.big.size,mouse.params_main.kernel_opt.big.sigma);
-    
-    cellmaps(ncell).max_bin_firingrate_refined = max(cellmaps(ncell).firingrate_refined(:));
     if mouse.max_bin.firingrate_refined < cellmaps(ncell).max_bin_firingrate_refined
         mouse.max_bin.firingrate_refined =  cellmaps(ncell).max_bin_firingrate_refined;
     end
     
-    cellmaps(ncell).firingrate_refined(cellmaps(ncell).firingrate_refined < mouse.params_main.thres_firing * cellmaps(ncell).max_bin_firingrate_refined) = 0;
-    
-    % firing rate map normalizing
-    cellmaps(ncell).firingrate_refined_normalized = cellmaps(ncell).firingrate_refined/mouse.max_bin.firingrate_refined;
-    
     mouse.activity_map_summary.firingrate = mouse.activity_map_summary.firingrate + cellmaps(ncell).firingrate_refined;
-    mouse.activity_map_summary.firingrate_normalized = mouse.activity_map_summary.firingrate_normalized + cellmaps(ncell).firingrate_refined_normalized;
+    mouse.activity_map_summary.firingrate_normalized = mouse.activity_map_summary.firingrate_normalized + cellmaps(ncell).firingrate_normalized;
     
     %MI calculation
-    Cell_IC(2:5,ncell) = RandomShiftMod( ...
+    cells_MI(2:5,ncell) = RandomShiftMod( ...
         mouse.params_main.smooth_freq_mode, ...
-        spike_t, ...
+        cellmaps(ncell).spikes, ...
         mouse.velcam, ...
         mouse.x_ind, ...
         mouse.y_ind, ...
@@ -672,14 +714,14 @@ for ncell = mouse.cells_active
         );
     
     
-    Cell_IC(6,ncell) = (Cell_IC(3,ncell)-Cell_IC(4,ncell))/Cell_IC(5,ncell);
-    Cell_IC(7,ncell) = length(spike_t_good);    
+    cells_MI(6,ncell) = (cells_MI(3,ncell)-cells_MI(4,ncell))/cells_MI(5,ncell);
+    cells_MI(7,ncell) = cellmaps(ncell).spikes_count;    
     
-    cells(ncell).criterion_MI = Cell_IC(2,ncell);
-    cells(ncell).MI_bit = Cell_IC(3,ncell);
-    cells(ncell).MI_zscore = Cell_IC(6,ncell);
-    cells(ncell).MI_mean_shuffles = Cell_IC(4,ncell);
-    cells(ncell).MI_std_shuffles = Cell_IC(5,ncell);
+    cells(ncell).criterion_MI = cells_MI(2,ncell);
+    cells(ncell).MI_bit = cells_MI(3,ncell);
+    cells(ncell).MI_zscore = cells_MI(6,ncell);
+    cells(ncell).MI_mean_shuffles = cells_MI(4,ncell);
+    cells(ncell).MI_std_shuffles = cells_MI(5,ncell);
 
 end
 delete(h);
@@ -703,9 +745,9 @@ mouse.cells_active_MI_bit_mean = round(mean(mouse.cells_active_MI_bit),2);
 mouse.cells_active_MI_zscored = [cells(mouse.cells_active).MI_zscore];
 mouse.cells_active_MI_zscored_mean = round(mean(mouse.cells_active_MI_zscored),2);
 
-if ~isempty(Cell_IC)
+if ~isempty(cells_MI)
     h = figure;
-    histogram(Cell_IC(6,:),ceil(sqrt(length(Cell_IC(6,:)))+1));
+    histogram(cells_MI(6,:),ceil(sqrt(length(cells_MI(6,:)))+1));
     title('Histogram of cell''s MI', 'FontSize', mouse.params_main.FontSizeTitle);
     saveas(h, sprintf('%s\\%s_Histogram_MI.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
     delete(h);
@@ -772,7 +814,7 @@ for map = mouse.cells_informative
 %                 Fields(7,wfields-n_wfield+mask_field) = Nsig_fields(mask_field);
 %                 Fields(9,wfields-n_wfield+mask_field) = (Fields(8,wfields-n_wfield+mask_field)>params_main.min_spike_field)*Fields(3,wfields-n_wfield+mask_field);
             case 'MI_vanila'
-                Fields(3:7,wfields-n_wfield+mask_field) = Cell_IC(2:6,map);
+                Fields(3:7,wfields-n_wfield+mask_field) = cells_MI(2:6,map);
                 Fields(9,wfields-n_wfield+mask_field) = (Fields(8,wfields-n_wfield+mask_field)>=params_main.min_spike_field)*Fields(3,wfields-n_wfield+mask_field);
             case 'MI_vanila_fields'
                 Fields(3:6,wfields-n_wfield+mask_field) = RandomShiftMod(params_main.smooth_freq_mode,[spike_in_field{mask_field,:}],mouse.x_ind,mouse.y_ind,N_time_sm,params_main.N_shift,params_main.shift,params_main.S_sigma,mouse.params_main.TimeRate,session.framerate,params_main.kernel_opt);
@@ -879,7 +921,7 @@ for map = mouse.cells_informative
 %     if mouse.plot_opt.Plot_WaterShed
 %         h = figure('Position', mouse.params_main.Screensize);
 %         DrawHeatMapModSphynx(Options,ArenaAndObjects,params_main.opt.spike,double(L), 0, mouse.x, mouse.y, mouse.bin_size, Options.x_kcorr, [spike_in_field{mask_field,:}]);
-%         title(sprintf('WaterShed Transform of cell %d Crit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, Cell_IC(2:6,map)), 'FontSize', mouse.params_main.FontSizeTitle);
+%         title(sprintf('WaterShed Transform of cell %d Crit= %d \n IC = %.2f, MU = %.3f, SIGMA = %.3f, Nsig = %.1f', map, cells_MI(2:6,map)), 'FontSize', mouse.params_main.FontSizeTitle);
 %         saveas(h, sprintf('%s\\WaterShed\\%s_WaterShed_%d.png', mouse.params_paths.pathOut,mouse.params_paths.filenameOut,map));
 %         delete(h);
 %     end
@@ -931,9 +973,9 @@ end
 %     delete(h);
 % end
 
-% if length(Cell_IC(1,:))>2
+% if length(cells_MI(1,:))>2
 %     h = figure;
-%     histogram(Cell_IC(6,Cell_IC(2,:)>=0),round(length(Cell_IC(6,:))/5));
+%     histogram(cells_MI(6,cells_MI(2,:)>=0),round(length(cells_MI(6,:))/5));
 %     title('Histogram of z-scored IC distribution for cells', 'FontSize', mouse.params_main.FontSizeLabel);
 %     saveas(h, sprintf('%s\\%s_Histogram_IC_cells_normalized.png', mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
 %     delete(h);

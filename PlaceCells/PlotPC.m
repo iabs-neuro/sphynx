@@ -166,15 +166,16 @@ switch mode
             h = figure('Position', mouse.params_main.Screensize);
             plot(mouse.x,mouse.y, 'b');hold on;                                         % траектория животного
             DrawLine(mouse.x, mouse.y, mouse.velocity_binary, 1, 'g', 0, 1);hold on;    % траектория во время побежек
-            plot(mouse.x(cells(ncell).spikes_in_rest_frames),mouse.y(cells(ncell).spikes_in_rest_frames),'k*', 'MarkerSize',round(mouse.params_main.MarksizeSpikes/2), 'LineWidth',round(mouse.params_main.LineWidthSpikes/2));hold on;
+            plot(mouse.x(cells(ncell).spikes_in_rest_frames),mouse.y(cells(ncell).spikes_in_rest_frames),'k*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes);hold on;
             plot(mouse.x(cells(ncell).spikes_in_mov_frames),mouse.y(cells(ncell).spikes_in_mov_frames),'r*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes);
             
             axis(mouse.axes);
             title(sprintf('Trajectory of mouse with n = %d (%d) Ca2+ events (in mov, red) of cell #%d', cells(ncell).spikes_all_count,cells(ncell).spikes_in_mov_count, ncell), 'FontSize', mouse.params_main.FontSizeTitle);
             xlabel('X coordinate, cm','FontSize', mouse.params_main.FontSizeLabel);
             ylabel('Y coordinate, cm','FontSize', mouse.params_main.FontSizeLabel);
-            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+             add_trace(cells(1));
             legend({'Rest', 'Locomotion'});
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
             
             saveas(h, sprintf('%s\\Spikes\\%s_Spikes_Cell_%d.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut,ncell));
             delete(h);
