@@ -157,77 +157,81 @@ switch mode
         saveas(h, sprintf('%s\\%s_velocity.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
         saveas(h, sprintf('%s\\%s_velocity.fig',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
         delete(h);
-       %%
+
     case 'single_spike'
-    
+        
         graf_trace_ratio = 0.8;
         for ncell = 1:mouse.cells_count_for_analysis
-            h_combined = figure('Position', [1 1 mouse.params_main.Screensize(4)/(1+(1-graf_trace_ratio)/graf_trace_ratio) mouse.params_main.Screensize(4)]);
             
-            % === 2.1. Верхняя часть (80%) — карта спайков (как в исходном коде) ===
+            h_combined = figure('Position', [1 1 mouse.params_main.Screensize(4)/(1+(1-graf_trace_ratio)/graf_trace_ratio) mouse.params_main.Screensize(4)]);
             subplot('Position', [0.2 1-graf_trace_ratio+0.2 0.6 graf_trace_ratio-0.3]); % [left bottom width height]
             
-            plot(mouse.x,mouse.y, 'b');hold on;                                         % траектория животного
-            DrawLine(mouse.x, mouse.y, mouse.velocity_binary, 1, 'g', 0, 1);hold on;    % траектория во время побежек
-            plot(mouse.x(cells(ncell).spikes_in_rest_frames),mouse.y(cells(ncell).spikes_in_rest_frames),'k*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes);hold on;
-            plot(mouse.x(cells(ncell).spikes_in_mov_frames),mouse.y(cells(ncell).spikes_in_mov_frames),'r*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes);
+            % график траектории с кальциевыми событиями
+            h1 = plot(mouse.x,mouse.y, 'b');hold on;
+            h2 = DrawLine(mouse.x, mouse.y, mouse.velocity_binary, 1, 'g', 0, 1); hold on;
+            h3 = plot(mouse.x(cells(ncell).spikes_in_rest_frames),mouse.y(cells(ncell).spikes_in_rest_frames),'k*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes); hold on;
+            h4 = plot(mouse.x(cells(ncell).spikes_in_mov_frames),mouse.y(cells(ncell).spikes_in_mov_frames),'r*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes);
             
             axis(mouse.axes);
-            xlabel('X coordinate, cm','FontSize', mouse.params_main.FontSizeLabel);
-            ylabel('Y coordinate, cm','FontSize', mouse.params_main.FontSizeLabel);
+            xlabel('X, cm','FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('Y, cm','FontSize', mouse.params_main.FontSizeLabel);
             set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
-            title(sprintf('Trajectory. n = %d (%d) Ca2+ events (in mov, red). Cell #%d', cells(ncell).spikes_all_count,cells(ncell).spikes_in_mov_count, ncell), 'FontSize', mouse.params_main.FontSizeTitle);
+            title(sprintf('%s. Cell #%d', strrep(mouse.params_paths.filenameOut, '_', '\_'), ncell), 'FontSize', mouse.params_main.FontSizeTitle);
             
-            legend({'Rest', 'Locomotion'}, 'FontSize', round(mouse.params_main.FontSizeTitle/2));
+            legend([h1, h2, h3, h4], {'Rest','Locomotion','Ca^{2+}, all events', 'Ca^{2+}, in locomotion'},'FontSize', round(mouse.params_main.FontSizeTitle*2/3), 'Position', [0.85 0.8 0.1 0.05]);
             
-            % === 2.2. Нижняя часть (20%) — временной график активности ===
+            % активность нейрона
             subplot('Position', [0.2 0.1 0.6 1-graf_trace_ratio]);
+            plot(mouse.time, cells(ncell).trace, 'b', 'LineWidth', 1.5); hold on;            
+            DrawLine(mouse.time, cells(ncell).trace, mouse.velocity_binary, 1, 'g', 0, 1); hold on;
             
-            % Рисуем сигнал trace
-            plot(mouse.time, cells(ncell).trace, 'm', 'LineWidth', 1.5); hold on;
-            
-            % Определяем общую высоту для всех спайков (90% от максимума активности)
             spike_level = 0.9 * max(cells(ncell).trace);
             
             % Отмечаем спайки покоя (чёрные звёздочки на фиксированной высоте)
-        time_rest = mouse.time(cells(ncell).spikes_in_rest_frames);
-        if ~isempty(time_rest)
-            plot(time_rest, repmat(spike_level, size(time_rest)), 'k*', ...
-                 'MarkerSize', 6, 'LineWidth', 1.5);
-        end
-        
-        % Отмечаем спайки движения (красные звёздочки на той же высоте)
-        time_mov = mouse.time(cells(ncell).spikes_in_mov_frames);
-        if ~isempty(time_mov)
-            plot(time_mov, repmat(spike_level, size(time_mov)), 'r*', ...
-                 'MarkerSize', 8, 'LineWidth', 1.5);
-        end
+            time_rest = mouse.time(cells(ncell).spikes_in_rest_frames);
+            if ~isempty(time_rest)
+                plot(time_rest, repmat(spike_level, size(time_rest)), 'k*', 'MarkerSize', 6, 'LineWidth', 1.5);
+            end
             
-            % Настройки графика
+            % Отмечаем спайки движения (красные звёздочки на той же высоте)
+            time_mov = mouse.time(cells(ncell).spikes_in_mov_frames);
+            if ~isempty(time_mov)
+                plot(time_mov, repmat(spike_level, size(time_mov)), 'r*', 'MarkerSize', 8, 'LineWidth', 1.5);
+            end
+            
             xlabel('Time, s', 'FontSize', mouse.params_main.FontSizeLabel);
-            ylabel('Activity (a.u.)', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('Activity, a.u.', 'FontSize', mouse.params_main.FontSizeLabel);
             set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
             xlim([min(mouse.time) max(mouse.time)]);
             box off;
-            % === Добавление рамки с SNR ===
-% Создаем axes для текста в правом нижнем углу
-axes('Position', [0.82 0.08 0.15 0.1], 'Visible', 'off'); % [left bottom width height]
-
-% Форматируем текст (жирный шрифт, размер)
-snr_text = sprintf('SNR = %.2f', cells(ncell).SNR);
-text(0.5, 0.5, snr_text, ...
-    'FontSize', mouse.params_main.FontSizeLabel *0.7, ...
-    'FontWeight', 'bold', ...
-    'HorizontalAlignment', 'center', ...
-    'VerticalAlignment', 'middle', ...
-    'BackgroundColor', [1 1 1], ... % белый фон
-    'EdgeColor', 'k', ... % черная рамка
-    'LineWidth', 1, ...
-    'Margin', 5); % отступ внутри рамки
+            
+            % инфо активности нейрона
+            % Создаем axes для текста в правом нижнем углу
+            axes('Position', [0.61 0.1 0.4 1-graf_trace_ratio], 'Visible', 'off');            
+            
+            cell_info = sprintf('SNR = %.1f\nN_{all} = %d Ca^{2+}\nN_{rest} = %d Ca^{2+}\nN_{loc} = %d Ca^{2+}\nFR_{all} = %.2f Ca^{2+}/min\nFR_{rest} = %.2f Ca^{2+}/min\nFR_{loc} = %.2f Ca^{2+}/min\nFR_{loc}/FR_{rest} = %.2f', ...
+                cells(ncell).SNR_peak, ...
+                cells(ncell).spikes_all_count, ...
+                cells(ncell).spikes_in_rest_count, ...
+                cells(ncell).spikes_in_mov_count, ...
+                cells(ncell).spikes_all_frequency, ...
+                cells(ncell).spikes_in_rest_frequency, ...
+                cells(ncell).spikes_in_mov_frequency, ...
+                cells(ncell).frequency_ratio_mov_rest);
+            
+            text(0.5, 0.5, cell_info, ...
+                'FontSize', mouse.params_main.FontSizeLabel *0.7, ...
+                'HorizontalAlignment', 'left', ...
+                'VerticalAlignment', 'middle', ...
+                'BackgroundColor', [1 1 1], ...
+                'EdgeColor', 'k', ...
+                'LineWidth', 1, ...
+                'Margin', 5);
+            
             saveas(h_combined, sprintf('%s\\Spikes\\%s_Spikes_Cell_%d.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut,ncell));
             delete(h_combined);
         end
-        %%
+
     case 'all_spikes'
         
         % all spikes from all cells
@@ -367,11 +371,11 @@ text(0.5, 0.5, snr_text, ...
         set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
         
         saveas(h, sprintf('%s\\%s_corr_SNR_FiringRateRatio.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
-        delete(h);
-        
+        delete(h);        
         
     otherwise
         error('Неизвестный режим: %s', mode);
+        
 end
 end
 

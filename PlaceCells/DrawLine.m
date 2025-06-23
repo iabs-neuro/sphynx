@@ -2,7 +2,7 @@
 % x_line = x_int_sm;
 % y_line = y_int_sm;
 % s = 'b';
-function DrawLine(x_line, y_line, line, x_kcorr, s, grad, width)
+function [h] = DrawLine(x_line, y_line, line, x_kcorr, s, grad, width)
 k=1;
 l=1;
 if grad
@@ -19,9 +19,9 @@ for i=2:length(line)
    end   
    if (line(i)==0) && (line(i-1) == 1) || (line(i) == 1 && i==length(line)) 
        if grad
-           plot(x_line(pline)/x_kcorr,y_line(pline), colorstring(mod(l,7)+1), 'LineWidth',width);
+           h = plot(x_line(pline)/x_kcorr,y_line(pline), colorstring(mod(l,7)+1), 'LineWidth',width);
        else
-           plot(x_line(pline)/x_kcorr,y_line(pline), s, 'LineWidth',width);
+           h = plot(x_line(pline)/x_kcorr,y_line(pline), s, 'LineWidth',width);
        end
        hold on;
        k=1;

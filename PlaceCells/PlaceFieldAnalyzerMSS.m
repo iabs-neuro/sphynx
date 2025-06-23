@@ -1,6 +1,6 @@
 function [FieldsIC] = PlaceFieldAnalyzerMSS(params_paths, params_main)
 % Place Cells and Fields Analysis 
-% Plusnin Viktor 2025
+% Plusnin Viktor, Savelev Nikita 2025
 % 
 % Short history of commites:
 % 12.20 added separate matrices for all plots(for correct gauss filtering)
@@ -14,19 +14,19 @@ function [FieldsIC] = PlaceFieldAnalyzerMSS(params_paths, params_main)
 if ~exist('params_paths', 'var')
     
     % define path for outputs
-    params_paths.pathOut = uigetdir('C:\Users\User\YandexDisk\_Projects\MSS\ActivityData', 'Please specify the path to save the data');
+    params_paths.pathOut = uigetdir('w:\Projects\NOF\ActivityData\PlaceCells\', 'Please specify the path to save the data');
     
     %loading videotracking
-    [params_paths.filenameWS, params_paths.pathWS]  = uigetfile('*.mat','Please specify the mat-file from behavior analysis','C:\Users\User\YandexDisk\_Projects\MSS\ActivityData\Behav_mat\');
+    [params_paths.filenameWS, params_paths.pathWS]  = uigetfile('*.mat','Please specify the mat-file from behavior analysis','w:\Projects\NOF\ActivityData\MAT_behav\');
     
     %loading spike file
-    [params_paths.filenameNV, params_paths.pathNV]  = uigetfile('*.csv','Please specify the file with spikes','C:\Users\User\YandexDisk\_Projects\MSS\ActivityData\Spikes\');
+    [params_paths.filenameNV, params_paths.pathNV]  = uigetfile('*.csv','Please specify the file with spikes','w:\Projects\NOF\ActivityData\Spikes\');
     
     %loading trace file
-    [params_paths.filenameTR, params_paths.pathTR]  = uigetfile('*.csv','Please specify the file with traces','C:\Users\User\YandexDisk\_Projects\MSS\ActivityData\Traces\');
+    [params_paths.filenameTR, params_paths.pathTR]  = uigetfile('*.csv','Please specify the file with traces','w:\Projects\NOF\ActivityData\Traces\');
     
     %loading preset file
-    [params_paths.filenamePR, params_paths.pathPR]  = uigetfile('*.mat','Please specify the preset file','C:\Users\User\YandexDisk\_Projects\MSS\ActivityData\Presets\');
+    [params_paths.filenamePR, params_paths.pathPR]  = uigetfile('*.mat','Please specify the preset file','w:\Projects\NOF\ActivityData\Presets\');
     
 end
 
@@ -36,7 +36,7 @@ if ~exist('params_main', 'var') || isempty(params_main)
         ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SYNCHRONIZATION OPTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         'CorrectionTrackMode', 'Bonsai',...             % different modes for correction syncronization of behavior and calcium data {'NVista', 'FC', 'Bonsai', 'none'}
         'coordinates_correction', 0,...                 % 1 if you need in interpolation and smoothing of videotracking data
-        'test_mode', 10,...                             % 0 for all cells analysis else number of n first cells
+        'test_mode', 20,...                             % 0 for all cells analysis else number of n first cells
         'start_frame', 1,...                            % frame of the first frame for analysis
         'app_frame', 1,...                              % frame of the first frame "mouse in cage" (at last paradigm od analysis - is the same frame like a srart
         'end_frame', 0,...                              % frame of the last frame for analysis
@@ -63,12 +63,12 @@ if ~exist('params_main', 'var') || isempty(params_main)
         ...
         ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TEMPORAL PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         'SmoothWindowS', 0.5,...                        % smoothing window in seconds for behavior analysis (in case non-smoothed data)
-        'time_smooth', 1,...                            % flag for smoothing of time map (occupancy map)
+        'time_smooth', 1,...                            % flag for smoothing of occupancy map
         'spike_smooth', 1,...                           % flag for smoothing of spikes map
         'spike_threshold', 0.1,...                     	% threshold for spike map after smoothing (0 - no thresholding)
-        'firing_threshold', 0.5,...                    	% threshold for activity map after smoothing
+        'firing_threshold', 0.5,...                    	% threshold for activity map after smoothing (0 - no thresholding)
         'length_line_sec', 0.5,...                      % min time for acts (in area of fields or velocity binary timeseries)
-        'snr_params', struct('percentile', 50),...      % percent of signal to identify noise lvl in neurob trace
+        'snr_params', struct('percentile', 50),...      % percent of signal to identify noise lvl in neuron trace
         ...
         ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SUPPORTING PLOTS AND VERBOSE PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         'verbose', 1,...                                % additional messages
@@ -228,6 +228,13 @@ if mouse.params_main.plot_mode > 1
     mouse.plot_opt.Plot_WaterShedField = 1;
     mouse.plot_opt.Plot_Field = 1;
 end
+
+disp(['Структура mouse для сессии ' mouse.params_paths.filenameOut ' создана']);
+disp(['Эксперимент: ', mouse.exp]);
+disp(['Группа: ', mouse.group]);
+disp(['Животное: ', mouse.id]);
+disp(['День: ', mouse.day]);
+disp(['Попытка: ', mouse.trial]);
 
 %% loading data
 
@@ -683,8 +690,8 @@ for ncell = mouse.cells_active
     
   	% firing rate map calculation, tresholded
     cellmaps(ncell).firingrate_refined = cellmaps(ncell).firingrate_smoothed;
-    if mouse.params_main.firingrate_threshold  
-        cellmaps(ncell).firingrate_refined(cellmaps(ncell).firingrate_refined < mouse.params_main.firingrate_threshold * cellmaps(ncell).max_bin_firingrate_refined) = 0;
+    if mouse.params_main.firing_threshold
+        cellmaps(ncell).firingrate_refined(cellmaps(ncell).firingrate_refined < mouse.params_main.firing_threshold * cellmaps(ncell).max_bin_firingrate_refined) = 0;
     end
     
     % firing rate map calculation, normalized
