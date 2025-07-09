@@ -6,36 +6,24 @@ function [Cell_IC] = RandomShiftMod(smooth_freq_mode,spike_t,velcam,x_ind,y_ind,
 MinTime = 60; %seconds in 1 minutes
 
 %% debugging plots
-% mkdir(path, 'Shift_Heatmap_Spike');
-% mkdir(path, 'Shift_Heatmap_Spike_Smooth');
-% mkdir(path, 'Shift_Heatmap_FiringRate');
-smooth_freq_mode = 
-spike_t = cellmaps(ncell).spikes
-velcam = 
-x_ind = 
-y_ind = 
-mask_t = 
-N_time_sm = 
-N_shift = 
-shift = 
-S_sigma = 
-TimeRate = 
-FrameRate = 
-kernel_opt = 
 
-        mouse.params_main.smooth_freq_mode, ...
-        cellmaps(ncell).spikes, ...
-        mouse.velcam, ...
-        mouse.x_ind, ...
-        mouse.y_ind, ...
-        mouse.mask_t, ...
-        mouse.ocuppancy_map.time_smoothed, ...
-        mouse.params_main.N_shift, ...
-        mouse.params_main.shift, ...
-        mouse.params_main.S_sigma, ...
-        mouse.params_main.TimeRate, ...
-        mouse.framerate, ...
-        mouse.params_main.kernel_opt ...
+% mkdir(mouse.params_paths.pathOut, 'Shift_Heatmap_Spike');
+% mkdir(mouse.params_paths.pathOut, 'Shift_Heatmap_Spike_Smooth');
+% mkdir(mouse.params_paths.pathOut, 'Shift_Heatmap_FiringRate');
+% 
+% smooth_freq_mode = mouse.params_main.smooth_freq_mode;
+% spike_t = cellmaps(ncell).spikes;
+% velcam = mouse.velcam;
+% x_ind = mouse.x_ind;
+% y_ind = mouse.y_ind;
+% mask_t = mouse.mask_t;
+% N_time_sm = mouse.ocuppancy_map.time_smoothed;
+% N_shift = mouse.params_main.N_shift;
+% shift = mouse.params_main.shift;
+% S_sigma = mouse.params_main.S_sigma;
+% TimeRate = mouse.params_main.TimeRate;
+% FrameRate = mouse.framerate;
+% kernel_opt = mouse.params_main.kernel_opt;
 
 %% creating time shift
 Time_total = length(velcam)/FrameRate; % total session time for correct time shift

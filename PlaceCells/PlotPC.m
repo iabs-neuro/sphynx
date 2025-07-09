@@ -12,50 +12,50 @@ end
 % Построение графиков в зависимости от режима
 switch mode
     case 'allmap'
-        
+
         %% Сводная картинка с использованием draw_heatmap
         for ncell = 1:mouse.cells_count_for_analysis
             h = figure('Position', [100 100 1200 900], 'Color', 'w');
-            
-            
+
+
             % ===== Верхний ряд: карты спайков =====
             % 1. Карта спайков (raw)
             subplot('Position', [0.05 0.7 0.25 0.25]);
             draw_heatmap(cellmaps(ncell).spike, [], [], [], bin_size, x_kcorr, shift, mouse.params_main.heatmap_opt.spike);
             axis image off;
             title('Spike Map (raw)', 'FontSize', 10);
-            
+
             % 2. Сглаженная карта спайков
             subplot('Position', [0.35 0.7 0.25 0.25]);
             draw_heatmap(cellmaps(ncell).spike_smoothed, [], [], [], bin_size, x_kcorr, shift, opt);
             axis image off;
             title('Spike Map (smoothed)', 'FontSize', 10);
-            
+
             % 3. Обрезанная карта спайков
             subplot('Position', [0.65 0.7 0.25 0.25]);
             draw_heatmap(cellmaps(ncell).spike_refined, [], [], [], bin_size, x_kcorr, shift, opt);
             axis image off;
             title('Spike Map (refined)', 'FontSize', 10);
-            
+
             % ===== Средний ряд: карты firing rate =====
             % 1. Карта firing rate (raw)
             subplot('Position', [0.05 0.4 0.25 0.25]);
             draw_heatmap(cellmaps(ncell).firingrate, [], [], [], bin_size, x_kcorr, shift, opt);
             axis image off;
             title('Firing Rate (raw)', 'FontSize', 10);
-            
+
             % 2. Сглаженная карта firing rate
             subplot('Position', [0.35 0.4 0.25 0.25]);
             draw_heatmap(cellmaps(ncell).firingrate_smoothed, [], [], [], bin_size, x_kcorr, shift, opt);
             axis image off;
             title('Firing Rate (smoothed)', 'FontSize', 10);
-            
+
             % 3. Обрезанная карта firing rate
             subplot('Position', [0.65 0.4 0.25 0.25]);
             draw_heatmap(cellmaps(ncell).firingrate_refined, [], [], [], bin_size, x_kcorr, shift, opt);
             axis image off;
             title('Firing Rate (refined)', 'FontSize', 10);
-            
+
             % ===== Нижний ряд: карта времени и график активности =====
             % 1. Карта времени нахождения (оставляем imagesc)
             subplot('Position', [0.05 0.05 0.25 0.25]);
@@ -63,7 +63,7 @@ switch mode
             axis image off;
             title('Occupancy Time Map', 'FontSize', 10);
             colorbar;
-            
+
             % 2. График активности нейрона (без изменений)
             subplot('Position', [0.35 0.05 0.55 0.25]);
             plot(mouse.time, cells(ncell).trace, 'b', 'LineWidth', 1);
@@ -73,7 +73,7 @@ switch mode
             box off;
             grid on;
             title('Neuronal Activity Trace', 'FontSize', 10);
-            
+
             % Добавляем SNR в правый нижний угол
             annotation('textbox', [0.78 0.33 0.1 0.05], ...
                 'String', sprintf('SNR: %.2f', cells(ncell).SNR), ...
@@ -85,14 +85,14 @@ switch mode
                 'VerticalAlignment', 'middle', ...
                 'Margin', 2, ...
                 'LineWidth', 0.8);
-            
+
             % Сохранение
             saveas(h, sprintf('%s\\CompositeMaps\\%s_Cell_%d.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut, ncell));
             if ~mouse.params_main.ShowFigures
                 close(h);
             end
         end
-        
+
     case 'trace'
 
         for ncell = mouse.cells_active
@@ -114,12 +114,161 @@ switch mode
             saveas(gcf, sprintf('%s\\Heatmap_Trace\\%s_Heatmap_Trace_FiringRate_Cell_%d.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut, ncell));
             clf; close;
         end
-        
+
+    case 'firing rate summary'
+
+        % activity_map_summary, firingrate
+        draw_heatmap( ...
+            mouse.behav_opt.rgb_image, ...
+            mouse.params_main.heatmap_opt.spike, ...
+            mouse.activity_map_summary.firingrate, ...
+            0, ...
+            mouse.x_track, ...
+            mouse.y_track, ...
+            mouse.shift, ...
+            mouse.behav_opt.x_kcorr, ...
+            mouse.params_main.bin_size_cm*mouse.behav_opt.pxl2sm, ...
+            [] ...
+            );
+
+        title('Firing rate for all cells(#/min)', 'FontSize', mouse.params_main.FontSizeTitle);
+        saveas(gcf, sprintf('%s\\%s_Heatmap_AllCells_FiringRate.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
+        clf; close;
+
+        % activity_map_summary, firingrate normalized
+        draw_heatmap( ...
+            mouse.behav_opt.rgb_image, ...
+            mouse.params_main.heatmap_opt.spike, ...
+            mouse.activity_map_summary.firingrate_normalized, ...
+            0, ...
+            mouse.x_track, ...
+            mouse.y_track, ...
+            mouse.shift, ...
+            mouse.behav_opt.x_kcorr, ...
+            mouse.params_main.bin_size_cm*mouse.behav_opt.pxl2sm, ...
+            [] ...
+            );
+
+        title('Firing rate for all cells normalized (#/min)', 'FontSize', mouse.params_main.FontSizeTitle);
+        saveas(gcf, sprintf('%s\\%s_Heatmap_AllCells_FiringRate_Normalized.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
+        clf; close;
+
+
+        if mouse.cells_active_count
+
+            % histogram, MI (bit/Ca2+)
+            h = figure('Position', mouse.params_main.Screensize);
+            histogram(mouse.cells_active_MI_bit_event, 'BinMethod','fd');
+            title('Histogram of cell''s MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('Count', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+            saveas(h, sprintf('%s\\%s_Histogram_MI_bit_event.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
+            delete(h);
+
+            % histogram, MI (bit/min)
+            h = figure('Position', mouse.params_main.Screensize);
+            histogram(mouse.cells_active_MI_bit_time, 'BinMethod','fd');
+            title('Histogram of cell''s MI, bit/min', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, bit/min', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('Count', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+            saveas(h, sprintf('%s\\%s_Histogram_MI_bit_time.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
+            delete(h);
+
+            % histogram, MI (z-scored)
+            h = figure('Position', mouse.params_main.Screensize);
+            histogram(mouse.cells_active_MI_zscored, 'BinMethod','fd');
+            title('Histogram of cell''s MI, z-scored', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, z-scored', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('Count', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+            saveas(h, sprintf('%s\\%s_Histogram_MI_zscored.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
+            delete(h);
+
+            % MI, bit/Ca2+ and MI, z-scored
+            h = figure('Position', mouse.params_main.Screensize);
+            scatter(mouse.cells_active_MI_bit_event, mouse.cells_active_MI_zscored, mouse.params_main.MarksizeSpikes, 'k', 'filled');
+            yline(mouse.params_main.S_sigma, 'r--', 'LineWidth', 2);
+            title('MI (bit/Ca^{2+}) and MI (z-scored)', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('MI, z-scored', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+
+            saveas(h, sprintf('%s\\%s_MI_event_zscored.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
+            delete(h);
+
+            % MI, bit/min and MI, z-scored
+            h = figure('Position', mouse.params_main.Screensize);
+            scatter(mouse.cells_active_MI_bit_time, mouse.cells_active_MI_zscored, mouse.params_main.MarksizeSpikes, 'k', 'filled');
+            yline(mouse.params_main.S_sigma, 'r--', 'LineWidth', 2);
+            title('MI (bit/min) and MI (z-scored)', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, bit/min', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('MI, z-scored', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+
+            saveas(h, sprintf('%s\\%s_MI_time_zscored.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
+            delete(h);
+
+            % MI, bit/min and MI, bit/event
+            h = figure('Position', mouse.params_main.Screensize, 'Color', 'w');
+            main_ax = axes('Position', [0.15 0.15 0.8 0.8]);
+            scatter(mouse.cells_active_MI_bit_time, mouse.cells_active_MI_bit_event, mouse.params_main.MarksizeSpikes, 'k', 'filled'); hold on;
+            [~,~,active_indx] = intersect(mouse.cells_informative,mouse.cells_active);
+            scatter(mouse.cells_active_MI_bit_time(active_indx), mouse.cells_active_MI_bit_event(active_indx), mouse.params_main.MarksizeSpikes, 'r', 'filled'); hold on;
+            title('MI (bit/min) and MI (z-scored)', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, bit/min', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel, 'TickDir', 'in', 'Box', 'on');
+
+            ax_xdist = axes('Position', [0.15 0.15 0.8 0.1]);
+            histogram(mouse.cells_active_MI_bit_time, 'BinMethod', 'fd', 'FaceColor', [0.2 0.6 0.8], 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+            ax_xdist.XAxis.Visible = 'off'; ax_xdist.YAxis.Visible = 'off'; ax_xdist.Color = 'none'; ax_xdist.YAxisLocation = 'right';
+
+            ax_ydist = axes('Position', [0.15 0.15 0.1 0.8]);
+            histogram(mouse.cells_active_MI_bit_event, 'BinMethod', 'fd', 'Orientation', 'horizontal', 'FaceColor', [0.9 0.4 0.3], 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+            ax_ydist.XAxis.Visible = 'off'; ax_ydist.YAxis.Visible = 'off'; ax_ydist.Color = 'none';
+
+            linkaxes([main_ax, ax_xdist], 'x');
+            linkaxes([main_ax, ax_ydist], 'y');
+
+            saveas(h, sprintf('%s\\%s_MI_time_event.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
+            delete(h);
+        end
+
+    case 'firing rate'
+
+        for ncell = mouse.cells_active
+
+            draw_heatmap( ...
+                mouse.behav_opt.rgb_image, ...
+                mouse.params_main.heatmap_opt.spike, ...
+                cellmaps(ncell).firingrate_refined, ...
+                mouse.max_bin.firingrate_refined, ...
+                mouse.x_track, ...
+                mouse.y_track, ...
+                mouse.shift, ...
+                mouse.behav_opt.x_kcorr, ...
+                mouse.params_main.bin_size_cm*mouse.behav_opt.pxl2sm, ...
+                cellmaps(ncell).spikes ... % !!! check for vel_opt
+                );
+
+            title(sprintf('Cell %d. Ca2+ events: %d, MI = %.2f, MI\\_shuffle = %.3f, SIGMA\\_shuffle = %.3f, MI\\_Zscore = %.1f', ...
+                ncell, ...
+                cells(ncell).spikes_all_count, ...
+                cells(ncell).MI_bit_event, ...
+                cells(ncell).MI_mean_shuffles, ...
+                cells(ncell).MI_std_shuffles, ...
+                cells(ncell).MI_zscore), ...
+                'FontSize', mouse.params_main.FontSizeTitle);
+            saveas(gcf, sprintf('%s\\Heatmap_FiringRate_Smooth\\%s_Heatmap_FiringRate_Smoothed_Cell_%d.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut, ncell));
+            clf; close;
+        end
     case 'occupancy'
         draw_heatmap( ...
             mouse.behav_opt.rgb_image, ...
             mouse.params_main.heatmap_opt.track, ...
-            mouse.ocuppancy_map.time_smoothed, ...
+            mouse.occupancy_map.time_smoothed, ...
             0, ...
             mouse.x_track, ...
             mouse.y_track, ...
@@ -192,84 +341,88 @@ switch mode
         saveas(h, sprintf('%s\\%s_velocity.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
         saveas(h, sprintf('%s\\%s_velocity.fig',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
         delete(h);
-       %%
+
     case 'single_spike'
-    
+
         graf_trace_ratio = 0.8;
-        for ncell = 1:mouse.cells_count_for_analysis
+        for ncell = 1:mouse.cells_for_analysis_count
+
             h_combined = figure('Position', [1 1 mouse.params_main.Screensize(4)/(1+(1-graf_trace_ratio)/graf_trace_ratio) mouse.params_main.Screensize(4)]);
-            
-            % === 2.1. Верхняя часть (80%) — карта спайков (как в исходном коде) ===
             subplot('Position', [0.2 1-graf_trace_ratio+0.2 0.6 graf_trace_ratio-0.3]); % [left bottom width height]
             
-            plot(mouse.x,mouse.y, 'b');hold on;                                         % траектория животного
-            DrawLine(mouse.x, mouse.y, mouse.velocity_binary, 1, 'g', 0, 1);hold on;    % траектория во время побежек
-            plot(mouse.x(cells(ncell).spikes_in_rest_frames),mouse.y(cells(ncell).spikes_in_rest_frames),'k*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes);hold on;
-            plot(mouse.x(cells(ncell).spikes_in_mov_frames),mouse.y(cells(ncell).spikes_in_mov_frames),'r*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes);
+            % график траектории с кальциевыми событиями
+            h1 = plot(mouse.x,mouse.y, 'b');hold on;
+            h2 = DrawLine(mouse.x, mouse.y, mouse.velocity_binary, 1, 'g', 0, 1); hold on;
+            h3 = plot(mouse.x(cells(ncell).spikes_in_rest_frames),mouse.y(cells(ncell).spikes_in_rest_frames),'k*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes); hold on;
+            h4 = plot(mouse.x(cells(ncell).spikes_in_mov_frames),mouse.y(cells(ncell).spikes_in_mov_frames),'r*', 'MarkerSize',mouse.params_main.MarksizeSpikes, 'LineWidth',mouse.params_main.LineWidthSpikes);
             
             axis(mouse.axes);
-            xlabel('X coordinate, cm','FontSize', mouse.params_main.FontSizeLabel);
-            ylabel('Y coordinate, cm','FontSize', mouse.params_main.FontSizeLabel);
+            xlabel('X, cm','FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('Y, cm','FontSize', mouse.params_main.FontSizeLabel);
             set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
-            title(sprintf('Trajectory. n = %d (%d) Ca2+ events (in mov, red). Cell #%d', cells(ncell).spikes_all_count,cells(ncell).spikes_in_mov_count, ncell), 'FontSize', mouse.params_main.FontSizeTitle);
+            title(sprintf('%s. Cell #%d', strrep(mouse.params_paths.filenameOut, '_', '\_'), ncell), 'FontSize', mouse.params_main.FontSizeTitle);
             
-            legend({'Rest', 'Locomotion'}, 'FontSize', round(mouse.params_main.FontSizeTitle/2));
+            legend([h1, h2, h3, h4], {'Rest','Locomotion','Ca^{2+}, all events', 'Ca^{2+}, in locomotion'},'FontSize', round(mouse.params_main.FontSizeTitle*2/3), 'Position', [0.85 0.8 0.1 0.05]);
             
-            % === 2.2. Нижняя часть (20%) — временной график активности ===
+            % активность нейрона
             subplot('Position', [0.2 0.1 0.6 1-graf_trace_ratio]);
-            
-            % Рисуем сигнал trace
-            plot(mouse.time, cells(ncell).trace, 'm', 'LineWidth', 1.5); hold on;
-            
-            % Определяем общую высоту для всех спайков (90% от максимума активности)
+            plot(mouse.time, cells(ncell).trace, 'b', 'LineWidth', 1.5); hold on;
+            DrawLine(mouse.time, cells(ncell).trace, mouse.velocity_binary, 1, 'g', 0, 1); hold on;
+
             spike_level = 0.9 * max(cells(ncell).trace);
             
             % Отмечаем спайки покоя (чёрные звёздочки на фиксированной высоте)
-        time_rest = mouse.time(cells(ncell).spikes_in_rest_frames);
-        if ~isempty(time_rest)
-            plot(time_rest, repmat(spike_level, size(time_rest)), 'k*', ...
-                 'MarkerSize', 6, 'LineWidth', 1.5);
-        end
-        
-        % Отмечаем спайки движения (красные звёздочки на той же высоте)
-        time_mov = mouse.time(cells(ncell).spikes_in_mov_frames);
-        if ~isempty(time_mov)
-            plot(time_mov, repmat(spike_level, size(time_mov)), 'r*', ...
-                 'MarkerSize', 8, 'LineWidth', 1.5);
-        end
-            
-            % Настройки графика
+            time_rest = mouse.time(cells(ncell).spikes_in_rest_frames);
+            if ~isempty(time_rest)
+                plot(time_rest, repmat(spike_level, size(time_rest)), 'k*', 'MarkerSize', 6, 'LineWidth', 1.5);
+            end
+
+            % Отмечаем спайки движения (красные звёздочки на той же высоте)
+            time_mov = mouse.time(cells(ncell).spikes_in_mov_frames);
+            if ~isempty(time_mov)
+                plot(time_mov, repmat(spike_level, size(time_mov)), 'r*', 'MarkerSize', 8, 'LineWidth', 1.5);
+            end
+
             xlabel('Time, s', 'FontSize', mouse.params_main.FontSizeLabel);
-            ylabel('Activity (a.u.)', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('Activity, a.u.', 'FontSize', mouse.params_main.FontSizeLabel);
             set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
             xlim([min(mouse.time) max(mouse.time)]);
             box off;
-            % === Добавление рамки с SNR ===
+
+            % инфо активности нейрона
             % Создаем axes для текста в правом нижнем углу
-            axes('Position', [0.82 0.08 0.15 0.1], 'Visible', 'off'); % [left bottom width height]
-            
-            % Форматируем текст (жирный шрифт, размер)
-            snr_text = sprintf('SNR = %.2f', cells(ncell).SNR);
-            text(0.5, 0.5, snr_text, ...
+            axes('Position', [0.61 0.1 0.4 1-graf_trace_ratio], 'Visible', 'off');
+
+            cell_info = sprintf('SNR = %.1f\nN_{all} = %d Ca^{2+}\nN_{rest} = %d Ca^{2+}\nN_{loc} = %d Ca^{2+}\nFR_{all} = %.2f Ca^{2+}/min\nFR_{rest} = %.2f Ca^{2+}/min\nFR_{loc} = %.2f Ca^{2+}/min\nFR_{loc}/FR_{rest} = %.2f', ...
+                cells(ncell).SNR_peak, ...
+                cells(ncell).spikes_all_count, ...
+                cells(ncell).spikes_in_rest_count, ...
+                cells(ncell).spikes_in_mov_count, ...
+                cells(ncell).spikes_all_frequency, ...
+                cells(ncell).spikes_in_rest_frequency, ...
+                cells(ncell).spikes_in_mov_frequency, ...
+                cells(ncell).frequency_ratio_mov_rest);
+
+            text(0.5, 0.5, cell_info, ...
                 'FontSize', mouse.params_main.FontSizeLabel *0.7, ...
-                'FontWeight', 'bold', ...
-                'HorizontalAlignment', 'center', ...
+                'HorizontalAlignment', 'left', ...
                 'VerticalAlignment', 'middle', ...
-                'BackgroundColor', [1 1 1], ... % белый фон
-                'EdgeColor', 'k', ... % черная рамка
+                'BackgroundColor', [1 1 1], ...
+                'EdgeColor', 'k', ...
                 'LineWidth', 1, ...
-                'Margin', 5); % отступ внутри рамки
+                'Margin', 5);
+
             saveas(h_combined, sprintf('%s\\Spikes\\%s_Spikes_Cell_%d.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut,ncell));
             delete(h_combined);
         end
-        %%
+
     case 'all_spikes'
         
         % all spikes from all cells
         h = figure('Position', mouse.params_main.Screensize);
         plot(mouse.x,mouse.y, 'b');hold on;
         DrawLine(mouse.x, mouse.y, mouse.velocity_binary, 1, 'g', 0, 1);hold on;
-        for ncell=1:mouse.cells_count_for_analysis
+        for ncell=1:mouse.cells_for_analysis_count
             plot(mouse.x(cells(ncell).spikes_in_mov_frames),mouse.y(cells(ncell).spikes_in_mov_frames),'r*', 'MarkerSize',mouse.params_main.MarksizeSpikesAll, 'LineWidth',mouse.params_main.LineWidthSpikes);
             hold on;
             plot(mouse.x(cells(ncell).spikes_in_rest_frames),mouse.y(cells(ncell).spikes_in_rest_frames),'k*', 'MarkerSize',round(mouse.params_main.MarksizeSpikesAll/2), 'LineWidth',round(mouse.params_main.LineWidthSpikes/2));
@@ -403,14 +556,11 @@ switch mode
         
         saveas(h, sprintf('%s\\%s_corr_SNR_FiringRateRatio.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
         delete(h);
-        
-        
+
     otherwise
         error('Неизвестный режим: %s', mode);
 end
 end
-
-
 
 % for ncell = mouse.cells_active
 % 

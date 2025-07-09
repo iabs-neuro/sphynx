@@ -1,5 +1,8 @@
 %% paths and names
-filenames = {
+
+ExpID = 'NOF';
+
+FileNames = {
     'H01_1D','H02_1D','H03_1D','H06_1D','H07_1D','H08_1D','H09_1D','H14_1D','H23_1D',...
     'H26_1D','H27_1D','H31_1D','H32_1D','H33_1D','H36_1D','H39_1D',...
     'H01_2D','H02_2D','H03_2D','H06_2D','H07_2D','H08_2D','H09_2D','H14_2D','H23_2D'...
@@ -10,10 +13,10 @@ filenames = {
     'H26_4D','H27_4D','H31_4D','H32_4D','H33_4D','H36_4D','H39_4D',...
     };
 
-pathNV = 'w:\Projects\NOF\PlaceCellsData\8_Spikes\';
-path = 'w:\Projects\NOF\PlaceCellsData\5.1_matfiles\';
+pathNV = 'w:\Projects\NOF\ActivityData\Spikes\';
+path = 'w:\Projects\NOF\ActivityData\MAT_behav\';
 % path = 'w:\Projects\NOF\PlaceCellsData\6_Features\';
-pathPR = 'w:\Projects\NOF\PlaceCellsData\4_Presets\';
+pathPR = 'w:\Projects\NOF\ActivityData\Presets\';
 
 %% main
 % Big_Cell_IC = [];
