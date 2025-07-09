@@ -14,6 +14,7 @@ switch mode
     
     case 'firing rate summary'
         
+        % activity_map_summary, firingrate
         draw_heatmap( ...
             mouse.behav_opt.rgb_image, ...
             mouse.params_main.heatmap_opt.spike, ...
@@ -31,6 +32,7 @@ switch mode
         saveas(gcf, sprintf('%s\\%s_Heatmap_AllCells_FiringRate.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
         clf; close;
         
+        % activity_map_summary, firingrate normalized
         draw_heatmap( ...
             mouse.behav_opt.rgb_image, ...
             mouse.params_main.heatmap_opt.spike, ...
@@ -48,6 +50,89 @@ switch mode
         saveas(gcf, sprintf('%s\\%s_Heatmap_AllCells_FiringRate_Normalized.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
         clf; close;
         
+
+        if mouse.cells_active_count
+            
+            % histogram, MI (bit/Ca2+)
+            h = figure('Position', mouse.params_main.Screensize);
+            histogram(mouse.cells_active_MI_bit_event, 'BinMethod','fd');            
+            title('Histogram of cell''s MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('Count', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);            
+            saveas(h, sprintf('%s\\%s_Histogram_MI_bit_event.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
+            delete(h);
+        
+            % histogram, MI (bit/min)
+            h = figure('Position', mouse.params_main.Screensize);
+            histogram(mouse.cells_active_MI_bit_time, 'BinMethod','fd');
+            title('Histogram of cell''s MI, bit/min', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, bit/min', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('Count', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);            
+            saveas(h, sprintf('%s\\%s_Histogram_MI_bit_time.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
+            delete(h);
+            
+            % histogram, MI (z-scored)
+            h = figure('Position', mouse.params_main.Screensize);
+            histogram(mouse.cells_active_MI_zscored, 'BinMethod','fd');
+            title('Histogram of cell''s MI, z-scored', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, z-scored', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('Count', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);            
+            saveas(h, sprintf('%s\\%s_Histogram_MI_zscored.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
+            delete(h);
+            
+            % MI, bit/Ca2+ and MI, z-scored 
+            h = figure('Position', mouse.params_main.Screensize);
+            scatter(mouse.cells_active_MI_bit_event, mouse.cells_active_MI_zscored, mouse.params_main.MarksizeSpikes, 'k', 'filled');
+            yline(mouse.params_main.S_sigma, 'r--', 'LineWidth', 2);
+            title('MI (bit/Ca^{2+}) and MI (z-scored)', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('MI, z-scored', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+            
+            saveas(h, sprintf('%s\\%s_MI_event_zscored.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
+            delete(h);
+            
+            % MI, bit/min and MI, z-scored 
+            h = figure('Position', mouse.params_main.Screensize);
+            scatter(mouse.cells_active_MI_bit_time, mouse.cells_active_MI_zscored, mouse.params_main.MarksizeSpikes, 'k', 'filled');
+            yline(mouse.params_main.S_sigma, 'r--', 'LineWidth', 2); 
+            title('MI (bit/min) and MI (z-scored)', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, bit/min', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('MI, z-scored', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+            
+            saveas(h, sprintf('%s\\%s_MI_time_zscored.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
+            delete(h);
+            
+            % MI, bit/min and MI, bit/event
+            h = figure('Position', mouse.params_main.Screensize, 'Color', 'w');
+            main_ax = axes('Position', [0.15 0.15 0.8 0.8]);
+            scatter(mouse.cells_active_MI_bit_time, mouse.cells_active_MI_bit_event, mouse.params_main.MarksizeSpikes, 'k', 'filled'); hold on;
+            [~,~,active_indx] = intersect(mouse.cells_informative,mouse.cells_active);
+            scatter(mouse.cells_active_MI_bit_time(active_indx), mouse.cells_active_MI_bit_event(active_indx), mouse.params_main.MarksizeSpikes, 'r', 'filled'); hold on;
+            title('MI (bit/min) and MI (z-scored)', 'FontSize', mouse.params_main.FontSizeTitle);
+            xlabel('MI, bit/min', 'FontSize', mouse.params_main.FontSizeLabel);
+            ylabel('MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeLabel);
+            set(gca, 'FontSize', mouse.params_main.FontSizeLabel, 'TickDir', 'in', 'Box', 'on');
+            
+            ax_xdist = axes('Position', [0.15 0.15 0.8 0.1]);
+            histogram(mouse.cells_active_MI_bit_time, 'BinMethod', 'fd', 'FaceColor', [0.2 0.6 0.8], 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+            ax_xdist.XAxis.Visible = 'off'; ax_xdist.YAxis.Visible = 'off'; ax_xdist.Color = 'none'; ax_xdist.YAxisLocation = 'right';
+            
+            ax_ydist = axes('Position', [0.15 0.15 0.1 0.8]);
+            histogram(mouse.cells_active_MI_bit_event, 'BinMethod', 'fd', 'Orientation', 'horizontal', 'FaceColor', [0.9 0.4 0.3], 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+            ax_ydist.XAxis.Visible = 'off'; ax_ydist.YAxis.Visible = 'off'; ax_ydist.Color = 'none';
+            
+            linkaxes([main_ax, ax_xdist], 'x');
+            linkaxes([main_ax, ax_ydist], 'y');
+            
+            saveas(h, sprintf('%s\\%s_MI_time_event.png',mouse.params_paths.pathOut,mouse.params_paths.filenameOut));
+            delete(h);
+        end
+        
     case 'firing rate'
         
         for ncell = mouse.cells_active
@@ -61,14 +146,14 @@ switch mode
                 mouse.y_track, ...
                 mouse.shift, ...
                 mouse.behav_opt.x_kcorr, ...
-                mouse.params_main.bin_size_cm*mouse.behav_opt.pxl2sm, ...
-                cells(ncell).spikes_all_frames ...
+                mouse.params_main.bin_size_cm*mouse.behav_opt.pxl2sm, ...                
+                cellmaps(ncell).spikes ... % !!! check for vel_opt
                 );
             
-            title(sprintf('Firing rate, smoothed, of cell %d (#/min). Ca2+ events: %d\n MI = %.2f, MI\\_shuffle = %.3f, SIGMA\\_shuffle = %.3f, MI\\_Zscore = %.1f', ...
+            title(sprintf('Cell %d. Ca2+ events: %d, MI = %.2f, MI\\_shuffle = %.3f, SIGMA\\_shuffle = %.3f, MI\\_Zscore = %.1f', ...
                 ncell, ...
                 cells(ncell).spikes_all_count, ...
-                cells(ncell).MI_bit, ...
+                cells(ncell).MI_bit_event, ...
                 cells(ncell).MI_mean_shuffles, ...
                 cells(ncell).MI_std_shuffles, ...
                 cells(ncell).MI_zscore), ...
@@ -84,7 +169,7 @@ switch mode
         draw_heatmap( ...
             mouse.behav_opt.rgb_image, ...
             mouse.params_main.heatmap_opt.track, ...
-            mouse.ocuppancy_map.time_smoothed, ...
+            mouse.occupancy_map.time_smoothed, ...
             0, ...
             mouse.x_track, ...
             mouse.y_track, ...
@@ -161,7 +246,7 @@ switch mode
     case 'single_spike'
         
         graf_trace_ratio = 0.8;
-        for ncell = 1:mouse.cells_count_for_analysis
+        for ncell = 1:mouse.cells_for_analysis_count
             
             h_combined = figure('Position', [1 1 mouse.params_main.Screensize(4)/(1+(1-graf_trace_ratio)/graf_trace_ratio) mouse.params_main.Screensize(4)]);
             subplot('Position', [0.2 1-graf_trace_ratio+0.2 0.6 graf_trace_ratio-0.3]); % [left bottom width height]
@@ -238,7 +323,7 @@ switch mode
         h = figure('Position', mouse.params_main.Screensize);
         plot(mouse.x,mouse.y, 'b');hold on;
         DrawLine(mouse.x, mouse.y, mouse.velocity_binary, 1, 'g', 0, 1);hold on;
-        for ncell=1:mouse.cells_count_for_analysis
+        for ncell=1:mouse.cells_for_analysis_count
             plot(mouse.x(cells(ncell).spikes_in_mov_frames),mouse.y(cells(ncell).spikes_in_mov_frames),'r*', 'MarkerSize',mouse.params_main.MarksizeSpikesAll, 'LineWidth',mouse.params_main.LineWidthSpikes);
             hold on;
             plot(mouse.x(cells(ncell).spikes_in_rest_frames),mouse.y(cells(ncell).spikes_in_rest_frames),'k*', 'MarkerSize',round(mouse.params_main.MarksizeSpikesAll/2), 'LineWidth',round(mouse.params_main.LineWidthSpikes/2));

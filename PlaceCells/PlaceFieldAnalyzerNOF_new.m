@@ -1,4 +1,4 @@
-function [FieldsIC] = PlaceFieldAnalyzerMSS(params_paths, params_main)
+function PlaceFieldAnalyzerNOF_new(params_paths, params_main)
 % Place Cells and Fields Analysis 
 % Plusnin Viktor, Savelev Nikita 2025
 % 
@@ -65,7 +65,7 @@ if ~exist('params_main', 'var') || isempty(params_main)
         ...
         'min_spike', 1,...                              % minimum number of spikes for active cell
         'min_spike_MI', 3,...                           % minimum number of spikes for MI calculation (not used right now)
-        'min_spike_field', 3,...                        % minimum number of spikes for place field
+        'min_spike_field', 3,...                        % minimum number of spikes for place field (not used right now)
         ...
         ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TEMPORAL PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         'SmoothWindowS', 0.5,...                        % smoothing window in seconds for behavior analysis (in case non-smoothed data)
@@ -146,16 +146,17 @@ mouse = struct(...
 'space_explored', [], ...               % percent of explored area
 'size_map', [], ...                     % size of all maps in analysis (occupancy, activity)
 'occupancy_map', struct( ...            % struct for occupancy maps:
-'frame', [], ...                        % occupancy map in frames
-'time', [], ...                         % occupancy map in seconds (or minutes)
-'time_restricted', [], ...              % occupancy map in seconds without very low bins
-'time_smoothed', []), ...               % occupancy map, restricted ans smoothed 
+    'frame', [], ...                        % occupancy map in frames
+    'time', [], ...                         % occupancy map in seconds (or minutes)
+    'time_restricted', [], ...              % occupancy map in seconds without very low bins
+    'time_smoothed', [], ...              	% occupancy map, restricted ans smoothed
+   	'time_smoothed_min', []), ...       	% occupancy map, restricted ans smoothed in minutes
 'mask_t', [], ...                       % mask for all maps in related to unvisited bins
 'max_bin', struct( ...                  % struct of maxima in bins of different maps:
-'spike', 0, ...                         % maximum in bins of all spikes maps
-'spike_refined', 0, ...                 % maximum in bins of all refined spikes maps
-'firingrate', 0, ...                    % maximum in bins of all firing rate maps
-'firingrate_refined', 0), ...           % maximum in bins of all refined firing rate maps
+    'spike', 0, ...                         % maximum in bins of all spikes maps
+    'spike_refined', 0, ...                 % maximum in bins of all refined spikes maps
+    'firingrate', 0, ...                    % maximum in bins of all firing rate maps
+    'firingrate_refined', 0), ...           % maximum in bins of all refined firing rate maps
 ...
 ...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CELL INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ...%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CELL. GENERAL %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -170,21 +171,25 @@ mouse = struct(...
 'cells_active_percent', [], ...             % percent of active cells (to cells_count)
 'cells_active_firingrate', [], ...          % firing rate of active cells
 'cells_active_firingrate_mean', [], ...     % mean firing rate of active cells
-'cells_active_MI_bit', [], ...              % MI of active cells (in bit/Ca2+)
-'cells_active_MI_bit_mean', [], ...         % mean MI of active cells (in bit/Ca2+)
+'cells_active_MI_bit_event', [], ...       	% MI of active cells (in bit/Ca2+)
+'cells_active_MI_bit_event_mean', [], ...  	% mean MI of active cells (in bit/Ca2+)
+'cells_active_MI_bit_time', [], ...       	% MI of active cells (in bit/min)
+'cells_active_MI_bit_time_mean', [], ...   	% mean MI of active cells (in bit/min)
 'cells_active_MI_zscored', [], ...          % MI of active cells (zscored)
 'cells_active_MI_zscored_mean', [], ...     % mean MI of active cells (zscored)
 'activity_map_summary', struct( ...         % struct of summary activity maps
-'firingrate', [], ...                       % summary of firing rate maps of active cells
-'firingrate_normalized', []), ...           % summary of normalized firing rate maps of active cells
+    'firingrate', [], ...                       % summary of firing rate maps of active cells
+    'firingrate_normalized', []), ...           % summary of normalized firing rate maps of active cells
 ...%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CELL. INFORMATIVE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-'cells_informative', [], ...                % indexes of informative cells
-'cells_informative_count', [], ...          % count of informative cells
-'cells_informative_percent', [], ...        % percent of informative cells (to active cells)
-'cells_informative_MI_bit', [], ...         % MI of informative cells (in bit/Ca2+)
-'cells_informative_MI_bit_mean', [], ...    % mean MI of informative cells (in bit/Ca2+)
-'cells_informative_MI_zscored', [], ...     % MI of informative cells (zscored)
-'cells_informative_MI_zscored_mean', [] ... % mean MI of informative cells (zscored)
+'cells_informative', [], ...                    % indexes of informative cells
+'cells_informative_count', [], ...              % count of informative cells
+'cells_informative_percent', [], ...            % percent of informative cells (to active cells)
+'cells_informative_MI_bit_event', [], ...       % MI of informative cells (in bit/Ca2+)
+'cells_informative_MI_bit_event_mean', [], ...	% mean MI of informative cells (in bit/Ca2+)
+'cells_informative_MI_bit_time', [], ...       	% MI of informative cells (in bit/min)
+'cells_informative_MI_bit_time_mean', [], ...  	% mean MI of informative cells (in bit/min)
+'cells_informative_MI_zscored', [], ...         % MI of informative cells (zscored)
+'cells_informative_MI_zscored_mean', [] ...     % mean MI of informative cells (zscored)
 );
 
 params_paths.filenameOut = params_paths.filenameNV(1:find(params_paths.filenameNV == '_', 1, 'last') - 1);
@@ -294,7 +299,8 @@ switch mouse.params_main.CorrectionTrackMode
     case 'Bonsai'
         % session.duration_time_s = 720;
         % !!! change 30
-        session.duration_s = round(mouse.params_main.end_frame/30,2);
+%         session.duration_s = round(mouse.params_main.end_frame/30,2);
+        session.duration_s = 600;
         session.duration_min = round(session.duration_s/mouse.params_main.MinTime,2);
 %         mouse.TimeLine.Track = (0:session.duration_s/(size(file_VT,1)-1):session.duration_s);
         mouse.TimeLine.Track = (0:session.duration_s/(length(x_orig)-1):session.duration_s);
@@ -432,50 +438,54 @@ save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_pat
 
 %% description and defining struct CELLS
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MOUSE INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 'exp'                         - experiment identifier (e.g. 'FOF', 'NOF', '3DM' 'MSS')
-% 'group'                       - experimental group of animal (e.g. 'Control', 'FAD')
-% 'id'                          - mouse identifier (e.g. 'F01', 'H39')
-% 'day'                         - day number of registration (e.g. '1D', '6D')
-% 'trial'                       - trial number of registration (e.g. '1T', '6T')
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MAIN CELL INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 'cell'                        - cell number (same order in trace or spike table)
-% 'trace'                       - raw cell activity signal from CaImAn
-% 'SNR_baseline'                - signal-to-noise ratio in dB calculated on raw signal Baseline-Based Method
-% 'SNR_peak'                    - signal-to-noise ratio in dB calculated on raw signal Peak Method (PSNR)
-% 'SNR'                         - average signal-to-noise ratio in dB calculated on raw signal
-% 'criterion_activity'          - 1 - if cell passed activity criteria
-% 'criterion_MI'                - 1 - if cell passed information criteria
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SPIKES STATISTICS %%%%%%%%%%%%%%%%%%%%%%%%
-% 'spikes_all_count'            - count of all Ca2+ events
-% 'spikes_all_frames'           - timestamps of all Ca2+ events ('1' in spikes table)
-% 'spikes_all_frequency'        - frequency of all Ca2+ events during session (Ca2+/min)
-% 'spikes_all_amplitude'        - all Ca2+ events amplitude 
-% 'spikes_all_mean_amplitude'   - mean all Ca2+ events amplitude 
-% 'spikes_all_peak_amplitude'   - maximum amplitude of Ca2+ events
-% 
-% 'spikes_in_mov-//-'           - the same statistics as 'all' but during locomotion
-% 'spikes_in_rest-//-'          - the same statistics as 'all' but during rest
-% 'frequency_ratio_mov_rest'    - ratio of 'spikes_in_mov_frequency'/'spikes_in_rest_frequency'
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MUTUAL INFORMATION %%%%%%%%%%%%%%%%%%%%%%%
-% 'MI_bit_event'              	- original MI in bits/Ca2+
-% 'MI_zscore'                   - z-scored MI
-% 'MI_bit_time'                 - original MI in bits/minute
-% 'MI_mean_shuffles'            - mean MI on shuffled set
-% 'MI_std_shuffles'             - std MI on shuffled set
-
 cells = struct(...
-    'exp', '', 'group', '', 'id', '', 'day', '', 'trial', '', ...
-    'cell', [], 'trace', [], 'SNR', [], 'SNR_baseline', [], 'SNR_peak', [], 'criterion_activity', [], 'criterion_MI', [], ...  
-    'spikes_all_count', [], 'spikes_all_frames', [], 'spikes_all_frequency', [], 'spikes_all_mean_amplitude', [], 'spikes_all_peak_amplitude', [], ...
-    'spikes_in_mov_count', [],'spikes_in_mov_frames', [], 'spikes_in_mov_frequency', [],'spikes_in_mov_mean_amplitude', [], 'spikes_in_mov_peak_amplitude', [], ...
-    'spikes_in_rest_count', [], 'spikes_in_rest_frames', [], 'spikes_in_rest_frequency', [], 'spikes_in_rest_mean_amplitude', [], 'spikes_in_rest_peak_amplitude', [], ... 
-    'frequency_ratio_mov_rest', [], ...
-    'MI_bit_event', [], 'MI_zscore', [], 'MI_bit_time', [], 'MI_mean_shuffles', [], 'MI_std_shuffles', [] ...  
-    );
+...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MOUSE INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'exp', '', ...                              - experiment identifier (e.g. 'FOF', 'NOF', '3DM' 'MSS')
+'group', '', ...                            - experimental group of animal (e.g. 'Control', 'FAD')
+'id', '', ...                               - mouse identifier (e.g. 'F01', 'H39')
+'day', '', ...                              - day number of registration (e.g. '1D', '6D')
+'trial', '', ...                            - trial number of registration (e.g. '1T', '6T')
+...
+...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MAIN CELL INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'cell', [], ...                             - cell number (same order in trace or spike table)
+'trace', [], ...                            - raw cell activity signal from CaImAn
+'SNR_baseline', [], ...                     - signal-to-noise ratio in dB, Baseline-Based Method
+'SNR_peak', [], ...                         - signal-to-noise ratio in dB, Peak Method
+'SNR', [], ...                              - average signal-to-noise ratio in dB calculated on raw signal
+'criterion_activity', [], ...               - 1 - if cell passed activity criteria
+'criterion_MI', [], ...                     - 1 - if cell passed information criteria
+...
+...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SPIKES STATISTICS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% all spikes %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'spikes_all_count', [], ...                 - count of all Ca2+ events
+'spikes_all_frames', [], ...                - timestamps of all Ca2+ events ('1' in spikes table)
+'spikes_all_frequency', [], ...             - frequency of all Ca2+ events during session (Ca2+/min)
+'spikes_all_amplitude', [], ...             - all Ca2+ events amplitude 
+'spikes_all_mean_amplitude', [], ...        - mean all Ca2+ events amplitude 
+'spikes_all_peak_amplitude', [], ...        - maximum amplitude of Ca2+ events
+...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% in movements spikes %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'spikes_in_mov_count', [], ...              - count of all Ca2+ events
+'spikes_in_mov_frames', [], ...             - timestamps of all Ca2+ events ('1' in spikes table)
+'spikes_in_mov_frequency', [], ...          - frequency of all Ca2+ events during session (Ca2+/min)
+'spikes_in_mov_amplitude', [], ...          - all Ca2+ events amplitude 
+'spikes_in_mov_mean_amplitude', [], ...     - mean all Ca2+ events amplitude 
+'spikes_in_mov_peak_amplitude', [], ...     - maximum amplitude of Ca2+ events
+...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% in rests spikes %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'spikes_in_rest_count', [], ...             - count of all Ca2+ events
+'spikes_in_rest_frames', [], ...            - timestamps of all Ca2+ events ('1' in spikes table)
+'spikes_in_rest_frequency', [], ...         - frequency of all Ca2+ events during session (Ca2+/min)
+'spikes_in_rest_amplitude', [], ...         - all Ca2+ events amplitude 
+'spikes_in_rest_mean_amplitude', [], ...    - mean all Ca2+ events amplitude 
+'spikes_in_rest_peak_amplitude', [], ...    - maximum amplitude of Ca2+ events
+'frequency_ratio_mov_rest', [], ...       	- ratio of 'spikes_in_mov_frequency'/'spikes_in_rest_frequency'
+...
+...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MUTUAL INFORMATION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'MI_bit_event', [], ...                     - original MI in bits/Ca2+
+'MI_bit_time', [], ...                      - original MI in bits/minute
+'MI_zscore', [], ...                        - z-scored MI
+'MI_mean_shuffles', [], ...                 - mean MI on shuffled set
+'MI_std_shuffles', [] ...                   - std MI on shuffled set
+);
 
 for ncell = mouse.cells_for_analysis_indexes
     
@@ -583,50 +593,45 @@ save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_pat
 
 %% Maps for cell activity defining, MI calculation
 
-% description and defining struct CELLMAPS            
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MOUSE INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 'exp'                         - experiment identifier (e.g. 'FOF', 'NOF', '3DM' 'MSS')
-% 'group'                       - experimental group of animal (e.g. 'Control', 'FAD')
-% 'id'                          - mouse identifier (e.g. 'F01', 'H39')
-% 'day'                         - day number of registration (e.g. '1D', '6D')
-% 'trial'                       - trial number of registration (e.g. '1T', '6T')
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SPIKE AND FIRINGRATE MAPS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 'cell'                                          	- index of cell
-% 'spikes'                                          - timestamps of relevant Ca2+ events
-% 'spikes_count'                                    - count of relevant Ca2+ events
-% 'spike'                                           - spike map, original:          count of Ca2+ events
-% 'spike_smoothed'                                  - spike map, smoothed:          convolution with gauss kernel
-% 'spike_refined'                                   - spike map, refined:           spike_smoothed thresholded
-% 'spike_normalized'                                - spike map, normalized:        spike_refined normalized to [0,1]
-% 'firingrate'                                      - firing rate map, original:    count Ca2+ events per time unit
-% 'firingrate_smoothed'                             - firing rate map, smoothed:    convolution with gauss kernel
-% 'firingrate_refined'                              - firing rate map, refined:     firingrate_smoothed thresholded
-% 'firingrate_normalized'                           - firing rate map, normalized:  firingrate_refined normalized to [0,1]
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MAXIMA OF MAPS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 'max_bin.spike'                                   - maximum value of spike map
-% 'max_bin.spike_refined'                          	- maximum value of spike map, smoothed and refined
-% 'max_bin.firingrate'                            	- maximum value of firing rate map
-% 'max_bin.firingrate_refined                     	- maximum value of firing rate map, smoothed and refined
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TRACE MAPS (IN DEVELOPMENT) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 'trace'                                           - trace map, original:                  raw Ca2+ activity map
-% 'trace_smoothed'                                 	- trace map, smoothed:                  convolution with gauss kernel
-% 'trace_refined'                                  	- trace map, refined:                   trace_smoothed thresholded
-% 'trace_normalized'                               	- trace map, normalized:                trace_refined normalized to [0,1]
-% 'trace_firingrate'                               	- trace firing rate map, original:      raw Ca2+ activity per time unit
-% 'trace_firingrate_smoothed'                      	- trace firing rate map, smoothed:      convolution with gauss kernel
-% 'trace_firingrate_refined'                       	- trace firing rate map, refined:       trace_firingrate_smoothed restricted
-% 'trace_firingrate_normalized'                    	- trace firing rate map, normalized:    trace_firingrate_refined normalized to [0,1]
-
+% description and defining struct CELLMAPS
 cellmaps = struct(...
-    'exp', '', 'group', '', 'id', '', 'day', '', 'trial', '', ...
-    'cell', [], 'spikes', [], 'spikes_count', [], ...
-    'spike', [], 'spike_smoothed', [], 'spike_refined', [], 'spike_normalized', [], ...
-    'firingrate', [], 'firingrate_smoothed', [], 'firingrate_refined', [], 'firingrate_normalized', [], ...
-    'max_bin', [] ...
-    );
+...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MOUSE INFO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'exp', '', ...                              - experiment identifier (e.g. 'FOF', 'NOF', '3DM' 'MSS')
+'group', '', ...                            - experimental group of animal (e.g. 'Control', 'FAD')
+'id', '', ...                               - mouse identifier (e.g. 'F01', 'H39')
+'day', '', ...                              - day number of registration (e.g. '1D', '6D')
+'trial', '', ...                            - trial number of registration (e.g. '1T', '6T')
+...
+...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SPIKE AND FIRINGRATE MAPS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'cell', [], ...                           	- index of cell
+'spikes', [], ...                          	- timestamps of relevant Ca2+ events
+'spikes_count', [], ...                    	- count of relevant Ca2+ events
+'spike', [], ...                           	- spike map, original:          count of Ca2+ events
+'spike_smoothed', [], ...                  	- spike map, smoothed:          convolution with gauss kernel
+'spike_refined', [], ...                   	- spike map, refined:           spike_smoothed thresholded
+'spike_normalized', [], ...                	- spike map, normalized:        spike_refined normalized to [0,1]
+'firingrate', [], ...                      	- firing rate map, original:    count Ca2+ events per time unit
+'firingrate_smoothed', [], ...             	- firing rate map, smoothed:    convolution with gauss kernel
+'firingrate_refined', [], ...              	- firing rate map, refined:     firingrate_smoothed thresholded
+'firingrate_normalized', [], ...           	- firing rate map, normalized:  firingrate_refined normalized to [0,1]
+...
+...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MAXIMA OF MAPS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'max_bin', struct(...
+'spike', [], ...                           	- maximum value of spike map
+'spike_refined', [], ...                   	- maximum value of spike map, smoothed and refined
+'firingrate', [], ...                      	- maximum value of firing rate map
+'firingrate_refined', []), ...             	- maximum value of firing rate map, smoothed and refined
+...
+...%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TRACE MAPS (IN DEVELOPMENT) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'trace', [], ...                           	- trace map, original:                  raw Ca2+ activity map
+'trace_smoothed', [], ...                  	- trace map, smoothed:                  convolution with gauss kernel
+'trace_refined', [], ...                   	- trace map, refined:                   trace_smoothed thresholded
+'trace_normalized', [], ...                	- trace map, normalized:                trace_refined normalized to [0,1]
+'trace_firingrate', [], ...                	- trace firing rate map, original:      raw Ca2+ activity per time unit
+'trace_firingrate_smoothed', [], ...       	- trace firing rate map, smoothed:      convolution with gauss kernel
+'trace_firingrate_refined', [], ...        	- trace firing rate map, refined:       trace_firingrate_smoothed restricted
+'trace_firingrate_normalized', [] ...      	- trace firing rate map, normalized:    trace_firingrate_refined normalized to [0,1]
+);
 
 mouse.activity_map_summary.firingrate = zeros(mouse.size_map);                  % HeatMap of all activity map
 mouse.activity_map_summary.firingrate_normalized = zeros(mouse.size_map);       % HeatMap of all normalized activity map
@@ -665,7 +670,7 @@ for ncell = mouse.cells_active
     % maximum value update for all cells   
     if mouse.max_bin.spike < cellmaps(ncell).max_bin.spike
         mouse.max_bin.spike =  cellmaps(ncell).max_bin.spike;
-    end    
+    end
     if mouse.max_bin.spike_refined < cellmaps(ncell).max_bin.spike_refined
         mouse.max_bin.spike_refined = cellmaps(ncell).max_bin.spike_refined;
     end
@@ -719,15 +724,7 @@ mouse.cells_active_MI_bit_time_mean = round(mean(mouse.cells_active_MI_bit_time)
 mouse.cells_active_MI_zscored = [cells(mouse.cells_active).MI_zscore];
 mouse.cells_active_MI_zscored_mean = round(mean(mouse.cells_active_MI_zscored),2);
 
-if ~isempty(cells_MI)
-    h = figure;
-    histogram(cells_MI(6,:),ceil(sqrt(length(cells_MI(6,:)))+1));
-    title('Histogram of cell''s MI', 'FontSize', mouse.params_main.FontSizeTitle);
-    saveas(h, sprintf('%s\\%s_Histogram_MI.png', mouse.params_paths.pathOut, mouse.params_paths.filenameOut));
-    delete(h);
-end
 
-%heatmap for occupancy map
 if mouse.plot_opt.Plot_FiringRate_Smooth
     PlotPC(mouse, 'firing rate', cells, cellmaps);
 end
