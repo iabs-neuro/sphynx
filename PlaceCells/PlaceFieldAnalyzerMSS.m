@@ -13,7 +13,7 @@ function [FieldsIC] = PlaceFieldAnalyzerMSS(params_paths, params_main)
 %% manual defining parameters section
 if ~exist('params_paths', 'var')
     
-    % define path for outputs
+    %% define path for outputs
     params_paths.pathOut = uigetdir('C:\Users\User\YandexDisk\_Projects\MSS\ActivityData', 'Please specify the path to save the data');
     
     %loading videotracking
@@ -31,7 +31,7 @@ if ~exist('params_paths', 'var')
 end
 
 if ~exist('params_main', 'var') || isempty(params_main)
-    
+    %%
     params_main = struct(...
         ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SYNCHRONIZATION OPTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         'CorrectionTrackMode', 'Bonsai',...             % different modes for correction syncronization of behavior and calcium data {'NVista', 'FC', 'Bonsai', 'none'}
@@ -75,9 +75,11 @@ if ~exist('params_main', 'var') || isempty(params_main)
         'plot_mode', 2,...                              % main plot parameters, 0 - no one plots, 1 - basic plots, 2 - all plots
         'Screensize', get(0, 'Screensize'),...          % screensize for all plotting 
         'axes_step', 1,...                              % in cm
-        'heatmap_opt', struct('track', struct('trackp', 1, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 0),...
-        'spike', struct('trackp', 0, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 1)),...
-        ...                                             % opts for plot activity map
+        'heatmap_opt', struct(...
+        'track', struct('trackp', 1, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 0),...
+        'spike', struct('trackp', 0, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 1), ...
+        'trace', struct('trackp', 0, 'textl', 1, 'scale', 1, 'transp', 0.8, 'fon', 1, 'spike_opt', 1)), ...
+        ...                                             % opts for plot activity maps
         'LineWidthSpikes', 2,...                        % line width for spikes plots
         'MarksizeSpikes', 10,...                        % size of calcium event mark on spikes plots
         'MarksizeSpikesAll', 5,...                      % size of calcium event mark on all_spikes plots
@@ -603,10 +605,11 @@ cellmaps = struct(...
     'max_bin_spike', [], 'max_bin_spike_refined', [], 'max_bin_firingrate', [], 'max_bin_firingrate_refined', [] ...
     );
 
-mouse.activity_map_summary.firingrate = zeros(mouse.size_map);                  % HeatMap of all activity map
-mouse.activity_map_summary.firingrate_normalized = zeros(mouse.size_map);       % HeatMap of all normalized activity map
-
-% MI table
+mouse.activity_map_summary.firingrate = zeros(mouse.size_map);                          % HeatMap of all activity map
+mouse.activity_map_summary.firingrate_normalized = zeros(mouse.size_map);               % HeatMap of all normalized activity map
+mouse.activity_map_summary.trace_firingrate = zeros(mouse.size_map);                  % HeatMap of all activity map
+mouse.activity_map_summary.trace_firingrate_normalized = zeros(mouse.size_map);       % HeatMap of all normalized activity map
+%% MI table
 cells_MI = zeros(7,mouse.cells_count_for_analysis);
 cells_MI(1,1:mouse.cells_count_for_analysis)=linspace(1,mouse.cells_count_for_analysis,mouse.cells_count_for_analysis);
 
@@ -641,65 +644,104 @@ for ncell = mouse.cells_active
         [cellmaps(ncell).spike_smoothed, ~] = convolution_with_holes(cellmaps(ncell).spike,mouse.mask_t,mouse.params_main.kernel_opt.small.size,mouse.params_main.kernel_opt.small.sigma);
     else
         cellmaps(ncell).spike_smoothed = cellmaps(ncell).spike;
-    end    
+    end
     cellmaps(ncell).max_bin_spike_refined = max(cellmaps(ncell).spike_smoothed(:));
     
     % spike map calculation, refined
     cellmaps(ncell).spike_refined = cellmaps(ncell).spike_smoothed;
-    if mouse.params_main.spike_threshold        
+    if mouse.params_main.spike_threshold
         cellmaps(ncell).spike_refined(cellmaps(ncell).spike_refined < mouse.params_main.spike_threshold * cellmaps(ncell).max_bin_spike_refined) = 0;
-    end    
+    end
     
     % spike map calculation, normalized
     cellmaps(ncell).spike_normalized = cellmaps(ncell).spike_refined/cellmaps(ncell).max_bin_spike_refined;
     
-    % spike map calculation, maximum value update    
+    % spike map calculation, maximum value update
     if mouse.max_bin.spike < cellmaps(ncell).max_bin_spike
         mouse.max_bin.spike =  cellmaps(ncell).max_bin_spike;
-    end    
+    end
     if mouse.max_bin.spike_refined < cellmaps(ncell).max_bin_spike_refined
         mouse.max_bin.spike_refined = cellmaps(ncell).max_bin_spike_refined;
+    end    
+    
+    cells(ncell).trace(cells(ncell).trace<0) = 0;
+    
+    % ===== TRACE MAP CALCULATION =====
+    % Original trace map (sum of calcium signals per position)
+    cellmaps(ncell).trace = zeros(mouse.size_map);
+    for frame = 1:mouse.duration_frames        
+        cellmaps(ncell).trace(mouse.y_ind(frame), mouse.x_ind(frame)) = ...
+            cellmaps(ncell).trace(mouse.y_ind(frame), mouse.x_ind(frame)) + cells(ncell).trace(frame);        
+    end
+    cellmaps(ncell).trace = cellmaps(ncell).trace./mouse.ocuppancy_map.frame;
+    cellmaps(ncell).trace(isnan(cellmaps(ncell).trace)) = 0;
+    cellmaps(ncell).trace(isinf(cellmaps(ncell).trace)) = 0;
+    cellmaps(ncell).max_bin_trace = max(cellmaps(ncell).trace(:));
+    
+    % Smoothed trace map
+    if mouse.params_main.trace_smooth
+        [cellmaps(ncell).trace_smoothed, ~] = convolution_with_holes(...
+            cellmaps(ncell).trace, ...
+            mouse.mask_t, ...
+            mouse.params_main.kernel_opt.trace_trace.size, ...
+            mouse.params_main.kernel_opt.trace_trace.sigma);
+    else
+        cellmaps(ncell).trace_smoothed = cellmaps(ncell).trace;
+    end
+    cellmaps(ncell).max_bin_trace_refined = max(cellmaps(ncell).trace_smoothed(:));
+    
+    % Thresholded trace map
+    cellmaps(ncell).trace_refined = cellmaps(ncell).trace_smoothed;
+    if mouse.params_main.trace_threshold
+        cellmaps(ncell).trace_refined(cellmaps(ncell).trace_refined < mouse.params_main.trace_threshold * cellmaps(ncell).max_bin_trace_refined) = 0;
+    end
+       
+    % ===== TRACE MAP FIRING RATE CALCULATION =====    
+    % Original trace firing rate map (calcium signal per time unit)
+    cellmaps(ncell).trace_firingrate = cellmaps(ncell).trace_refined ./ mouse.ocuppancy_map.time_smoothed;
+    cellmaps(ncell).trace_firingrate(isnan(cellmaps(ncell).trace_firingrate)) = 0;
+    cellmaps(ncell).trace_firingrate(isinf(cellmaps(ncell).trace_firingrate)) = 0;
+    cellmaps(ncell).max_bin_trace_firingrate = max(cellmaps(ncell).trace_firingrate(:));
+    
+    % Smoothed trace firing rate map
+    if mouse.params_main.trace_firingrate_smoothed
+        [cellmaps(ncell).trace_firingrate_smoothed, ~] = convolution_with_holes(...
+            cellmaps(ncell).trace_firingrate, ...
+            mouse.mask_t, ...
+            mouse.params_main.kernel_opt.trace_firing.size, ...
+            mouse.params_main.kernel_opt.trace_firing.sigma);        
+    else
+        cellmaps(ncell).trace_firingrate_smoothed = cellmaps(ncell).trace_firingrate;
+    end
+    cellmaps(ncell).max_bin_trace_firingrate_refined = max(cellmaps(ncell).trace_firingrate_smoothed(:));
+
+    % Thresholded trace firing rate map
+    cellmaps(ncell).trace_firingrate_refined = cellmaps(ncell).trace_firingrate_smoothed;
+    if mouse.params_main.trace_firingrate_threshold
+        cellmaps(ncell).trace_firingrate_refined(cellmaps(ncell).trace_firingrate_refined < mouse.params_main.trace_firingrate_threshold * cellmaps(ncell).max_bin_trace_firingrate_refined) = 0;
+    end
+
+    % ===== NORMALIZATION =====
+    cellmaps(ncell).trace_normalized = cellmaps(ncell).trace_refined / cellmaps(ncell).max_bin_trace_refined;
+    cellmaps(ncell).trace_firingrate_normalized = cellmaps(ncell).trace_firingrate_refined / cellmaps(ncell).max_bin_trace_firingrate_refined;
+
+    % ===== GLOBAL MAXIMA UPDATE =====
+    if mouse.max_bin.trace < cellmaps(ncell).max_bin_trace
+        mouse.max_bin.trace = cellmaps(ncell).max_bin_trace;
+    end
+    if mouse.max_bin.trace_refined < cellmaps(ncell).max_bin_trace_refined
+        mouse.max_bin.trace_refined = cellmaps(ncell).max_bin_trace_refined;
+    end    
+    if mouse.max_bin.trace_firingrate < cellmaps(ncell).max_bin_trace_firingrate
+        mouse.max_bin.trace_firingrate = cellmaps(ncell).max_bin_trace_firingrate;
+    end
+    if mouse.max_bin.trace_firingrate_refined < cellmaps(ncell).max_bin_trace_firingrate_refined
+        mouse.max_bin.trace_firingrate_refined = cellmaps(ncell).max_bin_trace_firingrate_refined;
     end
     
-%     % trace map calculation (IN DEVELOPMENT)
-%     cellmaps(ncell).trace = zeros(mouse.size_map);
-%     for frame = 1:mouse.duration_frames
-%         cellmaps(ncell).trace(mouse.y_ind(frame), mouse.x_ind(frame)) = ...
-%             cellmaps(ncell).trace(mouse.y_ind(frame), mouse.x_ind(frame)) + cells(ncell).trace(frame);
-%     end
-%     cellmaps(ncell).trace_firingrate = cellmaps(ncell).trace./mouse.ocuppancy_map.time_smoothed*mouse.params_main.MinTime;
-%     cellmaps(ncell).trace_firingrate(isnan(cellmaps(ncell).trace_firingrate)) = 0;
-%     cellmaps(ncell).trace_firingrate(isinf(cellmaps(ncell).trace_firingrate)) = 0;
-    
-    % firing rate map calculation, original
-    cellmaps(ncell).firingrate = cellmaps(ncell).spike_refined./mouse.ocuppancy_map.time_smoothed*mouse.params_main.MinTime;
-    cellmaps(ncell).firingrate(isnan(cellmaps(ncell).firingrate)) = 0;
-    cellmaps(ncell).firingrate(isinf(cellmaps(ncell).firingrate)) = 0;    
-    cellmaps(ncell).max_bin_firingrate = max(cellmaps(ncell).firingrate(:));
-    
-    % firing rate map calculation, smoothed
-    [cellmaps(ncell).firingrate_smoothed, ~] = convolution_with_holes(cellmaps(ncell).firingrate,mouse.mask_t,mouse.params_main.kernel_opt.big.size,mouse.params_main.kernel_opt.big.sigma);
-    cellmaps(ncell).max_bin_firingrate_refined = max(cellmaps(ncell).firingrate_smoothed(:));
-    
-  	% firing rate map calculation, tresholded
-    cellmaps(ncell).firingrate_refined = cellmaps(ncell).firingrate_smoothed;
-    if mouse.params_main.firingrate_threshold  
-        cellmaps(ncell).firingrate_refined(cellmaps(ncell).firingrate_refined < mouse.params_main.firingrate_threshold * cellmaps(ncell).max_bin_firingrate_refined) = 0;
-    end
-    
-    % firing rate map calculation, normalized
-    cellmaps(ncell).firingrate_normalized = cellmaps(ncell).firingrate_refined/cellmaps(ncell).max_bin_firingrate_refined;
-    
-    % firing rate map calculation, maximum value update       
-    if mouse.max_bin.firingrate < cellmaps(ncell).max_bin_firingrate
-        mouse.max_bin.firingrate =  cellmaps(ncell).max_bin_firingrate;
-    end
-    if mouse.max_bin.firingrate_refined < cellmaps(ncell).max_bin_firingrate_refined
-        mouse.max_bin.firingrate_refined =  cellmaps(ncell).max_bin_firingrate_refined;
-    end
-    
-    mouse.activity_map_summary.firingrate = mouse.activity_map_summary.firingrate + cellmaps(ncell).firingrate_refined;
-    mouse.activity_map_summary.firingrate_normalized = mouse.activity_map_summary.firingrate_normalized + cellmaps(ncell).firingrate_normalized;
+    % ===== SUMMARY MAPS UPDATE =====
+    mouse.activity_map_summary.trace_firingrate = mouse.activity_map_summary.trace_firingrate + cellmaps(ncell).trace_refined;
+    mouse.activity_map_summary.trace_firingrate_normalized = mouse.activity_map_summary.trace_firingrate_normalized + cellmaps(ncell).trace_normalized;
     
     %MI calculation
     cells_MI(2:5,ncell) = RandomShiftMod( ...
@@ -716,8 +758,7 @@ for ncell = mouse.cells_active
         mouse.params_main.TimeRate, ...
         mouse.framerate, ...
         mouse.params_main.kernel_opt ...
-        );
-    
+        );    
     
     cells_MI(6,ncell) = (cells_MI(3,ncell)-cells_MI(4,ncell))/cells_MI(5,ncell);
     cells_MI(7,ncell) = cellmaps(ncell).spikes_count;    
@@ -763,6 +804,11 @@ save(sprintf('%s\\WorkSpace_%s.mat',mouse.params_paths.pathOut, mouse.params_pat
 %heatmap for occupancy map
 if mouse.plot_opt.Plot_FiringRate_Smooth
     PlotPC(mouse, 'firing rate', cells, cellmaps);
+end
+
+%heatmap for trace map map
+if mouse.plot_opt.Plot_Trace_FiringRate_Smooth
+    PlotPC(mouse, 'trace', cells, cellmaps);
 end
 
 PlotPC(mouse, 'firing rate summary', cells, cellmaps);
