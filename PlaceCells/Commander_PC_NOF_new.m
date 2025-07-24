@@ -35,7 +35,7 @@ params_main = struct(...
     'PC_criterion', 'MI_vanila',...                 % method for criterion of Place Cells: 'Peak' - schuffled peak of activity, 'MI_vanila' - Mutual Information for cells,  'MI_vanila_fields' - Mutual Information for fields
     'bin_size_cm', 4,...                            % size of bins in cm
     'heatmap_border', 1,...                         % additional bins number on the edges of the HeatMaps
-    'S_sigma', 4,...                                % criteria for informative place cell(1.65 for p = 0.05, 2.29 for p = 0.01, 3,09 for p = 0.001)
+    'S_sigma', 2.29,...                                % criteria for informative place cell(1.65 for p = 0.05, 2.29 for p = 0.01, 3,09 for p = 0.001)
     'N_shift', 1000,...                             % number of shift for random distribution
     'shift', 0.9,...                                % percent of all time occupancy for random shift
     'kernel_opt', struct(...                        % gaussian kernel options for activity maps calculation
@@ -82,9 +82,7 @@ params_main = struct(...
     );
 
 %% main
-
-% for file = 1:length(FileNames)
-for file = [13:16 33 42:48]  
+for file = 1:length(FileNames)
     fprintf('Processing of %s_%s\n', ExpID, FileNames{file});
     
     FileNameWS = sprintf('%s_%s_WorkSpace.mat',ExpID, FileNames{file});

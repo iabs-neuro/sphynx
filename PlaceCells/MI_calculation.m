@@ -105,6 +105,7 @@ end
 
 %% stats
 
+
 [~,MU,SIGMA] = zscore(MI_shuffle(2,2:N_shift+1));           % calculate MU and SIGMA on shuffled data
 
 if MI_shuffle(2,1) > MU+S_sigma*SIGMA                       % criteria for imformative cells

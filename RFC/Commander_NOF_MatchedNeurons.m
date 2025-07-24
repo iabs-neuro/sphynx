@@ -49,6 +49,7 @@ cells_informative = struct( ...
     );
 %     'stability_daily_matrix', [], ...
 %     'stability_daily_array', [] ...    
+stability = [];
 
 %% main part
 for file = 1:length(Filenames)
@@ -63,8 +64,6 @@ for file = 1:length(Filenames)
         cells_informative(file).cells_informative_count = [cells_informative(file).cells_informative_count data{day}.mouse.cells_informative_count];
         cells_informative(file).cells_informative_percent = [cells_informative(file).cells_informative_percent round(data{day}.mouse.cells_informative_percent)];
     end
-%     cells_informative(file).cells_informative_count = data{day}.mouse.cells_informative_count;
-%     cells_informative(file).cells_informative_percent = data{day}.mouse.cells_informative_percent;
     
     % Определение индексов сметченных информативных нейронов
     Matched.Table = table2array(readtable(sprintf('%s\\%s_%s.csv', pathMatched, ExpID, Filenames{file})));
@@ -138,10 +137,11 @@ for file = 1:length(Filenames)
                 ind_j = Matched.Indeces(ind_row,j);
                 ssim(ncell) = computeSSIM(data{i}.cellmaps(ind_i).firingrate_smoothed, data{j}.cellmaps(ind_j).firingrate_smoothed);
                 if i ~= j
+                    stability = [stability ssim(ncell)];
                     nameout = sprintf('%s\\ActivityMap_%s_days_%d_%d_Cell_%d_%d.png', pathout, Filenames{file}, i, j, ind_i, ind_j);
                     days = [i, j];
 %                     plotMatricesFiringRate(data{i}.cellmaps(ind_i).firingrate_smoothed, data{j}.cellmaps(ind_j).firingrate_smoothed, ind_i, ind_j, days, ssim(ncell), [], 'ssim', nameout)
-                end
+                end                
             end
             cells_informative(file).stability_matrix_r(i, j) = mean(ssim);
             cells_informative(file).stability_matrix_r(j, i) = cells_informative(file).stability_matrix_r(i, j);
@@ -150,13 +150,32 @@ for file = 1:length(Filenames)
     cells_informative(file).stability_array_r = unfold_matrix_diagonal(cells_informative(file).stability_matrix_r);    
 end
 
+%% plots
+
+mouse = data{1, 1}.mouse;
+
+% histogram, Stability (SSIM)
+h = figure('Position', mouse.params_main.Screensize);
+histogram(stability, 100);
+title('Histogram of cell''s Stability, SSIM', 'FontSize', mouse.params_main.FontSizeTitle);
+xlabel('Stability, SSIM', 'FontSize', mouse.params_main.FontSizeLabel);
+ylabel('Count', 'FontSize', mouse.params_main.FontSizeLabel);
+set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+
+saveas(h, sprintf('%s\\%s_Histogram_Stability.png', pathout, ExpID));
+saveas(h, sprintf('%s\\%s_Histogram_Stability.fig', pathout, ExpID));
+delete(h);
+
 %% Create structure of outputs data
 
 % узнать набор актов (acts) в эксперименте (в рамках одного эксперимента набор актов одинаковый)
 % для этого берем набор актов из например первой мышесессии
 % mouse_id = sprintf('%s_%s', 'FOF',  Filenames{1});
 
-acts = {'intersect_count_array' 'intersect_percent_array' 'intersect_daily_count' 'intersect_daily_percent' 'stability_array_r'};
+acts = { ...
+    'cells_informative_count' 'cells_informative_percent' 'matched_count' 'matched_percent' ...
+    'intersect_count_array' 'intersect_percent_matched_array' 'intersect_percent_inform_array' ...
+    'intersect_daily_count' 'intersect_daily_percent' 'stability_array_r'};
 
 % создание столбцов с id мышей и группой (и линией) в начале таблицы
 mice_info = table(Filenames(:), groups(:), line(:), 'VariableNames', {'mouse', 'group', 'line'});
@@ -167,29 +186,31 @@ mice_info = table(Filenames(:), groups(:), line(:), 'VariableNames', {'mouse', '
 % добавить все метрики актов
 num_volume = 1;
 for act = 1:length(acts)
-    if act == 3 || act == 4
-        sessions = 2;
-    else
+    if act <= 4
+        sessions = 4;
+    elseif act > 4 && act <= 7
+        sessions = 6;
+    elseif act > 7 && act <= 9
         sessions = 3;
+    else
+        sessions = 6;
     end
     for session = 1:sessions
 %         num_volume = (act-1)*sessions+session;
-        UglyTable.Name{num_volume} = [acts{act} '_' session];
+        UglyTable.Name{num_volume} = [acts{act} '_' num2str(session)];
         for mouse = 1:length(Filenames)
-
             session_name = [Filenames{mouse}];
-            session_ind = find(strcmp({cells_informative.name}, session_name));
-            
+            session_ind = find(strcmp({cells_informative.name}, session_name));            
             UglyTable.Data(mouse, num_volume) = cells_informative(session_ind).(acts{act})(session);
 
         end
         num_volume = num_volume + 1;
     end
-
 end
 
 % создание и сохранение итоговой таблицы
 UglyTable.Table = array2table(UglyTable.Data, 'VariableNames', UglyTable.Name);
 UglyTable.Table = [mice_info, UglyTable.Table];
-ExpID = 'FOF';
-writetable(UglyTable.Table, sprintf('%s\\%s_PlaceCellsStability.csv',pathout, ExpID));
+
+writetable(UglyTable.Table, sprintf('%s\\%s_Stability.csv',pathout, ExpID));
+save(sprintf('%s\\%s_Stability.mat', pathout, ExpID));

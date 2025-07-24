@@ -676,6 +676,7 @@ for ncell = mouse.cells_active
     end
     if mouse.max_bin.firingrate < cellmaps(ncell).max_bin.firingrate
         mouse.max_bin.firingrate =  cellmaps(ncell).max_bin.firingrate;
+    end
     if mouse.max_bin.firingrate_refined < cellmaps(ncell).max_bin.firingrate_refined
         mouse.max_bin.firingrate_refined =  cellmaps(ncell).max_bin.firingrate_refined;
     end
