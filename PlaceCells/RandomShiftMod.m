@@ -6,9 +6,24 @@ function [Cell_IC] = RandomShiftMod(smooth_freq_mode,spike_t,velcam,x_ind,y_ind,
 MinTime = 60; %seconds in 1 minutes
 
 %% debugging plots
-% mkdir(path, 'Shift_Heatmap_Spike');
-% mkdir(path, 'Shift_Heatmap_Spike_Smooth');
-% mkdir(path, 'Shift_Heatmap_FiringRate');
+
+% mkdir(mouse.params_paths.pathOut, 'Shift_Heatmap_Spike');
+% mkdir(mouse.params_paths.pathOut, 'Shift_Heatmap_Spike_Smooth');
+% mkdir(mouse.params_paths.pathOut, 'Shift_Heatmap_FiringRate');
+% 
+% smooth_freq_mode = mouse.params_main.smooth_freq_mode;
+% spike_t = cellmaps(ncell).spikes;
+% velcam = mouse.velcam;
+% x_ind = mouse.x_ind;
+% y_ind = mouse.y_ind;
+% mask_t = mouse.mask_t;
+% N_time_sm = mouse.ocuppancy_map.time_smoothed;
+% N_shift = mouse.params_main.N_shift;
+% shift = mouse.params_main.shift;
+% S_sigma = mouse.params_main.S_sigma;
+% TimeRate = mouse.params_main.TimeRate;
+% FrameRate = mouse.framerate;
+% kernel_opt = mouse.params_main.kernel_opt;
 
 %% creating time shift
 Time_total = length(velcam)/FrameRate; % total session time for correct time shift
@@ -36,19 +51,19 @@ for i=1:N_shift+1
     for k=1:length(spike_t_good)
         N(y_ind(spike_t_good(k)),x_ind(spike_t_good(k))) = N(y_ind(spike_t_good(k)),x_ind(spike_t_good(k))) + 1;        
     end
-    [N_sm, ~] = ConvBorderFix(N,mask_t,kernel_opt.small.size,kernel_opt.small.sigma);
+    [N_sm, ~] = convolution_with_holes(N,mask_t,kernel_opt.small.size,kernel_opt.small.sigma);
     
     N_freq = N_sm./N_time_sm*MinTime;
     N_freq(isnan(N_freq)) = 0;
     N_freq(isinf(N_freq)) = 0;
     
     if smooth_freq_mode
-        [N_freq_sm, ~] = ConvBorderFix(N_freq,mask_t,kernel_opt.big.size,kernel_opt.big.sigma);
+        [N_freq_sm, ~] = convolution_with_holes(N_freq,mask_t,kernel_opt.big.size,kernel_opt.big.sigma);
     else
         N_freq_sm = N_freq;
-    end    
+    end
     
-    %IC calculation
+    %MI calculation
     for ii = 1:size(N_time_sm,1)
         for jj = 1:size(N_time_sm,2)
             if N_freq_sm(ii,jj)>0

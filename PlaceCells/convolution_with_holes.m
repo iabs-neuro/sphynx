@@ -1,7 +1,7 @@
 function [N_ideal, mask] = convolution_with_holes(N_orig, mask_orig, kernel_size, kernel_sigma)
 % Performs 2D Gaussian convolution while handling borders and holes (zero values)
 % Redistributes values from holes to valid neighbors using a Gaussian kernel
-%
+% 
 % Inputs:
 %   N_orig: Input matrix
 %   mask_orig: Binary mask (1 = valid, 0 = hole) OR 0 (if no mask provided)

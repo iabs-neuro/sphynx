@@ -3,7 +3,6 @@
 pathMat = 'w:\Projects\FOF\ActivityData\PC_mat\';
 pathout = 'w:\Projects\FOF\ActivityData\CogMap\';
 
-
 Filenames = {
     'F01' 'F05' 'F06' 'F08' 'F11' 'F12' 'F07' 'F09' 'F10' 'F14' 'F15' 'F20' ...
     'F29' 'F31' 'F34' 'F36' 'F38' 'F41' 'F53' 'F54' 'F28' 'F30' 'F35' 'F37' 'F40' 'F48' 'F52' ...

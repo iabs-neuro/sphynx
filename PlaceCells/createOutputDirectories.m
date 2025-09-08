@@ -41,6 +41,9 @@ function mouse = createOutputDirectories(mouse)
     if mouse.plot_opt.Plot_FiringRate_Smooth
         mkdir(mouse.params_paths.pathOut, 'Heatmap_FiringRate_Smooth');
     end
+    if mouse.params_main.plot_trace
+        mkdir(mouse.params_paths.pathOut, 'Heatmap_Trace');
+    end
     if mouse.plot_opt.Plot_FiringRate_Smooth_Thres
         mkdir(mouse.params_paths.pathOut, 'Heatmap_FiringRate_Smooth_Thres_NOT_Informative');
         mkdir(mouse.params_paths.pathOut, 'Heatmap_FiringRate_Smooth_Thres_Informative');

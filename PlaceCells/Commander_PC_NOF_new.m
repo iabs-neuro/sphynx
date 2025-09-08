@@ -1,30 +1,3 @@
-%% main
-% Big_Cell_IC = [];
-for file = 1:length(filenames)
-    filename = sprintf('NOF_%s_WorkSpace.mat',filenames{file});
-    %     filename = sprintf('NOF_%s_Features.csv',filenames{file});
-    filenameNV = sprintf('NOF_%s_spikes.csv',filenames{file});
-    filenamePR = sprintf('NOF_%s_Preset.mat',filenames{file});
-    
-    %     FilenameMat = sprintf('w:\\Projects\\NOF\\PlaceCellsData\\11_MAT_test\\WorkSpace_NOF_%s.mat',filenames{file});
-    %     load(FilenameMat, 'Cell_IC');
-    %     Big_Cell_IC = [Big_Cell_IC Cell_IC(6,:)];
-    % end
-    
-    plot_opt = 1;
-    
-    if file > 9 && file < 17
-        filenamePR = 'NOF_H26_1D_Preset.mat';
-    elseif (file > 25 && file < 33) || (file > 41 && file <  49) || (file > 57)
-        filenamePR = 'NOF_H26_2D_Preset.mat';
-    else
-        filenamePR = sprintf('NOF_%s_Preset.mat', filenames{file});
-    end
-    
-    [FieldsIC] = PlaceFieldAnalyzerNOF(path,filename,pathNV,filenameNV,pathPR,filenamePR, plot_opt);
-end
-
-
 %% paths and names
 
 ExpID = 'NOF';
@@ -45,15 +18,14 @@ PathSpikes = 'w:\Projects\NOF\ActivityData\Spikes\';
 PathWorkSpaces = 'w:\Projects\NOF\ActivityData\MAT_behav\';
 PathPresets = 'w:\Projects\NOF\ActivityData\Presets\';
 
-PathOut = 'w:\Projects\MSS\ActivityData\PlaceCells\';
+PathOut = 'w:\Projects\NOF\ActivityData\PlaceCells\';
 
 %% all vital parameters
-
 params_main = struct(...
     ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SYNCHRONIZATION OPTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     'CorrectionTrackMode', 'Bonsai',...             % different modes for correction syncronization of behavior and calcium data {'NVista', 'FC', 'Bonsai', 'none'}
     'coordinates_correction', 0,...                 % 1 if you need in interpolation and smoothing of videotracking data
-    'test_mode', 10,...                             % 0 for all cells analysis else number of n first cells
+    'test_mode', 0,...                              % 0 for all cells analysis else number of n first cells
     'start_frame', 1,...                            % frame of the first frame for analysis
     'app_frame', 1,...                              % frame of the first frame "mouse in cage" (at last paradigm od analysis - is the same frame like a srart
     'end_frame', 0,...                              % frame of the last frame for analysis
@@ -63,15 +35,21 @@ params_main = struct(...
     'PC_criterion', 'MI_vanila',...                 % method for criterion of Place Cells: 'Peak' - schuffled peak of activity, 'MI_vanila' - Mutual Information for cells,  'MI_vanila_fields' - Mutual Information for fields
     'bin_size_cm', 4,...                            % size of bins in cm
     'heatmap_border', 1,...                         % additional bins number on the edges of the HeatMaps
-    'S_sigma', 2.29,...                             % criteria for informative place cell(1.65 for p = 0.05, 2.29 for p = 0.01)
+    'S_sigma', 2.29,...                                % criteria for informative place cell(1.65 for p = 0.05, 2.29 for p = 0.01, 3,09 for p = 0.001)
     'N_shift', 1000,...                             % number of shift for random distribution
     'shift', 0.9,...                                % percent of all time occupancy for random shift
-    'kernel_opt', struct(...
-    'small', struct('size', 3, 'sigma', 1.5),...
-    'big', struct('size', 5, 'sigma', 1.5)),...     % gaussian kernel for maps smoothing
-    'smooth_freq_mode', 1,...                       % 1 for smoothing activity map during MI calculation
+    'kernel_opt', struct(...                        % gaussian kernel options for activity maps calculation
+    'small', struct('size', 3, 'sigma', 1.0),...    % small size and sigma kernel, for spike maps
+    'big', struct('size', 5, 'sigma', 1.0)),...    	% bigger size and sigma kernel, for firing rate maps
     ...
-    'vel_opt', 0,...                                % all maps and MI calculated with respond to velocity threshold
+    'activity_map_opt', struct(...                  % flags and parameters for activity maps calculation
+    'visual', struct(...                        % for visualization of activity maps
+    'spike',  struct('smooth', 1, 'threshold', 0.1), ...    % for spike maps calculation
+    'firing', struct('smooth', 1, 'threshold', 0.5)), ...   % for firing rate maps calculation
+    'mi', struct(...                            % for mi calculation of activity maps
+    'spike',  struct('smooth', 1, 'threshold', 0.1), ...    % for spike maps calculation
+    'firing', struct('smooth', 1, 'threshold', 0.1))), ...  % for firing rate maps calculation
+    'vel_opt', 0, ...                               % 1 - MI calculated with respond to velocity (only locomotion included)
     'vel_border', 5,...                             % velocity threshold in cm/s
     ...
     'min_spike', 1,...                              % minimum number of spikes for active cell
@@ -80,16 +58,13 @@ params_main = struct(...
     ...
     ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TEMPORAL PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     'SmoothWindowS', 0.5,...                        % smoothing window in seconds for behavior analysis (in case non-smoothed data)
-    'time_smooth', 1,...                            % flag for smoothing of time map (occupancy map)
-    'spike_smooth', 1,...                           % flag for smoothing of spikes map
-    'thres_spike', 0.3,...                          % threshold for spike map after smoothing
-    'thres_firing', 0.5,...                         % threshold for activity map after smoothing
+    'time_smooth', 1,...                            % flag for smoothing of occupancy map
     'length_line_sec', 0.5,...                      % min time for acts (in area of fields or velocity binary timeseries)
     'snr_params', struct('percentile', 50),...      % percent of signal to identify noise lvl in neuron trace
     ...
     ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SUPPORTING PLOTS AND VERBOSE PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     'verbose', 1,...                                % additional messages
-    'plot_mode', 2,...                              % main plot parameters, 0 - no one plots, 1 - basic plots, 2 - all plots
+    'plot_mode', 0,...                              % main plot parameters, 0 - no one plots, 1 - basic plots, 2 - all plots
     'Screensize', get(0, 'Screensize'),...          % screensize for all plotting
     'axes_step', 1,...                              % in cm
     'heatmap_opt', struct('track', struct('trackp', 1, 'textl', 1, 'scale', 1, 'transp', 1, 'fon', 1, 'spike_opt', 0),...
@@ -107,23 +82,19 @@ params_main = struct(...
     );
 
 %% main
-
 for file = 1:length(FileNames)
-    
     fprintf('Processing of %s_%s\n', ExpID, FileNames{file});
     
     FileNameWS = sprintf('%s_%s_WorkSpace.mat',ExpID, FileNames{file});
     FileNameTR = sprintf('%s_%s_traces.csv',ExpID, FileNames{file});
-    FileNameSP = sprintf('%s_%s_spikes.csv',ExpID, FileNames{file});    
+    FileNameSP = sprintf('%s_%s_spikes.csv',ExpID, FileNames{file});
     
-    % preset loading
-
     if file > 9 && file < 17
         FileNamePR = 'NOF_H26_1D_Preset.mat';
     elseif (file > 25 && file < 33) || (file > 41 && file <  49) || (file > 57)
         FileNamePR = 'NOF_H26_2D_Preset.mat';
     else
-        FileNamePR = sprintf('%s_%s_Preset.mat',ExpID, FileNames{file});
+        FileNamePR = sprintf('NOF_%s_Preset.mat', FileNames{file});
     end
     
     params_paths = struct('pathWS', PathWorkSpaces, 'filenameWS', FileNameWS, ...
@@ -133,7 +104,7 @@ for file = 1:length(FileNames)
         'pathOut', PathOut);
     
     if isfile(fullfile(PathTraces,FileNameTR))
-        [FieldsIC] = PlaceFieldAnalyzerMSS(params_paths, params_main);
+        PlaceFieldAnalyzerNOF_new(params_paths, params_main);
     end
     
     clear 'params_paths'

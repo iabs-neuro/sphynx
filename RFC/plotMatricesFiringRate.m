@@ -1,12 +1,20 @@
-function plotMatricesFiringRate(matrix1, matrix2, cell, days, r, p, nameout)
+function plotMatricesFiringRate(matrix1, matrix2, cell_1, cell_2, days, metric1, metric2, metric_type, nameout)
     % plotMatrices - строит две матрицы рядом, сохраняя их реальные размеры
+    % с возможностью отображения разных метрик сравнения
     %
     % Входные параметры:
     %   matrix1 - первая матрица (числовая)
     %   matrix2 - вторая матрица (числовая)
+    %   cell - номер нейрона
+    %   days - дни экспериментов [day1, day2]
+    %   metric1 - первая метрика (r для Пирсона или ssim значение)
+    %   metric2 - вторая метрика (p для Пирсона или не используется для ssim)
+    %   metric_type - тип метрики: 'pearson' или 'ssim'
+    %   nameout - имя файла для сохранения
     %
-    % Пример использования:
-    %   plotMatrices(rand(9, 10), rand(9, 10));
+    % Примеры использования:
+    %   Для Пирсона: plotMatricesFiringRate(m1, m2, 5, [1 2], 0.8, 0.01, 'pearson', 'output.png')
+    %   Для SSIM: plotMatricesFiringRate(m1, m2, 5, [1 2], 0.95, [], 'ssim', 'output.png')
 
     % Размеры матриц
     [m1_rows, m1_cols] = size(matrix1);
@@ -26,7 +34,7 @@ function plotMatricesFiringRate(matrix1, matrix2, cell, days, r, p, nameout)
     nexttile;
     imagesc(matrix1); % Визуализация данных
     colorbar; % Панель цвета
-    title(sprintf('Карта активности. %d день',days(1)), 'FontWeight', 'normal'); % Убираем жирный шрифт
+    title(sprintf('Карта активности. %d день', days(1)), 'FontWeight', 'normal'); % Убираем жирный шрифт
     xlabel('Сектора, X-координата');
     ylabel('Сектора, Y-координата');
     axis equal; % Сохраняем пропорции
@@ -36,7 +44,7 @@ function plotMatricesFiringRate(matrix1, matrix2, cell, days, r, p, nameout)
     nexttile;
     imagesc(matrix2); % Визуализация данных
     colorbar; % Панель цвета
-    title(sprintf('Карта активности. %d день',days(2)), 'FontWeight', 'normal');
+    title(sprintf('Карта активности. %d день', days(2)), 'FontWeight', 'normal');
     xlabel('Сектора, X-координата');
     ylabel('Сектора, Y-координата');
     axis equal; % Сохраняем пропорции
@@ -45,8 +53,18 @@ function plotMatricesFiringRate(matrix1, matrix2, cell, days, r, p, nameout)
     % Настройка общей цветовой схемы
     colormap('parula'); % Цветовая схема для обеих матриц
     
+    % Создание заголовка в зависимости от типа метрики
+    switch lower(metric_type)
+        case 'pearson'
+            title_text = sprintf('Карты активности нейрона %d. Корреляция Пирсона r = %4.3f, p = %0.3g', cell_1, metric1, metric2);
+        case 'ssim'
+            title_text = sprintf('Карты активности нейрона #%d %d. SSIM = %4.2f', cell_1, cell_2, metric1);
+        otherwise
+            error('Неизвестный тип метрики. Используйте ''pearson'' или ''ssim''');
+    end
+    
     % Добавление общего заголовка
-    sgtitle(sprintf('Карты активности нейрона %d. Корреляция Пирсона r = %4.3f, p = %0.3g',cell,r,p), 'FontSize', 16);    
+    sgtitle(title_text, 'FontSize', 16);    
     saveas(h, nameout);
     delete(h);
-    end
+end
