@@ -1,6 +1,6 @@
 %% только видео
 
-TotalRealTime = 1200;
+TotalRealTime = 900;
 
 % Выберите видео файлы
 [filenames, pathname] = uigetfile({'*.avi;*.mp4;*.m4v;*.tif', 'Video Files (*.avi, *.mp4, *.m4v, *.tif)'}, 'Выберите видео файлы', 'MultiSelect', 'on', 'd:\Projects\H_mice\RawCombineVideo\');
