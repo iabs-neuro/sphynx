@@ -23,12 +23,21 @@ function plot_correlation_matrix_color(corrMatrix, labels, normalizationMethod, 
             error('Неизвестный метод нормировки. Используйте "zero_to_max", "min_to_max", "zero_to_one" или "neg_one_to_one".');
     end
     
-    % Визуализация
+    % Создаем квадратную фигуру
     figure;
+    % Устанавливаем размер фигуры для квадратного изображения
+    figSize = 600; % Размер фигуры в пикселях (можно настроить)
+    set(gcf, 'Position', [100, 100, figSize, figSize]);
+    
+    % Визуализация
     imagesc(corrMatrix, 'AlphaData', ~eye(rows)); % Оставляем диагональ прозрачной
     colormap(jet); % Цветовая карта
     colorbar; % Добавляем шкалу значений
     caxis(colorLimits); % Применяем выбранные границы
+    
+    % Устанавливаем квадратные оси
+    axis square; % Делает оси квадратными
+    axis tight;  % Плотное расположение данных
     
     % Закрашиваем диагональ серым
     hold on;
@@ -55,6 +64,8 @@ function plot_correlation_matrix_color(corrMatrix, labels, normalizationMethod, 
 
     title(name_title);
     
+    % Сохраняем с сохранением квадратного соотношения сторон
+    set(gcf, 'PaperPositionMode', 'auto'); % Сохраняет точный размер
     saveas(gcf, nameout);
     delete(gcf);
     
