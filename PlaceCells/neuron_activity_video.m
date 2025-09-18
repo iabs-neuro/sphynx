@@ -3,10 +3,10 @@ function neuron_activity_video(videoFile, videoPath, csvFile, csvPath, outPath)
 
 %%
 if nargin<5
-    [videoFile, videoPath] = uigetfile('*.mp4', 'Выберите видеофайл (MP4)','c:\Users\1\YandexDisk\_Projects\2024_H_mice\NOF\BehaviorData\2_RawCombineVideo\');
-    [csvFile, csvPath] = uigetfile('*.csv', 'Выберите файл с активностью нейронов (CSV)', 'c:\Users\1\YandexDisk\_Projects\2024_H_mice\NOF\CalciumData\6_Traces\');
-    [vtFile, vtPath] = uigetfile('*.csv', 'Выберите файл с видеотрекингом (CSV)', 'c:\Users\1\YandexDisk\_Projects\2024_H_mice\NOF\BehaviorData\6_Features\');
-    outPath = 'w:\Projects\NOF\ActivityData\';
+    [videoFile, videoPath] = uigetfile('*.mp4', 'Выберите видеофайл (MP4)','w:\Projects\3DM\BehaviorData\2_Combined\');
+    [csvFile, csvPath] = uigetfile('*.csv', 'Выберите файл с активностью нейронов (CSV)', 'c:\Users\1\YandexDisk\_Projects\3DM\CalciumData\6_Traces\');
+    [vtFile, vtPath] = uigetfile('*.csv', 'Выберите файл с видеотрекингом (CSV)', 'w:\Projects\3DM\BehaviorData\8_Features\');
+    outPath = 'w:\Projects\3DM\ActivityData\';
 end
 
 if isequal(videoFile, 0) || isequal(csvFile, 0) || isequal(vtFile, 0)
@@ -38,8 +38,9 @@ if video.NumFrames ~= numFrames
 end
 
 %% Для каждого нейрона создаем новое видео
-% for neuronIdx = 2:numNeurons + 1
-for neuronIdx = [21 22 25 29 70]
+% for neuronIdx = 1:numNeurons
+for neuronIdx = [171 434 454 270 451 462 513 602 713 577 218]
+    neuronIdx = neuronIdx+1;
     neuronActivity = table2array(data(2:end, neuronIdx));  % Активность нейрона
     PointsLine = []; % массив кадров для траектории (кумулятивно)
     
@@ -50,19 +51,19 @@ for neuronIdx = [21 22 25 29 70]
     % Пороговое значение для активности (медиана + 4*медианное отклонение)
     threshold = neuronMedian + 4 * medAbsDev;
     
-    [Indexes, ~, ~,~, TimeLineCalcium, FrameRate] = synchronizer((1:video.NumFrames)', neuronActivity, 'Bonsai', 600);
+    [Indexes, ~, ~,~, TimeLineCalcium, FrameRate] = synchronizer((1:video.NumFrames)', neuronActivity, 'Bonsai', 1800);
     length_line = round(FrameRate);
 %     length_line = round(FrameRate/2);    
     [selectedFrames, ~, ~,~,~,~] = RefineLine(neuronActivity > threshold, length_line, length_line);
     
-    % debugging plots
-    h = figure; 
-    plot(1:11849, neuronActivity); hold on;
-    plot(1:11849, ones(1,11849)*threshold); hold on;
-    plot(1:11849, neuronActivity./max(neuronActivity)); hold on;
-    plot(1:11849, neuronActivity > threshold); hold on
-    plot(1:11849, selectedFrames*2); hold on
-    delete(h);
+%     % debugging plots
+%     h = figure; 
+%     plot(TimeLineCalcium, neuronActivity); hold on;
+%     plot(TimeLineCalcium, ones(1,numFrames)*threshold); hold on;
+%     plot(TimeLineCalcium, neuronActivity./max(neuronActivity)); hold on;
+%     plot(TimeLineCalcium, neuronActivity > threshold); hold on
+%     plot(TimeLineCalcium, selectedFrames*2); hold on
+%     delete(h);
     
     % Находим индексы кадров, где активность выше порога
     selectedFramesIdxNeuro = find(selectedFrames);
@@ -81,6 +82,29 @@ for neuronIdx = [21 22 25 29 70]
     open(outputVideo);
     fprintf('Plotting video for neuron %d/%d\n', neuronIdx - 1, numNeurons);
     
+    
+    %% optimized code
+    % Предварительные вычисления (один раз перед циклом)
+neuronActivityNorm = (neuronActivity - min(neuronActivity)) ./ (max(neuronActivity) - min(neuronActivity));
+minTime = 1;
+maxTime = max(TimeLineCalcium);
+frameCount = length(selectedFramesIdx);
+
+% Создаем и настраиваем фигуру один раз (вместо создания/закрытия в цикле)
+fig = figure('visible', 'off', 'Renderer', 'painters', 'Position', [100 100 800 200]);
+ax = axes('Parent', fig);
+plot(ax, TimeLineCalcium, neuronActivityNorm, 'b');
+hold(ax, 'on');
+redLine = line(ax, [0 0], [0 1], 'Color', 'r', 'LineWidth', 1);
+hold(ax, 'off');
+xlim(ax, [minTime maxTime]);
+ylim(ax, [0 1]);
+set(ax, 'XTickLabel', []);
+set(ax, 'YTickLabel', []);
+
+% Оптимизация: предварительно вычисляем позиции красной линии
+redLinePositions = TimeLineCalcium(selectedFramesIdxNeuro);
+    %%
     % Извлечение и запись выбранных кадров в новое видео
     h = waitbar(1/length(selectedFramesIdx), sprintf('Plotting video, frame %d of %d', 0,  length(selectedFramesIdx)));
     for i = 1:length(selectedFramesIdx)
@@ -88,43 +112,24 @@ for neuronIdx = [21 22 25 29 70]
             h = waitbar(i/length(selectedFramesIdx), h, sprintf('Plotting video, frame %d of %d', i,  length(selectedFramesIdx)));
         end
         
-        video.CurrentTime = (selectedFramesIdx(i) - 1) / frameRate;        
-        neuronActivityNorm = (neuronActivity-min(neuronActivity))./(max(neuronActivity)-min(neuronActivity));
-        
-        % Построение графика активности с отметкой на текущем кадре
-        fig = figure('visible', 'off');
-        plot(TimeLineCalcium,neuronActivityNorm, 'b');
-        hold on;
-        
-        % Рисуем красную вертикальную линию
-        line([TimeLineCalcium(selectedFramesIdxNeuro(i)), TimeLineCalcium(selectedFramesIdxNeuro(i))], [0, 1], 'Color', 'r', 'LineWidth', 1);
-        
-%         plot(TimeLineCalcium(selectedFramesIdxNeuro(i)), neuronActivityNorm(selectedFramesIdxNeuro(i)), 'r.', 'MarkerSize', 15, 'LineWidth', 3);  % Жирная точка
-        hold off;
-        
-        % Настройка осей и размеров
-        xlim([1 max(TimeLineCalcium)]);
-        ylim([0, 1]);
-        yticklabels([]);  
-        xticklabels([]);       
-        
-        % Сохранение графика как изображение
-        frameGraph = getframe(fig);
-        graphImage = frameGraph.cdata;
-        close(fig);
-        
-        frame = readFrame(video);
-        % рисуем траекторию на видео
-%         PointsLine = [PointsLine selectedFramesIdx(i)];
-%         for l = 1:length(PointsLine)
-%             frame = insertShape(frame,'filledcircle', [BodyPartsTraces(5).TraceOriginal.X(PointsLine(l))/Options.x_kcorr BodyPartsTraces(5).TraceOriginal.Y(PointsLine(l)) 2],'Color','green','LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
-%         end
-        
-        % Объединение видео-кадра и графика
-        combinedFrame = append_graph_to_frame(frame, graphImage, 0.2);
-        
-        % Запись объединенного кадра в новое видео
-        writeVideo(outputVideo, combinedFrame);        
+        % Установка времени видео
+    video.CurrentTime = (selectedFramesIdx(i) - 1) / frameRate;
+    
+    % Обновляем только красную линию (самая быстрая операция)
+    set(redLine, 'XData', [redLinePositions(i) redLinePositions(i)]);
+    
+    % Получаем кадр графика
+    frameGraph = getframe(fig);
+    graphImage = frameGraph.cdata;
+    
+    % Чтение и обработка видео кадра
+    frame = readFrame(video);
+    
+    % Объединение с графиком
+    combinedFrame = append_graph_to_frame(frame, graphImage, 0.2);
+    
+    % Запись в выходное видео
+    writeVideo(outputVideo, combinedFrame);    
     
     end
     delete(h);

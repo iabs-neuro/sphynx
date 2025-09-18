@@ -13,13 +13,12 @@ behavior_act_params = struct(...
 ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SPACE ACTS %%%%%%%%%%%%%%%%%%%%%%%%%%
 'walls',                        ["ActPercent" "Distance"], ...                  % пристеночная зона:        [процент, дистанция]
 'middle_zone',                  ["ActPercent" "Distance"], ...                  % промежуточная зона:       [процент, дистанция]
-... % 'centertrue',                   ["ActNumber" "ActPercent" "Distance"], ...      % центральная зона:         [кол-во, процент, дистанция]
 'center',                       ["ActNumber" "ActPercent" "Distance"], ...      % пристеночная зона:        [кол-во, процент, дистанция]
 'corners',                      "ActPercent", ...                               % зона углов:               [процент, дистанция]
 ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% UNSPECIFIC ACTS %%%%%%%%%%%%%%%%%%%%
 'freezing',                     "ActPercent", ...                               % замирания:                [процент]
-... % 'rear',                         "ActNumber", ...                                % стойки:                   [кол-во]
-... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:BOF %%%%%%%%%%%%% 
+'rear',                         "ActNumber", ...                                % стойки:                   [кол-во]
+... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:BOF - bowl acts (old names) %%%%%%%%%%%%% 
 'bowlinside',                   ["ActDuration" "ActPercent"], ...               % мышь в миске:                                         [длительность, процент]
 'bowlinteraction',              ["ActDuration" "ActPercent"], ...               % любое взаимодействие с миской:                        [длительность, процент]
 'bowlinteractreal',             ["ActDuration" "ActPercent"], ...               % контакт с миской:                                     [длительность, процент]
@@ -32,7 +31,7 @@ behavior_act_params = struct(...
 'entryOutBowlInsideAll',        "ActNumber", ...                                % любой выход из миски после сидения:                   [кол-во]
 'entryOutBowlInteractAll',      "ActNumber", ...                                % любой выход из миски после контакта:                  [кол-во]
 'bowlInView',                   "ActPercent", ...                               % миска в области зрения:                               [процент]
-...
+... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:BOF - object acts (old names) %%%%%%%%%%%%% 
 'objectinside',              	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...              	% мышь в объекте:                                       [длительность, процент]
 'objectinteraction',         	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...              	% любое взаимодействие с объектом:                      [длительность, процент]
 'objectinteractreal',        	["ActDuration" "ActPercent"], ...              	% контакт с объектом:                                   [длительность, процент]
@@ -45,6 +44,19 @@ behavior_act_params = struct(...
 'entryOutObjectInsideAll',  	"ActNumber", ...                                % любой выход из объекта после сидения:                 [кол-во]
 'entryOutObjectnteractAll',     "ActNumber", ...                                % любой выход из объекта после контакта:                [кол-во]
 'objectInView',              	"ActPercent", ...                               % объект в области зрения:                              [процент]
+... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:BOWL (new names) %%%%%%%%%%%%% 
+'bowl_interaction',           	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...  	% любое взаимодействие с миской:       	[кол-во, длительность, процент, среднее время на акт]               
+'object1_interaction',         	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...  	% любое взаимодействие с объектом №1:   [кол-во, длительность, процент, среднее время на акт]
+'object2_interaction',         	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...  	% любое взаимодействие с объектом №2:   [кол-во, длительность, процент, среднее время на акт]
+... 
+'entry_in_bowl',                "ActNumber", ...                                % целенаправленный подход к миске:                    	[кол-во]
+'entry_in_object1',             "ActNumber", ...                                % целенаправленный подход к объекту №1:             	[кол-во]
+'entry_in_object2',             "ActNumber", ...                                % целенаправленный подход к объекту №2:                 [кол-во]
+... 
+'bowl_in_view',              	"ActPercent", ...                               % миска в области зрения:                             	[процент]
+'object1_in_view',             	"ActPercent", ...                               % объект 1 в области зрения:                           	[процент]
+'object2_in_view',             	"ActPercent", ...                               % объект 2 в области зрения:                          	[процент]
+... 
 ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:2DM %%%%%%%%%%%%%
 'rest_in_walls',             	"ActNumber", ...                                % остановка в пристеночной зоне:                        [кол-во]
 'loc_in_walls',                 "ActNumber", ...                                % быстрая побежка в пристеночной зоне:                 	[кол-во]
