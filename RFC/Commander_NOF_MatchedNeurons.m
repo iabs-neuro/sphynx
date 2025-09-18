@@ -1,9 +1,9 @@
 %% paths and names
 
 ExpID  ='NOF';
-pathMat = 'w:\Projects\NOF\ActivityData\PC_mat\';
+pathMat = 'w:\Projects\NOF\ActivityData\PC_mat\4\';
 pathMatched = 'w:\Projects\NOF\ActivityData\Match\';
-pathout = 'w:\Projects\NOF\ActivityData\CogMap\';
+pathout = 'w:\Projects\NOF\ActivityData\';
 
 Filenames = {
     'H01' 'H02' 'H03' 'H06' 'H07' 'H08' 'H09' 'H14' 'H23' 'H26' 'H27' 'H31' 'H32' 'H33' 'H36' 'H39' ...
@@ -50,6 +50,9 @@ cells_informative = struct( ...
 %     'stability_daily_matrix', [], ...
 %     'stability_daily_array', [] ...    
 stability = [];
+cells_info = [];
+
+table_info.data = [];
 
 %% main part
 for file = 1:length(Filenames)
@@ -63,8 +66,9 @@ for file = 1:length(Filenames)
         [data{day}] = load(pathin{day}, 'mouse', 'cells_MI', 'cellmaps');
         cells_informative(file).cells_informative_count = [cells_informative(file).cells_informative_count data{day}.mouse.cells_informative_count];
         cells_informative(file).cells_informative_percent = [cells_informative(file).cells_informative_percent round(data{day}.mouse.cells_informative_percent)];
+%         cells_info.([ExpID '_' Filenames{file} '_' session_id{day}]) = [data{day}.cells_MI(1,:); data{day}.cells_MI(2,:); data{day}.cells_MI(3,:); data{day}.cells_MI(7,:); data{day}.cells_MI(8,:); data{day}.cells_MI(4,:); data{day}.cells_MI(6,:); data{day}.cells_MI(5,:)];
     end
-    
+   
     % Определение индексов сметченных информативных нейронов
     Matched.Table = table2array(readtable(sprintf('%s\\%s_%s.csv', pathMatched, ExpID, Filenames{file})));
     Matched.non_zero_rows = all(Matched.Table ~= 0, 2);
@@ -91,6 +95,23 @@ for file = 1:length(Filenames)
     cells_informative(file).matched_n_cell_matched = Matched.N_cell_matched;
     cells_informative(file).matched_count = Matched.Count;
     
+  	% создание таблицы для сравнения с интенсом
+    % индекс строчки в табличе метчинга (нумерация с 0 как в табличках Интенса)
+    table_info_this_data = [];
+    table_info_this_data(:, 6) = Matched.indices_raw - 1;
+    
+    % в столбцах 9:12 соответствующих 1D:4D - значения z-score нейронов
+    for day = 1:day_count
+        for cell_id = 1 : Matched.N_cell_matched
+            cell_id_inner_col = Matched.Indeces(cell_id, day);
+            cell_id_inner = data{day}.cells_MI(1,data{day}.cells_MI(1,:) == cell_id_inner_col);
+            table_info_this_data(cell_id, day+8) = data{day}.cells_MI(4, cell_id_inner);
+        end
+    end
+    table_info_this_data(:, 7) = str2num(Filenames{file}(2:3));
+    table_info.data = [table_info.data; table_info_this_data];
+
+
     % Попарное пересечение множеств ифнормативных нейронов (каждое с каждым)
     for i = 1:day_count
         for j = i:day_count
@@ -149,6 +170,25 @@ for file = 1:length(Filenames)
     end
     cells_informative(file).stability_array_r = unfold_matrix_diagonal(cells_informative(file).stability_matrix_r);    
 end
+
+% в столбцах 2:5 соответствующих 1D:4D - лейбл клетки места (1 - да)
+table_info.data(:, 1) = 0:size(table_info.data, 1)-1;
+for row = 1:size(table_info.data, 1)
+    for day = 1:day_count
+        table_info.data(row, day+1) = table_info.data(row, day+8) > 4;
+    end
+end
+% посчитать колво появлений клетки места (4 - клетка места во всех сессиях)
+for row = 1:size(table_info.data, 1)
+    table_info.data(row, 8) = sum(table_info.data(row, 2:5));
+end
+
+% create table for classic PC VS INTENSE 
+table_info.names = {'index' '1D' '2D' '3D' '4D' 'matching_row' 'mouse' 'PC_stable' '1D_zscore' '2D_zscore' '3D_zscore' '4D_zscore'};
+table_info.Table = array2table(table_info.data, 'VariableNames', table_info.names);
+
+writetable(table_info.Table, sprintf('%s\\%s_Stability_Compare_Intense.csv',pathout, ExpID));
+save(sprintf('%s\\%s_Stability_Compare_Intense.mat', pathout, ExpID));
 
 %% plots
 

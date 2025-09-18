@@ -1,11 +1,11 @@
 %% paths and names
 
-path = 'w:\Projects\MSS\ActivityData\MAT_PC\';
-pathout = 'w:\Projects\MSS\ActivityData\CogMap\';
+pathMat = 'w:\Projects\MSS\ActivityData\MAT_PC\';
+pathout = 'w:\Projects\MSS\ActivityData\Results_paper\CogMap\';
 ExpID  ='MSS';
 
 % All days
-Filenames = {
+FileNames = {
     'D01_1D_1T' 'D01_2D_1T' 'F01_1D_1T' 'F01_2D_1T' 'F01_3D_1T' 'F01_4D_1T' 'F01_5D_1T' 'F01_6D_1T' 'F04_1D_1T' 'F04_2D_1T'  ...
     'F04_3D_1T' 'F04_4D_1T' 'F04_5D_1T' 'F04_6D_1T' 'F05_1D_1T' 'F05_1D_2T' 'F05_1D_3T' 'F05_1D_4T' 'F05_1D_5T' 'F05_2D_1T'  ...
     'F06_1D_2T' 'F06_1D_3T' 'F06_1D_4T' 'F06_1D_5T' 'F06_2D_1T' 'F08_1D_1T' 'F08_2D_1T' 'F09_1D_1T' 'F09_2D_1T' 'F09_3D_1T'  ...
@@ -27,7 +27,7 @@ Filenames = {
 % local parameters
 center = 16;
 
-%% variables
+%% variables and main struct
 
 mice = struct( ...
     ...
@@ -38,70 +38,87 @@ mice = struct( ...
     'day', '', ...                                                      - day number of registration (e.g. '1D', '6D')
     'trial', '', ...                                                    - trial number of registration (e.g. '1T', '6T')
     ...
-    'duration_s', zeros(1,length(Filenames)), ...
-    'framerate', zeros(1,length(Filenames)), ...
+    'duration_s', zeros(1,length(FileNames)), ...
+    'framerate', zeros(1,length(FileNames)), ...
     'size_map', [], ...
-    'xkcorr', zeros(1,length(Filenames)), ...
+    'xkcorr', zeros(1,length(FileNames)), ...
     ...
-    'cells_count', zeros(1,length(Filenames)), ...                   	- всего нейронов
-    'cells_active_count', zeros(1,length(Filenames)), ...            	- количество активных нейронов
-    'cells_active_percent', zeros(1,length(Filenames)), ...             - процент активных нейронов
+    'cells_count', zeros(1,length(FileNames)), ...                   	- всего нейронов
+    'cells_active_count', zeros(1,length(FileNames)), ...            	- количество активных нейронов
+    'cells_active_percent', zeros(1,length(FileNames)), ...             - процент активных нейронов
     'cells_active_firingrate', [], ...                                	- гистограмма частоты кальциевых событий в минуту активных нейронов
-    'cells_active_firingrate_mean', zeros(1,length(Filenames)), ...   	- частота кальциевых событий в минуту активных нейронов
-    'cells_active_MI_bit', [], ...                                      - гистограмма для MI активных нейронов (z-scored)
-    'cells_active_MI_bit_mean', zeros(1,length(Filenames)), ...         - среднее значение MI активных нейронов (z-scored)
+    'cells_active_firingrate_mean', zeros(1,length(FileNames)), ...   	- частота кальциевых событий в минуту активных нейронов
+    'cells_active_MI_bit_event', [], ...                               	- гистограмма для MI активных нейронов (bit/Ca2+)
+    'cells_active_MI_bit_time', [], ...                                	- гистограмма для MI активных нейронов (bit/min)
     'cells_active_MI_zscored', [], ...                              	- гистограмма для MI активных нейронов (z-scored)
-    'cells_active_MI_zscored_mean', zeros(1,length(Filenames)), ...     - среднее значение MI активных нейронов (z-scored)
+    'cells_active_MI_bit_event_mean', zeros(1,length(FileNames)), ...  	- среднее значение MI активных нейронов (bit/Ca2+)
+    'cells_active_MI_bit_time_mean', zeros(1,length(FileNames)), ...   	- среднее значение MI активных нейронов (bit/min)
+    'cells_active_MI_zscored_mean', zeros(1,length(FileNames)), ...     - среднее значение MI активных нейронов (z-scored)
     ...
-    'space_explored', zeros(1,length(Filenames)), ...                   - процент исследованного пространства
+    'space_explored', zeros(1,length(FileNames)), ...                   - процент исследованного пространства
     ...
-    'cells_informative_count', zeros(1,length(Filenames)), ...       	- количество информативных клеток
-    'cells_informative_percent', zeros(1,length(Filenames)), ...       	- процент инормативных клеток от числа активных
+    'cells_informative_firingrate', [], ...                            	- гистограмма частоты кальциевых событий в минуту информативных нейронов
+    'cells_informative_firingrate_mean', 0, ...                         - частота кальциевых событий в минуту информативных нейронов
+    'cells_informative_count', 0, ...                                   - количество информативных клеток
+    'cells_informative_percent', 0, ...                                 - процент инормативных клеток от числа активных
     ...
-    'cells_informative_MI_bit', [], ...                               	- гистограмма для MI всех активных нейронов (bit/Ca2+)
+    'cells_informative_MI_bit_event', [], ...                        	- гистограмма для MI всех активных нейронов (bit/Ca2+)
+    'cells_informative_MI_bit_time', [], ...                           	- гистограмма для MI всех активных нейронов (bit/min)
     'cells_informative_MI_zscored', [], ...                          	- гистограмма для MI информативных нейронов (z-scored)
     ...
-    'cells_informative_MI_zscored_mean', zeros(1,length(Filenames)), ...- среднее значение MI для информативных клеток (z-scored)
-    'cells_informative_MI_bit_mean', zeros(1,length(Filenames)), ...  	- среднее значение MI для информативных клеток (bit/Ca2+)
+    'cells_informative_MI_bit_event_mean', 0, ...                       - среднее значение MI для информативных клеток (bit/Ca2+)
+    'cells_informative_MI_bit_time_mean', 0, ...                        - среднее значение MI для информативных клеток (bit/min)
+    'cells_informative_MI_zscored_mean', 0, ...                         - среднее значение MI для информативных клеток (z-scored)
     ...
     'Area_hist', [], ...                                                - гистрограмма для площади полей места в см^2
-    'Area_average', zeros(1,length(Filenames)), ...                     - средняя площадь ифнормативных полей места
+    'Area_average', 0, ...                     - средняя площадь ифнормативных полей места
     ...
     'Max_FR_hist', [], ...                                              - максимальное значение активности в поле информативных клеток
-    'Max_FR_average', zeros(1,length(Filenames)), ...                   - средняя высота поля активности для информативных нейронов
+    'Max_FR_average', 0, ...                   - средняя высота поля активности для информативных нейронов
     ...
     'Volume_hist', [], ...                                              - объем поля информативного нейрона
-    'Volume_average', zeros(1,length(Filenames)), ...                   - средний объем полей информативных нейронов
+    'Volume_average', 0, ...                   - средний объем полей информативных нейронов
     ...
-    'Fields_N', zeros(1,length(Filenames)), ...                         - количество информативных полей
-    'Fields_N_active_percent', zeros(1,length(Filenames)), ...          - процент информативных полей на количество активных нейронов
-    'Fields_N_on_inform_cell', zeros(1,length(Filenames)), ...          - количество информативных полей на количество информативных нейронов
+    'Fields_N', 0, ...                                                  - количество информативных полей
+    'Fields_N_active_percent', 0, ...                                   - процент информативных полей на количество активных нейронов
+    'Fields_N_on_inform_cell', 0, ...                                   - количество информативных полей на количество информативных нейронов
     'Fields_distrib', [], ...                                           - распределение количества полей на клетку
     ...
-    'FieldsNumber', zeros(length(Filenames), 6) ...                     - распределение количества полей места на нейрон
+    'FieldsNumber', 0 ...                     - распределение количества полей места на нейрон
     );
 
-FieldsNumberAllMice = zeros(1, 6);                                  % количество полей на место на всех мышей
-BigField = zeros(31,31);                                            % средняя карта активности для всех информативных полей
+FieldsNumberAllMice = zeros(1, 6);                                      % количество полей на место на всех мышей
+BigField = zeros(31,31);                                                % средняя карта активности для всех информативных полей
 
+cells_active_firingrate = [];
+cells_active_MI_bit_event  = [];
+cells_active_MI_bit_time  = [];
+cells_active_MI_zscored = [];
+
+cells_informative_firingrate = [];
+cells_informative_MI_bit_event =[];
+cells_informative_MI_bit_time = [];
+cells_informative_MI_zscored = [];
+
+mice_active_indx = [];
 
 %% main part
 
-for file = 1:length(Filenames)
-    disp(Filenames{file});
+for file = 1:length(FileNames)
+    disp(FileNames{file});
     
-    pathin = sprintf('%s\\WorkSpace_MSS_%s.mat',path,Filenames{file});
+    pathin = sprintf('%s\\WorkSpace_%s_%s.mat', pathMat, ExpID, FileNames{file});
     load(pathin, 'mouse', 'MapFieldsIC', 'FieldsIC');
     
     % defining struct
-    mice(file).name = Filenames{file};
+    mice(file).name = FileNames{file};
     mice(file).exp = mouse.exp;
     mice(file).group = mouse.group;
     mice(file).id = mouse.id;
     mice(file).day = mouse.day;
     mice(file).trial = mouse.trial;
     
-    % check 
+    % check
     mice(file).size_map = mouse.size_map;
     mice(file).xkcorr = mouse.behav_opt.x_kcorr;
     mice(file).duration_s = mouse.duration_s;
@@ -115,68 +132,213 @@ for file = 1:length(Filenames)
     mice(file).cells_active_firingrate = mouse.cells_active_firingrate;
     mice(file).cells_active_firingrate_mean = mouse.cells_active_firingrate_mean;
     
-    mice(file).cells_active_MI_bit = mouse.cells_active_MI_bit;
+    mice(file).cells_active_MI_bit_event = mouse.cells_active_MI_bit_event;
+    mice(file).cells_active_MI_bit_time = mouse.cells_active_MI_bit_time;
     mice(file).cells_active_MI_zscored = mouse.cells_active_MI_zscored;
-    mice(file).cells_active_MI_bit_mean = mouse.cells_active_MI_bit_mean;
+    
+    if length(mice(file).cells_active_MI_bit_event) ~= length(mice(file).cells_active_MI_zscored)
+        disp(['this ' FileNames{file} ]);
+    end
+    
+    mice(file).cells_active_MI_bit_event_mean = mouse.cells_active_MI_bit_event_mean;
+    mice(file).cells_active_MI_bit_time_mean = mouse.cells_active_MI_bit_time_mean;
     mice(file).cells_active_MI_zscored_mean = mouse.cells_active_MI_zscored_mean;
     
     mice(file).cells_informative_count = mouse.cells_informative_count;
     mice(file).cells_informative_percent = mouse.cells_informative_percent;
-    mice(file).cells_informative_MI_bit = mouse.cells_informative_MI_bit;
-    mice(file).cells_informative_MI_bit_mean = mouse.cells_informative_MI_bit_mean;
+
+    mice(file).cells_informative_firingrate = mouse.cells_informative_firingrate;
+    mice(file).cells_informative_firingrate_mean = mouse.cells_informative_firingrate_mean;
+
+    mice(file).cells_informative_MI_bit_event = mouse.cells_informative_MI_bit_event;
+    mice(file).cells_informative_MI_bit_time = mouse.cells_informative_MI_bit_time;
     mice(file).cells_informative_MI_zscored = mouse.cells_informative_MI_zscored;
+
+    mice(file).cells_informative_MI_bit_event_mean = mouse.cells_informative_MI_bit_event_mean;
+    mice(file).cells_informative_MI_bit_time_mean = mouse.cells_informative_MI_bit_time_mean;
     mice(file).cells_informative_MI_zscored_mean = mouse.cells_informative_MI_zscored_mean;
+
+    cells_active_firingrate = [cells_active_firingrate mouse.cells_active_firingrate];
+    cells_active_MI_bit_event  = [cells_active_MI_bit_event  mouse.cells_active_MI_bit_event];
+    cells_active_MI_bit_time  = [cells_active_MI_bit_time  mouse.cells_active_MI_bit_time];
+    cells_active_MI_zscored = [cells_active_MI_zscored mouse.cells_active_MI_zscored];
+    cells_informative_firingrate = [cells_informative_firingrate mouse.cells_informative_firingrate];
+    cells_informative_MI_bit_event =[cells_informative_MI_bit_event  mouse.cells_informative_MI_bit_event];
+    cells_informative_MI_bit_time = [cells_informative_MI_bit_time  mouse.cells_informative_MI_bit_time];
+    cells_informative_MI_zscored = [cells_informative_MI_zscored mouse.cells_informative_MI_zscored];
     
     % fields number calculation
-    mice(file).Fields_N = size(MapFieldsIC,3);
-    mice(file).Fields_N_active_percent = round(mice(file).Fields_N/mice(file).cells_active_count*100,1);
-    mice(file).Fields_N_on_inform_cell = round(mice(file).Fields_N/mice(file).cells_informative_count,2);
+    if ~isempty(MapFieldsIC)
+        mice(file).Fields_N = size(MapFieldsIC,3);
+       	mice(file).Fields_N_active_percent = round(mice(file).Fields_N/mice(file).cells_active_count*100,1);
+        mice(file).Fields_N_on_inform_cell = round(mice(file).Fields_N/mice(file).cells_informative_count,2);
+    else
+      	mice(file).Fields_N = 0;
+       	mice(file).Fields_N_active_percent = 0;
+        mice(file).Fields_N_on_inform_cell = 0;
+    end
     
     % area/max_FR/volume of inform fields
-    Area_hist_mouse = [];
-    Max_FR_hist_mouse = [];
-    Volume_hist_mouse = [];
-    for area=1:mice(file).Fields_N
-        TempField = zeros(31,31);
-        Area_hist_mouse = [Area_hist_mouse length(find(MapFieldsIC(:,:,area)>0))*mouse.params_main.bin_size_cm^2];
-        Max_FR_hist_mouse = [Max_FR_hist_mouse max(max(MapFieldsIC(:,:,area)))];
-        Volume_hist_mouse = [Volume_hist_mouse sum(sum(MapFieldsIC(:,:,area)))*mouse.params_main.bin_size_cm^2];
-        [biny, binx] = find(MapFieldsIC(:,:,area) == max(max(MapFieldsIC(:,:,area))));
-        SizeX = size(MapFieldsIC,2);
-        SizeY = size(MapFieldsIC,1);        
-        TempField(center-biny+1:center+SizeY-biny,center-binx+1:center+SizeX-binx) = MapFieldsIC(:,:,area);
-        BigField = BigField+TempField;
-    end
-    mice(file).Area_hist = [mice(file).Area_hist Area_hist_mouse];
-    mice(file).Max_FR_hist = [mice(file).Max_FR_hist Max_FR_hist_mouse];
-    mice(file).Volume_hist = [mice(file).Volume_hist Volume_hist_mouse];
-    mice(file).Area_average = mean(Area_hist_mouse);
-    mice(file).Max_FR_average = mean(Max_FR_hist_mouse);
-    mice(file).Volume_average = mean(Volume_hist_mouse);
-    
-    %fields per active cell calculation
-    test_zone5 = zeros(1,mice(file).cells_count);
-    for i=1:mice(file).cells_count
-        if ~isempty(FieldsIC)
-            test_zone5(i) = length(find(FieldsIC(1,:)==i));
+    if mice(file).Fields_N
+        Area_hist_mouse = [];
+        Max_FR_hist_mouse = [];
+        Volume_hist_mouse = [];
+        for area=1:mice(file).Fields_N
+            TempField = zeros(31,31);
+            Area_hist_mouse = [Area_hist_mouse length(find(MapFieldsIC(:,:,area)>0))*mouse.params_main.bin_size_cm^2];
+            Max_FR_hist_mouse = [Max_FR_hist_mouse max(max(MapFieldsIC(:,:,area)))];
+            Volume_hist_mouse = [Volume_hist_mouse sum(sum(MapFieldsIC(:,:,area)))*mouse.params_main.bin_size_cm^2];
+            [biny, binx] = find(MapFieldsIC(:,:,area) == max(max(MapFieldsIC(:,:,area))));
+            SizeX = size(MapFieldsIC,2);
+            SizeY = size(MapFieldsIC,1);
+            TempField(center-biny+1:center+SizeY-biny,center-binx+1:center+SizeX-binx) = MapFieldsIC(:,:,area);
+            BigField = BigField+TempField;
         end
+        mice(file).Area_hist = [mice(file).Area_hist Area_hist_mouse];
+        mice(file).Max_FR_hist = [mice(file).Max_FR_hist Max_FR_hist_mouse];
+        mice(file).Volume_hist = [mice(file).Volume_hist Volume_hist_mouse];
+        mice(file).Area_average = mean(Area_hist_mouse);
+        mice(file).Max_FR_average = mean(Max_FR_hist_mouse);
+        mice(file).Volume_average = mean(Volume_hist_mouse);
+        
+        %fields per active cell calculation
+        test_zone5 = zeros(1,mice(file).cells_count);
+        for i=1:mice(file).cells_count
+            if ~isempty(FieldsIC)
+                test_zone5(i) = length(find(FieldsIC(1,:)==i));
+            end
+        end
+        mice(file).Fields_distrib = [mice(file).Fields_distrib test_zone5(test_zone5>0)];
+        mice(file).FieldsNumber = [ ...
+            mice(file).cells_active_count, ...
+            length(find(test_zone5(1,:)==1)), ...
+            length(find(test_zone5(1,:)==2)), ...
+            length(find(test_zone5(1,:)==3)), ...
+            length(find(test_zone5(1,:)==4)), ...
+            length(find(test_zone5(1,:)==5)) ...
+            ];
+        
+        FieldsNumberAllMice = FieldsNumberAllMice + mice(file).FieldsNumber;
+    else
+        mice(file).Area_average = 0;
+        mice(file).Max_FR_average = 0;
+        mice(file).Volume_average = 0;
     end
-    mice(file).Fields_distrib = [mice(file).Fields_distrib test_zone5(test_zone5>0)];
-    mice(file).FieldsNumber = [ ...
-        mice(file).cells_active_count, ...
-        length(find(test_zone5(1,:)==1)), ...
-        length(find(test_zone5(1,:)==2)), ...
-        length(find(test_zone5(1,:)==3)), ...
-        length(find(test_zone5(1,:)==4)), ...
-        length(find(test_zone5(1,:)==5)) ...
-        ];
-    
-    FieldsNumberAllMice = FieldsNumberAllMice + mice(file).FieldsNumber;
-    
     clear 'mouse' 'MapFieldsIC' 'FieldsIC'
 end
 
-save(sprintf('%s\\WorkSpace_final.mat',pathout));
+save(sprintf('%s\\%s_TEST_PC.mat', pathout, ExpID));
+
+%% plots
+
+load(pathin, 'mouse');
+
+% histogram, FiringRate (Ca2+/min)
+h = figure('Position', mouse.params_main.Screensize);
+histogram(cells_active_firingrate, 20);
+title('Histogram of cell''s FiringRate, Ca^{2+}/min', 'FontSize', mouse.params_main.FontSizeTitle);
+xlabel('FiringRate, Ca^{2+}/min', 'FontSize', mouse.params_main.FontSizeLabel);
+ylabel('Count', 'FontSize', mouse.params_main.FontSizeLabel);
+set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+saveas(h, sprintf('%s\\%s_Histogram_FiringRate.png', pathout, ExpID));
+saveas(h, sprintf('%s\\%s_Histogram_FiringRate.fig', pathout, ExpID));
+delete(h);
+
+% histogram, MI (bit/Ca2+)
+h = figure('Position', mouse.params_main.Screensize);
+cells_active_MI_bit_event_hist = cells_active_MI_bit_event(cells_active_MI_bit_event~=0);
+histogram(cells_active_MI_bit_event_hist, 'BinMethod','fd');
+title('Histogram of cell''s MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeTitle);
+xlabel('MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeLabel);
+ylabel('Count', 'FontSize', mouse.params_main.FontSizeLabel);
+set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+saveas(h, sprintf('%s\\%s_Histogram_MI_bit_event.png', pathout, ExpID));
+saveas(h, sprintf('%s\\%s_Histogram_MI_bit_event.fig', pathout, ExpID));
+delete(h);
+
+% histogram, MI (bit/min)
+h = figure('Position', mouse.params_main.Screensize);
+cells_active_MI_bit_time_hist = cells_active_MI_bit_time(cells_active_MI_bit_time~=0);
+histogram(cells_active_MI_bit_time_hist, 'BinMethod','fd');
+title('Histogram of cell''s MI, bit/min', 'FontSize', mouse.params_main.FontSizeTitle);
+xlabel('MI, bit/min', 'FontSize', mouse.params_main.FontSizeLabel);
+ylabel('Count', 'FontSize', mouse.params_main.FontSizeLabel);
+set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+saveas(h, sprintf('%s\\%s_Histogram_MI_bit_time.png', pathout, ExpID));
+saveas(h, sprintf('%s\\%s_Histogram_MI_bit_time.fig', pathout, ExpID));
+delete(h);
+
+% histogram, MI (z-scored)
+h = figure('Position', mouse.params_main.Screensize);
+cells_active_MI_zscored_hist = cells_active_MI_zscored(cells_active_MI_zscored~=0);
+histogram(cells_active_MI_zscored_hist, 'BinMethod','fd');
+title('Histogram of cell''s MI, z-scored', 'FontSize', mouse.params_main.FontSizeTitle);
+xlabel('MI, z-scored', 'FontSize', mouse.params_main.FontSizeLabel);
+ylabel('Count', 'FontSize', mouse.params_main.FontSizeLabel);
+set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+saveas(h, sprintf('%s\\%s_Histogram_MI_zscored.png', pathout, ExpID));
+saveas(h, sprintf('%s\\%s_Histogram_MI_zscored.fig', pathout, ExpID));
+delete(h);
+
+% MI, bit/Ca2+ and MI, z-scored
+h = figure('Position', mouse.params_main.Screensize);
+scatter(cells_active_MI_bit_event, cells_active_MI_zscored, mouse.params_main.MarksizeSpikes, 'k', 'filled');
+yline(mouse.params_main.S_sigma, 'r--', 'LineWidth', 2);
+title('MI (bit/Ca^{2+}) and MI (z-scored)', 'FontSize', mouse.params_main.FontSizeTitle);
+xlabel('MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeLabel);
+ylabel('MI, z-scored', 'FontSize', mouse.params_main.FontSizeLabel);
+set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+
+saveas(h, sprintf('%s\\%s_MI_event_zscored.png', pathout, ExpID));
+saveas(h, sprintf('%s\\%s_MI_event_zscored.fig', pathout, ExpID));
+delete(h);
+
+% MI, bit/min and MI, z-scored
+h = figure('Position', mouse.params_main.Screensize);
+scatter(cells_active_MI_bit_time, cells_active_MI_zscored, mouse.params_main.MarksizeSpikes, 'k', 'filled');
+yline(mouse.params_main.S_sigma, 'r--', 'LineWidth', 2);
+title('MI (bit/min) and MI (z-scored)', 'FontSize', mouse.params_main.FontSizeTitle);
+xlabel('MI, bit/min', 'FontSize', mouse.params_main.FontSizeLabel);
+ylabel('MI, z-scored', 'FontSize', mouse.params_main.FontSizeLabel);
+set(gca, 'FontSize', mouse.params_main.FontSizeLabel);
+
+saveas(h, sprintf('%s\\%s_MI_time_zscored.png', pathout, ExpID));
+saveas(h, sprintf('%s\\%s_MI_time_zscored.fig', pathout, ExpID));
+delete(h);
+
+% MI, bit/min and MI, bit/event
+h = figure('Position', mouse.params_main.Screensize, 'Color', 'w');
+main_ax = axes('Position', [0.15 0.15 0.8 0.8]);
+scatter(cells_active_MI_bit_time, cells_active_MI_bit_event, mouse.params_main.MarksizeSpikes, 'k', 'filled'); hold on;
+scatter(cells_informative_MI_bit_time, cells_informative_MI_bit_event, mouse.params_main.MarksizeSpikes, 'r', 'filled'); hold on;
+
+title('MI (bit/min) and MI (z-scored)', 'FontSize', mouse.params_main.FontSizeTitle);
+xlabel('MI, bit/min', 'FontSize', mouse.params_main.FontSizeLabel);
+ylabel('MI, bit/Ca^{2+}', 'FontSize', mouse.params_main.FontSizeLabel);
+set(gca, 'FontSize', mouse.params_main.FontSizeLabel, 'TickDir', 'in', 'Box', 'on');
+
+% ax_xdist = axes('Position', [0.15 0.15 0.8 0.1]);
+% histogram(cells_active_MI_bit_time, 'BinMethod', 'fd', 'FaceColor', [0.2 0.6 0.8], 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+% ax_xdist.XAxis.Visible = 'off'; ax_xdist.YAxis.Visible = 'off'; ax_xdist.Color = 'none'; ax_xdist.YAxisLocation = 'right';
+% 
+% ax_xdist = axes('Position', [0.15 0.15 0.8 0.1]);
+% histogram(cells_informative_MI_bit_time, 'BinMethod', 'fd', 'FaceColor', [0.2 0.6 1], 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+% ax_xdist.XAxis.Visible = 'off'; ax_xdist.YAxis.Visible = 'off'; ax_xdist.Color = 'none'; ax_xdist.YAxisLocation = 'right';
+% 
+% ax_ydist = axes('Position', [0.15 0.15 0.1 0.8]);
+% histogram(cells_active_MI_bit_event, 'BinMethod', 'fd', 'Orientation', 'horizontal', 'FaceColor', [0.9 0.4 0.3], 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+% ax_ydist.XAxis.Visible = 'off'; ax_ydist.YAxis.Visible = 'off'; ax_ydist.Color = 'none';
+% 
+% ax_ydist = axes('Position', [0.15 0.15 0.1 0.8]);
+% histogram(cells_informative_MI_bit_event, 'BinMethod', 'fd', 'Orientation', 'horizontal', 'FaceColor', [0.9 0.4 1], 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+% ax_ydist.XAxis.Visible = 'off'; ax_ydist.YAxis.Visible = 'off'; ax_ydist.Color = 'none';
+% 
+% linkaxes([main_ax, ax_xdist], 'x');
+% linkaxes([main_ax, ax_ydist], 'y');
+
+saveas(h, sprintf('%s\\%s_MI_time_event.png', pathout, ExpID));
+saveas(h, sprintf('%s\\%s_MI_time_event.fig', pathout, ExpID));
+delete(h);
 
 %% Create structure of outputs data
 
@@ -185,8 +347,8 @@ save(sprintf('%s\\WorkSpace_final.mat',pathout));
 % mouse_id = sprintf('%s_%s', 'FOF',  Filenames{1});
 
 acts = {'cells_count' 'cells_active_count' 'cells_active_percent' 'cells_active_firingrate_mean' ...
-    'cells_active_MI_bit_mean' 'cells_active_MI_zscored_mean' 'space_explored' 'cells_informative_count' ....
-    'cells_informative_percent' 'cells_informative_MI_zscored_mean' 'cells_informative_MI_bit_mean' ...
+    'cells_active_MI_bit_event_mean' 'cells_active_MI_bit_time_mean' 'cells_active_MI_zscored_mean' 'space_explored' 'cells_informative_count' ....
+    'cells_informative_percent' 'cells_informative_firingrate_mean' 'cells_informative_MI_zscored_mean' 'cells_informative_MI_bit_event_mean' 'cells_informative_MI_bit_time_mean' ...
     'Area_average' 'Max_FR_average' 'Volume_average' 'Fields_N' 'Fields_N_active_percent' 'Fields_N_on_inform_cell'};
 
 % создание структуры таблицы:
@@ -215,8 +377,8 @@ line = {
 mice_info = table(micename(:), groups(:), line(:), 'VariableNames', {'mouse', 'group', 'line'});
 
 % сессии в конкретном эксперименте
-session_id = {'1D_1T' '1D_2T' '1D_3T' '1D_4T' '1D_5T' '2D_1T' '3D_1T' '4D_1T' '5D_1T' '6D_1T'};
-% session_id = {'1D_1T' '2DT' '3DT' '4DT' '5DT' '6D_1T'};
+% session_id = {'1D_1T' '1D_2T' '1D_3T' '1D_4T' '1D_5T' '2D_1T' '3D_1T' '4D_1T' '5D_1T' '6D_1T'};
+session_id = {'2D_1T' '6D_1T'};
 
 %% Create MAIN Big Ugly Table
 
@@ -240,288 +402,7 @@ end
 % создание и сохранение итоговой таблицы
 UglyTable.Table = array2table(UglyTable.Data, 'VariableNames', UglyTable.Name);
 UglyTable.Table = [mice_info, UglyTable.Table];
-writetable(UglyTable.Table, sprintf('%s\\%s_PlaceCells.csv',pathout, ExpID));
 
-%% all histograms
+writetable(UglyTable.Table, sprintf('%s\\%s_PlaceCells_Test.csv',pathout, ExpID));
+save(sprintf('%s\\%_TEST_PC.mat', pathout, ExpID));
 
-% BigFieldCntrl = BigField./sum(Fields_N);
-% FieldsNumberAllMiceCntrl = FieldsNumberAllMice;
-% Cells_MI_all_zscored_Cntrl = Cells_MI_all_zscored;
-% Cells_MI_all_bit_Cntrl = Cells_MI_all_bit;
-% FiringRate_hist_Cntrl = FiringRate_hist;
-% Fields_N_Cntrl = Fields_N;
-% Area_hist_Cntrl = Area_hist;
-% Max_FR_hist_Cntrl = Max_FR_hist;
-% Volume_hist_Cntrl = Volume_hist;
-%
-% BigFieldFad = BigField./sum(Fields_N);
-% FieldsNumberAllMiceFad = FieldsNumberAllMice;
-% Cells_MI_all_zscored_Fad = Cells_MI_all_zscored;
-% Cells_MI_all_bit_Fad = Cells_MI_all_bit;
-% FiringRate_hist_Fad = FiringRate_hist;
-% Fields_N_FAD = Fields_N;
-% Area_hist_FAD = Area_hist;
-% Max_FR_hist_FAD = Max_FR_hist;
-% Volume_hist_FAD = Volume_hist;
-%
-% %% histogram of fields per active cell
-% fake = log10(FieldsNumberAllMiceCntrl);
-%
-% h = figure; % Создаем фигуру и сохраняем ее в переменную
-% h1 = histogram('BinEdges',[-0.5:1:3.5],'BinCounts',log10(FieldsNumberAllMiceFad)); hold on;
-% h2 = histogram('BinEdges',[-0.5:1:3.5],'BinCounts',fake);hold on;
-%
-% % h1.BinWidth = 1;hold on;
-% h2.FaceColor = 'c';
-% h2.EdgeColor = 'k';
-% % h2.BinWidth = 1;
-% h1.FaceColor = 'r';
-% h1.EdgeColor = 'k';
-%
-% title('Количество полей места на активную клетку','FontSize', 16);
-% xlabel('Количество полей','FontSize', 16);
-% ylabel('Log10(Количество активных клеток)','FontSize', 16);
-% grid on;
-%
-% legend('5xFAD','С57');
-%
-% % Сохранение фигуры в формате .fig
-% savefig(h, sprintf('%s\\FieldsPerCell_hist.fig', pathout));
-%
-% % Сохранение фигуры в формате .png
-% saveas(h, sprintf('%s\\FieldsPerCell_hist.png', pathout));
-%
-% % save(sprintf('%s\\WorkSpace_final.mat',pathout));
-%
-%% sum profile of fields calculation
-
-% TheBigField = [BigFieldCntrl(9:23,10:21) BigFieldFad(9:23,10:21)];
-% 
-% hss = fspecial('gaussian', 5, 1);
-% BigFieldNorm_sm = conv2(TheBigField, single(hss), 'same');
-% %
-% Map = BigFieldNorm_sm;
-% Map = TheBigField;
-Map = BigField;
-
-h = figure('Position', get(0, 'Screensize'));
-[X,Y] = meshgrid(1:size(Map,2),1:size(Map,1));
-C = double(Map);
-surf(X,Y,Map,C);
-colorbar;
-
-%% Увеличение разрешения сетки
-[X, Y] = meshgrid(1:0.5:size(Map, 2), 1:0.5:size(Map, 1)); % Более плотная сетка
-C = interp2(1:size(Map, 2), 1:size(Map, 1), Map, X, Y, 'spline'); % Интерполяция значений
-
-% Построение поверхности
-h = figure('Position', get(0, 'Screensize'));
-% surf(X, Y, C, C, 'EdgeColor', 'none'); % 'EdgeColor', 'none' для сглаживания
-surf(X, Y, C, C); % 'EdgeColor', 'none' для сглаживания
-colorbar;
-% shading interp; % Сглаживание цветов
-view(3); % 3D вид
-%
-% %% histogram of area
-%
-% Area_hist_Cntrl_sm = Area_hist_Cntrl;
-% Area_hist_FAD_sm = Area_hist_FAD;
-%
-% h = figure; % Создаем фигуру и сохраняем ее в переменную
-% h1 = histogram(Area_hist_Cntrl_sm,'Normalization','pdf');hold on;
-% h2 = histogram(Area_hist_FAD_sm,'Normalization','pdf'); hold on;
-%
-% h1.BinWidth = 10;hold on;
-% h1.FaceColor = 'c';
-% h1.EdgeColor = 'k';
-% h2.BinWidth = 10;
-% h2.FaceColor = 'r';
-% h2.EdgeColor = 'k';
-%
-% title('Распределение площади полей места','FontSize', 16);
-% xlabel('Площадь полей, см^2','FontSize', 16);
-% ylabel('Вероятность','FontSize', 16);
-% grid on;
-%
-% y = 0:1:max([Area_hist_Cntrl_sm Area_hist_FAD_sm]);
-% [~,mu_C,sigma_C] = zscore(Area_hist_Cntrl_sm);
-% [~,mu_F,sigma_F] = zscore(Area_hist_FAD_sm);
-%
-% f_C = exp(-(y-mu_C).^2./(2*sigma_C^2))./(sigma_C*sqrt(2*pi));
-% f_F = exp(-(y-mu_F).^2./(2*sigma_F^2))./(sigma_F*sqrt(2*pi));
-% plot(y,f_C, 'c' ,'LineWidth',3);hold on;
-% plot(y,f_F, 'r','LineWidth',3);
-%
-% legend('С57','5xFAD', 'С57, PDF', '5xFAD, PDF');
-% savefig(h, sprintf('%s\\Area_hist.fig', pathout));
-% saveas(h, sprintf('%s\\Area_hist.png', pathout));
-%
-% % save(sprintf('%s\\WorkSpace_final.mat',pathout));
-%
-% %% histogram of peak FR of field
-%
-% h = figure; % Создаем фигуру и сохраняем ее в переменную
-% h1 = histogram(Max_FR_hist_Cntrl,'Normalization','pdf');hold on;
-% h2 = histogram(Max_FR_hist_FAD,'Normalization','pdf'); hold on;
-%
-% h1.BinWidth = 1;hold on;
-% h1.FaceColor = 'c';
-% h1.EdgeColor = 'k';
-% h2.BinWidth = 1;
-% h2.FaceColor = 'r';
-% h2.EdgeColor = 'k';
-%
-% title('Распределение пиков активности полей места','FontSize', 16);
-% xlabel('Частота Ca2+ событий, Ca2+/мин','FontSize', 16);
-% ylabel('Вероятность','FontSize', 16);
-% grid on;
-%
-% y = 0:0.1:max([Max_FR_hist_Cntrl Max_FR_hist_FAD]);
-% [~,mu_C,sigma_C] = zscore(Max_FR_hist_Cntrl);
-% [~,mu_F,sigma_F] = zscore(Max_FR_hist_FAD);
-%
-% f_C = exp(-(y-mu_C).^2./(2*sigma_C^2))./(sigma_C*sqrt(2*pi));
-% f_F = exp(-(y-mu_F).^2./(2*sigma_F^2))./(sigma_F*sqrt(2*pi));
-% plot(y,f_C, 'c' ,'LineWidth',3);hold on;
-% plot(y,f_F, 'r','LineWidth',3);
-%
-% legend('С57','5xFAD', 'С57, PDF', '5xFAD, PDF');
-%
-% savefig(h, sprintf('%s\\Max_FR_hist.fig', pathout));
-% saveas(h, sprintf('%s\\Max_FR_hist.png', pathout));
-%
-% % save(sprintf('%s\\WorkSpace_final.mat',pathout));
-%
-% %% histogram of fields volume
-%
-% h = figure; % Создаем фигуру и сохраняем ее в переменную
-% Volume_hist_Cntrl_sm = Volume_hist_Cntrl;
-% Volume_hist_FAD_sm = Volume_hist_FAD;
-%
-% h1 = histogram(Volume_hist_Cntrl_sm,'Normalization','pdf');hold on;
-% h2 = histogram(Volume_hist_FAD_sm,'Normalization','pdf'); hold on;
-%
-% h1.BinWidth = 100;hold on;
-% h1.FaceColor = 'c';
-% h1.EdgeColor = 'k';
-% h2.BinWidth = 100;
-% h2.FaceColor = 'r';
-% h2.EdgeColor = 'k';
-%
-% title('Распределение объема полей места','FontSize', 16);
-% xlabel('Объем поля, Ca2+/мин*см^2','FontSize', 16);
-% ylabel('Вероятность','FontSize', 16);
-% grid on;
-%
-% y = 0:1:max([Volume_hist_Cntrl_sm Volume_hist_FAD_sm]);
-% [~,mu_C,sigma_C] = zscore(Volume_hist_Cntrl_sm);
-% [~,mu_F,sigma_F] = zscore(Volume_hist_FAD_sm);
-%
-% f_C = exp(-(y-mu_C).^2./(2*sigma_C^2))./(sigma_C*sqrt(2*pi));
-% f_F = exp(-(y-mu_F).^2./(2*sigma_F^2))./(sigma_F*sqrt(2*pi));
-% plot(y,f_C, 'c' ,'LineWidth',3);hold on;
-% plot(y,f_F, 'r','LineWidth',3);
-%
-% legend('С57','5xFAD', 'С57, PDF', '5xFAD, PDF');
-% savefig(h, sprintf('%s\\Volume_hist.fig', pathout));
-% saveas(h, sprintf('%s\\Volume_hist.png', pathout));
-%
-% % save(sprintf('%s\\WorkSpace_final.mat',pathout));
-% %% histogram of active cells zscored(MI)
-%
-% h = figure; % Создаем фигуру и сохраняем ее в переменную
-% h1 = histogram(Cells_MI_all_zscored_Cntrl,'Normalization','pdf');hold on;
-% h2 = histogram(Cells_MI_all_zscored_Fad,'Normalization','pdf'); hold on;
-%
-% h1.BinWidth = 0.25;hold on;
-% h1.FaceColor = 'c';
-% h1.EdgeColor = 'k';
-% h2.BinWidth = 0.25;
-% h2.FaceColor = 'r';
-% h2.EdgeColor = 'k';
-%
-% title('Распределение MI активных клеток','FontSize', 16);
-% xlabel('z-scored (MI), \sigma','FontSize', 16);
-% ylabel('Вероятность','FontSize', 16);
-% grid on;
-%
-% y = min([Cells_MI_all_zscored_Fad Cells_MI_all_zscored_Cntrl]):0.1:max([Cells_MI_all_zscored_Fad Cells_MI_all_zscored_Cntrl]);
-% [~,mu_C,sigma_C] = zscore(Cells_MI_all_zscored_Cntrl);
-% [~,mu_F,sigma_F] = zscore(Cells_MI_all_zscored_Fad);
-%
-% f_C = exp(-(y-mu_C).^2./(2*sigma_C^2))./(sigma_C*sqrt(2*pi));
-% f_F = exp(-(y-mu_F).^2./(2*sigma_F^2))./(sigma_F*sqrt(2*pi));
-% plot(y,f_C, 'c' ,'LineWidth',3);hold on;
-% plot(y,f_F, 'r','LineWidth',3);
-%
-% legend('С57','5xFAD', 'С57, PDF', '5xFAD, PDF');
-% savefig(h, sprintf('%s\\IC_hist.fig', pathout));
-% saveas(h, sprintf('%s\\IC_hist.png', pathout));
-%
-% % save(sprintf('%s\\WorkSpace_final.mat',pathout));
-%
-% %% histogram of active cells MI (bit/Ca2+)
-%
-% h = figure; % Создаем фигуру и сохраняем ее в переменную
-% h1 = histogram(Cells_MI_all_bit_Cntrl,'Normalization','pdf');hold on;
-% h2 = histogram(Cells_MI_all_bit_Fad,'Normalization','pdf'); hold on;
-%
-% h1.BinWidth = 0.04;hold on;
-% h1.FaceColor = 'c';
-% h1.EdgeColor = 'k';
-% h2.BinWidth = 0.04;
-% h2.FaceColor = 'r';
-% h2.EdgeColor = 'k';
-%
-% title('Распределение MI активных клеток','FontSize', 16);
-% xlabel('MI, бит/Са2+','FontSize', 16);
-% ylabel('Вероятность','FontSize', 16);
-% grid on;
-%
-% y = min([Cells_MI_all_bit_Fad Cells_MI_all_bit_Cntrl]):0.01:max([Cells_MI_all_bit_Fad Cells_MI_all_bit_Cntrl]);
-% [~,mu_C,sigma_C] = zscore(Cells_MI_all_bit_Cntrl);
-% [~,mu_F,sigma_F] = zscore(Cells_MI_all_bit_Fad);
-%
-% f_C = exp(-(y-mu_C).^2./(2*sigma_C^2))./(sigma_C*sqrt(2*pi));
-% f_F = exp(-(y-mu_F).^2./(2*sigma_F^2))./(sigma_F*sqrt(2*pi));
-% plot(y,f_C, 'c' ,'LineWidth',3);hold on;
-% plot(y,f_F, 'r','LineWidth',3);
-%
-% legend('С57','5xFAD', 'С57, PDF', '5xFAD, PDF');
-% savefig(h, sprintf('%s\\IC_hist_bit.fig', pathout));
-% saveas(h, sprintf('%s\\IC_hist_bit.png', pathout));
-%
-% % save(sprintf('%s\\WorkSpace_final.mat',pathout));
-%
-% %% histogram of active cells zscored(MI)
-%
-% h = figure; % Создаем фигуру и сохраняем ее в переменную
-% h1 = histogram(FiringRate_hist_Cntrl,'Normalization','pdf');hold on;
-% h2 = histogram(FiringRate_hist_Fad,'Normalization','pdf'); hold on;
-%
-% h1.BinWidth = 0.5;hold on;
-% h1.FaceColor = 'c';
-% h1.EdgeColor = 'k';
-% h2.BinWidth = 0.5;
-% h2.FaceColor = 'r';
-% h2.EdgeColor = 'k';
-%
-% title('Распределение активности клеток','FontSize', 16);
-% xlabel('Частота Ca2+ событий, Са2+/мин','FontSize', 16);
-% ylabel('Вероятность','FontSize', 16);
-% grid on;
-%
-% y = 0:0.1:max([FiringRate_hist_Fad FiringRate_hist_Cntrl]);
-% [~,mu_C,sigma_C] = zscore(FiringRate_hist_Cntrl);
-% [~,mu_F,sigma_F] = zscore(FiringRate_hist_Fad);
-%
-% f_C = exp(-(y-mu_C).^2./(2*sigma_C^2))./(sigma_C*sqrt(2*pi));
-% f_F = exp(-(y-mu_F).^2./(2*sigma_F^2))./(sigma_F*sqrt(2*pi));
-% plot(y,f_C, 'c' ,'LineWidth',3);hold on;
-% plot(y,f_F, 'r','LineWidth',3);
-%
-% legend('С57','5xFAD', 'С57, PDF', '5xFAD, PDF');
-% savefig(h, sprintf('%s\\FR_hist.fig', pathout));
-% saveas(h, sprintf('%s\\FR_hist.png', pathout));
-
-% save(sprintf('%s\\WorkSpace_final.mat',pathout));
