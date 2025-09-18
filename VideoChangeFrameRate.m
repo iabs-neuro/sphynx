@@ -7,7 +7,7 @@ if nargin<2
     %%
     [filenames, pathname] = uigetfile({'*.avi;*.mp4', 'Video Files (*.avi, *.mp4)'}, 'Выберите видео файлы', 'MultiSelect', 'on', 'W:\Projects\3DM\Comparision\3DM\2_Combined');
     inputVideoPath = fullfile(pathname,filenames);
-    newFrameRates = 54.14;
+    newFrameRates = 55.525;
 end
 
 if ~iscell(inputVideoPath)

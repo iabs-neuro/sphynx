@@ -83,8 +83,8 @@ ExtraLinesNumber = 0;
 BodyPartsTraces = struct('BodyPartName', [],'TraceOriginal', [],'TraceLikelihood', [], 'TraceInterpolated', [], 'TraceSmoothed', [],'PercentNaN', [],'PercentLikeliHoodSubThreshold', [],'AverageDistance', [],'AverageSpeed', []);
 BodyPartsTracesMainX = zeros(BodyPartsNumber,n_frames);
 BodyPartsTracesMainY = zeros(BodyPartsNumber,n_frames);
-% for part=1:BodyPartsNumber
-for part=2:13
+for part=1:BodyPartsNumber
+% for part=1:13
     BodyPartsTraces(part).BodyPartName = BodyPartsNames{part};
     BodyPartsTraces(part).TraceOriginal.X = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)));
     BodyPartsTraces(part).TraceOriginal.Y = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+1));
@@ -176,13 +176,15 @@ for part=2:13
     delete(h);
 %     
 end
+
+save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 %% 
-save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
-SumError = zeros(1,3);
-for part=1:BodyPartsNumber
-    SumError = SumError + [BodyPartsTraces(part).PercentLikeliHoodSubThreshold(1) BodyPartsTraces(part).PercentLikeliHoodSubThreshold(2) BodyPartsTraces(part).PercentLikeliHoodSubThreshold(3)];
-end
 
-AverageError = SumError/BodyPartsNumber
-
-save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
+% SumError = zeros(1,3);
+% for part=1:BodyPartsNumber
+%     SumError = SumError + [BodyPartsTraces(part).PercentLikeliHoodSubThreshold(1) BodyPartsTraces(part).PercentLikeliHoodSubThreshold(2) BodyPartsTraces(part).PercentLikeliHoodSubThreshold(3)];
+% end
+% 
+% AverageError = SumError/BodyPartsNumber
+% 
+% save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
