@@ -1,4 +1,4 @@
-function plot_correlation_matrix_color(corrMatrix, labels, normalizationMethod)
+function plot_correlation_matrix_color(corrMatrix, labels, normalizationMethod, name_title, nameout)
     % Проверяем, что матрица квадратная
     [rows, cols] = size(corrMatrix);
     if rows ~= cols
@@ -53,5 +53,9 @@ function plot_correlation_matrix_color(corrMatrix, labels, normalizationMethod)
         end
     end
 
-    title('Correlation Matrix', 'FontSize', 14, 'FontWeight', 'bold');
+    title(name_title);
+    
+    saveas(gcf, nameout);
+    delete(gcf);
+    
 end
