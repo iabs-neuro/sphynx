@@ -20,9 +20,15 @@ function [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo, PathVideo, P
 
 if nargin<3
     %%
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\3DM\BehaviorData\2_Combined\');
-     PathOut = uigetdir('w:\Projects\3DM\BehaviorData\3_Preset\', 'Pick a Directory for outfiles');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','e:\Projects\HOS\BehaviorData_2wave\2_Combined\');
+     PathOut = uigetdir('e:\Projects\HOS\BehaviorData_2wave\4_Preset\', 'Pick a Directory for outfiles');
 end
+
+%%
+wall_width_in_default = '10';
+wall_width_out_default = '10';
+wall_width_object_default = '2.5';
+default_objects_count = '1';
 
 %% some local parameters
 NumPointsForPlotBorders = 20000;
@@ -33,8 +39,8 @@ LineWidth.Arena = 2;
 LineWidth.Objects = 2;
 StepDefault = 10;
 
-TypeExpList = ["3DM", "BowlsOpenField","Novelty OF","NOL","Round Track","Holes Track","Odor Track","Freezing Track","New Track","Complex Context","OF_Obj"];
-ArenaGeometryOptions = ["Polygon", "Circle", "Ellipse", "O-maze"];
+TypeExpList = ["BowlsOpenField","3DM","Novelty OF","NOL","Round Track","Holes Track","Odor Track","Freezing Track","New Track","Complex Context","OF_Obj"];
+ArenaGeometryOptions = ["Circle", "Polygon", "Ellipse", "O-maze"];
 
 FilenameOut = FilenameVideo(1:end-4);
 mkdir(PathOut, sprintf('%s_zones',FilenameOut));
@@ -43,7 +49,7 @@ PathOut = sprintf('%s\\%s_zones',PathOut, FilenameOut);
 question = questdlg('Do you want dowload Preset?', 'Important question', 'Yes','No','Yes');
 switch question
     case 'Yes'
-        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','w:\Projects\3DM\BehaviorData\3_Preset\');
+        [FilenamePresetDownload, PathPresetDownload]  = uigetfile('*.mat','Select preset file','e:\Projects\HOS\BehaviorData_2wave\4_Preset\');
         load(sprintf('%s//%s', PathPresetDownload, FilenamePresetDownload), 'Options','ArenaAndObjects');
 end
 
@@ -140,6 +146,7 @@ end
 % end
 
 %% rescale downloaded preset to current video
+
 if strcmp(question, 'Yes')
     rotationAngle = 0;
     rotationCenterX = mean(ArenaAndObjects(1).border_x);
@@ -342,7 +349,7 @@ ArenaAndObjects(1).border_y = y_arena;
 
 %% reading objects coordinates
 
-Options.ObjectsNumber = str2double(inputdlg('Specify the number of objects', 'Parameters', 1, {'0'}, 'on'));
+Options.ObjectsNumber = str2double(inputdlg('Specify the number of objects', 'Parameters', 1, {default_objects_count}, 'on'));
 for object=1:Options.ObjectsNumber
     ObjectGeometry = questdlg('Choice geometry of object', 'Parameters', 'Polygon', 'Circle', 'Ellipse', 'Polygon');
     prmt = 0;
@@ -410,8 +417,8 @@ switch Options.ExperimentType
         Zones = struct('name',[],'type',[], 'maskfilled', []);
         prmt = 0;
         while prmt == 0
-            dlg_prompt = {'Specify width of wall outside zone (cm)','Specify width of wall inside zone (cm)', 'Specify width of object zone (cm)'};
-            dlg_default_data = {'10', '10', '3'};
+            dlg_prompt = {'Specify width of wall outside zone (cm)','Specify width of wall inside zone (cm)', 'Specify width of object zone (cm)'};            
+            dlg_default_data = {wall_width_in_default, wall_width_out_default, wall_width_object_default};
             dlg_data = inputdlg(dlg_prompt, 'Parameters', 1, dlg_default_data, 'on');
 
             Options.WidthWallOutCm = str2double(dlg_data{1});
@@ -764,7 +771,7 @@ switch Options.ExperimentType
                 zone_for_plot = [
                     find(strcmp({Zones.name}, 'ObjectAllOut'))...
                     find(strcmp({Zones.name}, 'ObjectAllReal'))...
-                    ];
+                    ]; 
                 IIM(:,:,3) = Zones(zone_for_plot(1)).maskfilled*255 + Zones(zone_for_plot(2)).maskfilled*125 + IIM(:,:,3);
             end
 
@@ -783,7 +790,6 @@ switch Options.ExperimentType
             saveas(h, sprintf('%s\\%s_Main_Zones.png',PathOut, FilenameOut));
             delete(h);
         end
-
         % plot of all zones
 %         for zone = 1:length(Zones)
 %             if strcmp(Zones(zone).type, 'area')
