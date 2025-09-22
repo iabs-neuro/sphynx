@@ -65,8 +65,8 @@ function plot_correlation_matrix_color(corrMatrix, labels, normalizationMethod, 
     title(name_title);
     
     % Сохраняем с сохранением квадратного соотношения сторон
-    set(gcf, 'PaperPositionMode', 'auto'); % Сохраняет точный размер
-    saveas(gcf, nameout);
-    delete(gcf);
+   % set(gcf, 'PaperPositionMode', 'auto'); % Сохраняет точный размер
+   % saveas(gcf, nameout);
+   % delete(gcf);
     
 end
