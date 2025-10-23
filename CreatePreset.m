@@ -105,7 +105,7 @@ while prmt==0
             Options.GoodVideoFrameGray = VidFrames(:,:,1);
         case 'No'
             prmt = 0;
-            gframe = randi([round(Options.NumFrames/2), Options.NumFrames]);
+            gframe = randi([1, Options.NumFrames]);
     end
     delete(h);
 end
@@ -740,6 +740,7 @@ switch Options.ExperimentType
             % plot of main zones
             [X,Y] = meshgrid(1:Options.Width,1:Options.Height);
             PlotArray = Y.*ArenaAndObjects(1).maskborder{1};
+            IIM = [];
             switch ArenaAndObjects(1).geometry
                 case 'Polygon'
                     zone_for_plot = [

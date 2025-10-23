@@ -170,10 +170,11 @@ for part=1:BodyPartsNumber
     BodyPartsTraces(part).BodyPartName = BodyPartsNames{part};
     BodyPartsTraces(part).TraceOriginal.X = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)))*Options.x_kcorr;
     BodyPartsTraces(part).TraceOriginal.Y = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+1));
-    BodyPartsTraces(part).TraceLikelihood = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+2));
+    BodyPartsTraces(part).TraceLikelihood = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+2)); 
     
     TempArrayX = BodyPartsTraces(part).TraceOriginal.X;
     TempArrayY = BodyPartsTraces(part).TraceOriginal.Y;
+    
     TempArrayX(isnan(BodyPartsTraces(part).TraceOriginal.X)) = 0;
     TempArrayY(isnan(BodyPartsTraces(part).TraceOriginal.Y)) = 0;
     
@@ -380,7 +381,7 @@ if PlotOption.main
     open(v);
     h = waitbar(1/n_frames, sprintf('Plotting video, frame %d of %d', 0,  n_frames));
 %     for k=1:n_frames
-    for k=100:1100
+    for k=4000:5000
 %         if ~mod(k,100)
             h = waitbar(k/n_frames, h, sprintf('Plotting video, frame %d of %d', k,  n_frames));
 %         end
@@ -533,8 +534,17 @@ Acts(5).ActArrayRefine = Acts(5).ActArrayRefine';
 % correct headdirection
 CenterHead.X = BodyPartsTracesMainX(Point.HeadCenter,:);
 CenterHead.Y = BodyPartsTracesMainY(Point.HeadCenter,:);
-[HeadDirection,~] = cart2pol(BodyPartsTracesMainX(Point.MiniscopeUCLA,:)-CenterHead.X,BodyPartsTracesMainY(Point.MiniscopeUCLA,:)-CenterHead.Y);
-HeadDirection = smooth(HeadDirection,Options.FrameRate,'sgolay',DegreeSmoothSGolay)';
+
+Point.HD = Point.MiniscopeUCLA;
+if isempty(Point.HD)
+    Point.HD = Point.Nose;
+end
+
+HeadDirection = [];
+if ~isempty(Point.HD)
+    [HeadDirection,~] = cart2pol(BodyPartsTracesMainX(Point.HD,:)-CenterHead.X,BodyPartsTracesMainY(Point.HD,:)-CenterHead.Y);
+    HeadDirection = smooth(HeadDirection,round(Options.FrameRate),'sgolay',DegreeSmoothSGolay)';
+end
 
 % calculation coordinate features during locomotion
 xlocomotion = MouseCenterX'.*Acts(3).ActArrayRefine;
@@ -544,10 +554,10 @@ ylocomotion(ylocomotion == 0) = NaN;
 
 %% Task-specific Acts 
 
-ZonesOption.NameZone = {'WallsAndCornersRealOut' 'Center' 'Object1Real' 'Object1RealOut'};
-ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'headcenter' 'headcenter'};
-ZonesOption.NameAct = {'walls' 'center' 'object_inside' 'object_interaction'};
-ZonesOption.NumBodyPart = [Point.Center Point.Center Point.HeadCenter Point.HeadCenter];
+ZonesOption.NameZone = {'ArenaCornersAllRealOut' 'ArenaWallsAllRealOut' 'Center' 'Object1RealOut' 'Object2RealOut' 'Object3RealOut' 'Object4RealOut' 'ObjectAllRealOut'};
+ZonesOption.NameBodyPart = {'tailbase' 'tailbase' 'tailbase' 'nose' 'nose' 'nose' 'nose' 'nose'};
+ZonesOption.NameAct = {'corners' 'walls' 'center' 'object1' 'object2' 'object3' 'object4' 'objects'};
+ZonesOption.NumBodyPart = [12 12 12 2 2 2 2 2];
 
 ZonesOption.NumZone = zeros(1,length(ZonesOption.NameZone));
 for zone = 1:length(ZonesOption.NameZone)
@@ -567,18 +577,6 @@ for zone = 1:length(ZonesOption.NameZone)
     Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
 end
 
-% refining object interaction act
-IndexInteract = find(strcmp({Acts.ActName}, 'object_interaction'), 1);
-IndexInside = find(strcmp({Acts.ActName}, 'object_inside'), 1);
-if ~isempty(IndexInteract)
-    Acts(end+1).ActName = 'object_interactreal';    
-    Acts(end).ActArray = Acts(IndexInteract).ActArrayRefine - Acts(IndexInside).ActArrayRefine;
-    Acts(end).ActArray(Acts(end).ActArrayRefine == -1) = 0;
-    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
-    Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
-    Acts(end).Zone = Acts(find(strcmp({Acts.ActName}, 'object_interaction'), 1)).Zone;
-end
-
 %% act's statistics
 
 for line = 1:size(Acts,2)
@@ -591,6 +589,7 @@ for line = 1:size(Acts,2)
     Acts(line).Distance = round(mean(BodyPartsTraces(Point.Center).VelocitySmoothed(logical(Acts(line).ActArrayRefine)))*time(end)*Acts(line).ActPercent/10000,2);
     Acts(line).ActMeanDistance = Acts(line).Distance/Acts(line).ActNumber;
     Acts(line).ActVelocity = Acts(line).Distance/(Acts(line).ActMeanTime*Acts(line).ActNumber)*100;
+    Acts(line).ActDuration = round(Acts(line).ActPercent*n_frames/Options.FrameRate/100,2);
     histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
     title(sprintf('Histogram of acts duration time: %s', string(Acts(line).ActName)));
     saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
