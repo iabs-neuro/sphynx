@@ -18,6 +18,12 @@ behavior_act_params = struct(...
 ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% UNSPECIFIC ACTS %%%%%%%%%%%%%%%%%%%%
 'freezing',                     "ActPercent", ...                               % замирания:                [процент]
 'rear',                         "ActNumber", ...                                % стойки:                   [кол-во]
+... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:NOF/LNOF %%%%%%%%
+'object1',                    	["ActDuration" "ActPercent"], ...               % мышь взаимодействует с объектом1:                     [длительность, процент]
+'object2',                     	["ActDuration" "ActPercent"], ...               % мышь взаимодействует с объектом2:                     [длительность, процент]
+'object3',                     	["ActDuration" "ActPercent"], ...               % мышь взаимодействует с объектом3:                     [длительность, процент]
+'object4',                    	["ActDuration" "ActPercent"], ...               % мышь взаимодействует с объектом4:                     [длительность, процент]
+'objects',                    	["ActDuration" "ActPercent"], ...               % мышь взаимодействует с объектами:                     [длительность, процент]
 ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:BOF - bowl acts (old names) %%%%%%%%%%%%% 
 'bowlinside',                   ["ActDuration" "ActPercent"], ...               % мышь в миске:                                         [длительность, процент]
 'bowlinteraction',              ["ActDuration" "ActPercent"], ...               % любое взаимодействие с миской:                        [длительность, процент]
