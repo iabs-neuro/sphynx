@@ -56,3 +56,270 @@ Pass A.2 (13, NEW):
 
 1. If anything failed - paste output below this section, I fix and iterate.
 2. If green - tag `stage-c-pass-A2-angles-fixed` and start Pass A.3 (velocity & smoothing, Bug-3 + Bug-4).
+
+ runAllTests('tag','fast')
+Running 51 tests (tag=fast)
+Running circleFitTest
+.....
+Done circleFitTest
+__________
+
+Running classifyCircleTest
+.....
+Done classifyCircleTest
+__________
+
+Running classifySquareTest
+.....
+Done classifySquareTest
+__________
+
+Running inMaskSafeTest
+.....
+Done inMaskSafeTest
+__________
+
+Running logTest
+.....
+Done logTest
+__________
+
+Running partitionStripsTest
+.....
+Done partitionStripsTest
+__________
+
+Running polygonFitTest
+...
+Done polygonFitTest
+__________
+
+Running sanityTest
+..
+Done sanityTest
+__________
+
+Running unwrapForSmoothTest
+
+================================================================================
+Error occurred in unwrapForSmoothTest/testConstantInputUnchanged and it did not run to completion.
+    ---------
+    Error ID:
+    ---------
+    'MATLAB:UndefinedFunction'
+    --------------
+    Error Details:
+    --------------
+    Undefined function 'smooth' for input arguments of type 'double'.
+    
+    Error in sphynx.angles.unwrapForSmooth (line 28)
+            smoothed = smooth(unwrapped, windowLen, 'sgolay', polyOrder);
+    
+    Error in unwrapForSmoothTest>testConstantInputUnchanged (line 7)
+        out = sphynx.angles.unwrapForSmooth(in, 11);
+================================================================================
+.
+================================================================================
+Error occurred in unwrapForSmoothTest/testNoArtifactAcrossDiscontinuity and it did not run to completion.
+    ---------
+    Error ID:
+    ---------
+    'MATLAB:UndefinedFunction'
+    --------------
+    Error Details:
+    --------------
+    Undefined function 'smooth' for input arguments of type 'double'.
+    
+    Error in sphynx.angles.unwrapForSmooth (line 28)
+            smoothed = smooth(unwrapped, windowLen, 'sgolay', polyOrder);
+    
+    Error in unwrapForSmoothTest>testNoArtifactAcrossDiscontinuity (line 17)
+        out = sphynx.angles.unwrapForSmooth(raw, 11);
+================================================================================
+.
+================================================================================
+Error occurred in unwrapForSmoothTest/testOutputInRange and it did not run to completion.
+    ---------
+    Error ID:
+    ---------
+    'MATLAB:UndefinedFunction'
+    --------------
+    Error Details:
+    --------------
+    Undefined function 'smooth' for input arguments of type 'double'.
+    
+    Error in sphynx.angles.unwrapForSmooth (line 28)
+            smoothed = smooth(unwrapped, windowLen, 'sgolay', polyOrder);
+    
+    Error in unwrapForSmoothTest>testOutputInRange (line 25)
+        out = sphynx.angles.unwrapForSmooth(in, 11);
+================================================================================
+.
+================================================================================
+Error occurred in unwrapForSmoothTest/testRespectsWindowSize and it did not run to completion.
+    ---------
+    Error ID:
+    ---------
+    'MATLAB:UndefinedFunction'
+    --------------
+    Error Details:
+    --------------
+    Undefined function 'smooth' for input arguments of type 'double'.
+    
+    Error in sphynx.angles.unwrapForSmooth (line 28)
+            smoothed = smooth(unwrapped, windowLen, 'sgolay', polyOrder);
+    
+    Error in unwrapForSmoothTest>testRespectsWindowSize (line 32)
+        out11 = sphynx.angles.unwrapForSmooth(in, 11);
+================================================================================
+.
+Done unwrapForSmoothTest
+__________
+
+Running wrapTest
+......
+Done wrapTest
+__________
+
+Running headDirectionContinuityTest
+
+================================================================================
+Error occurred in headDirectionContinuityTest/testNoLargeJumpsAfterSmoothing and it did not run to completion.
+    ---------
+    Error ID:
+    ---------
+    'MATLAB:UndefinedFunction'
+    --------------
+    Error Details:
+    --------------
+    Undefined function 'smooth' for input arguments of type 'double'.
+    
+    Error in sphynx.angles.unwrapForSmooth (line 28)
+            smoothed = smooth(unwrapped, windowLen, 'sgolay', polyOrder);
+    
+    Error in sphynx.angles.headDirection (line 22)
+            hd = sphynx.angles.unwrapForSmooth(raw, smoothWindow);
+    
+    Error in headDirectionContinuityTest>testNoLargeJumpsAfterSmoothing (line 8)
+        hd = sphynx.angles.headDirection(f.headTipX, f.headTipY, ...
+================================================================================
+.
+================================================================================
+Error occurred in headDirectionContinuityTest/testHDinValidRange and it did not run to completion.
+    ---------
+    Error ID:
+    ---------
+    'MATLAB:UndefinedFunction'
+    --------------
+    Error Details:
+    --------------
+    Undefined function 'smooth' for input arguments of type 'double'.
+    
+    Error in sphynx.angles.unwrapForSmooth (line 28)
+            smoothed = smooth(unwrapped, windowLen, 'sgolay', polyOrder);
+    
+    Error in sphynx.angles.headDirection (line 22)
+            hd = sphynx.angles.unwrapForSmooth(raw, smoothWindow);
+    
+    Error in headDirectionContinuityTest>testHDinValidRange (line 17)
+        hd = sphynx.angles.headDirection(f.headTipX, f.headTipY, ...
+================================================================================
+.
+================================================================================
+Error occurred in headDirectionContinuityTest/testTotalRotationApproximatelyCorrect and it did not run to completion.
+    ---------
+    Error ID:
+    ---------
+    'MATLAB:UndefinedFunction'
+    --------------
+    Error Details:
+    --------------
+    Undefined function 'smooth' for input arguments of type 'double'.
+    
+    Error in sphynx.angles.unwrapForSmooth (line 28)
+            smoothed = smooth(unwrapped, windowLen, 'sgolay', polyOrder);
+    
+    Error in sphynx.angles.headDirection (line 22)
+            hd = sphynx.angles.unwrapForSmooth(raw, smoothWindow);
+    
+    Error in headDirectionContinuityTest>testTotalRotationApproximatelyCorrect (line 24)
+        hd = sphynx.angles.headDirection(f.headTipX, f.headTipY, ...
+================================================================================
+.
+Done headDirectionContinuityTest
+__________
+
+Running zoneVisitTest
+..
+Done zoneVisitTest
+__________
+
+Running demoPipelineTest
+
+================================================================================
+demoPipelineTest/testNOF_H01_1D_runsWithoutError was filtered.
+    Test Diagnostic: pass-0 placeholder; real test arrives in Pass B
+Details
+================================================================================
+.
+Done demoPipelineTest
+__________
+
+Failure Summary:
+
+     Name                                                               Failed  Incomplete  Reason(s)
+    ================================================================================================================
+     unwrapForSmoothTest/testConstantInputUnchanged                       X         X       Errored.
+    ----------------------------------------------------------------------------------------------------------------
+     unwrapForSmoothTest/testNoArtifactAcrossDiscontinuity                X         X       Errored.
+    ----------------------------------------------------------------------------------------------------------------
+     unwrapForSmoothTest/testOutputInRange                                X         X       Errored.
+    ----------------------------------------------------------------------------------------------------------------
+     unwrapForSmoothTest/testRespectsWindowSize                           X         X       Errored.
+    ----------------------------------------------------------------------------------------------------------------
+     headDirectionContinuityTest/testNoLargeJumpsAfterSmoothing           X         X       Errored.
+    ----------------------------------------------------------------------------------------------------------------
+     headDirectionContinuityTest/testHDinValidRange                       X         X       Errored.
+    ----------------------------------------------------------------------------------------------------------------
+     headDirectionContinuityTest/testTotalRotationApproximatelyCorrect    X         X       Errored.
+    ----------------------------------------------------------------------------------------------------------------
+     demoPipelineTest/testNOF_H01_1D_runsWithoutError                               X       Filtered by assumption.
+
+=== Summary ===
+Total:   51
+Passed:  43
+Failed:  7
+Skipped: 8
+Warning: 7 failed, 8 incomplete 
+> In runAllTests (line 71) 
+
+ans = 
+
+  1×51 TestResult array with properties:
+
+    Name
+    Passed
+    Failed
+    Incomplete
+    Duration
+    Details
+
+Totals:
+   43 Passed, 7 Failed (rerun), 8 Incomplete.
+   0.22133 seconds testing time.
+
+---
+
+## Iteration 2 — fix smooth toolbox dependency
+
+All 7 failures had the same root cause: `Undefined function 'smooth'`. `smooth(...)` is from Curve Fitting Toolbox, which is not available in your MATLAB session. Replaced with `sgolayfilt(...)` from Signal Processing Toolbox (same Savitzky-Golay math, no toolbox issue).
+
+Saved as project memory so future passes won't reintroduce `smooth`.
+
+Re-run:
+
+```matlab
+runAllTests('tag','fast')
+```
+
+Expected: **51/0/1** (50 passed, 0 failed, 1 skipped).
