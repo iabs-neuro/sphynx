@@ -21,7 +21,7 @@ runAllTests('tag','golden')        % golden only
 To rebuild the golden snapshot (after a known intentional change):
 
 ```matlab
-run(fullfile(sphynx.util.repoRoot(),'tests','+golden','buildSnapshots.m'))
+run(fullfile(sphynx.util.repoRoot(),'tests','golden','buildSnapshots.m'))
 ```
 
 Tests run with `SPHYNX_HEADLESS=1` set automatically — no figures or videos

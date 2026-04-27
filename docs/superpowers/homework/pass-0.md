@@ -10,7 +10,7 @@ In MATLAB Command Window:
 cd 'C:\Users\User\pycharmprojects\sphynx'
 startup
 runAllTests('tag','fast')
-run(fullfile(sphynx.util.repoRoot(),'tests','+golden','buildSnapshots.m'))
+run(fullfile(sphynx.util.repoRoot(),'tests','golden','buildSnapshots.m'))
 ```
 
 ## Expected output
@@ -38,7 +38,7 @@ Breakdown:
 [INFO] Wrote <repo>\tests\+golden\snapshots\NOF_H01_1D_Acts.mat (1.x KB)
 ```
 
-After this, the file `tests/+golden/snapshots/NOF_H01_1D_Acts.mat` should exist.
+After this, the file `tests/golden/snapshots/NOF_H01_1D_Acts.mat` should exist.
 
 ## What I do after you send output
 

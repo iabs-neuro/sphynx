@@ -22,13 +22,13 @@ function results = runAllTests(varargin)
 
     switch tag
         case 'fast'
-            buckets = {'+unit', '+synthetic', '+smoke'};
+            buckets = {'unit', 'synthetic', 'smoke'};
         case 'full'
-            buckets = {'+unit', '+synthetic', '+smoke', '+golden'};
+            buckets = {'unit', 'synthetic', 'smoke', 'golden'};
         case 'golden'
-            buckets = {'+golden'};
+            buckets = {'golden'};
         case 'all'
-            buckets = {'+unit', '+synthetic', '+smoke', '+golden'};
+            buckets = {'unit', 'synthetic', 'smoke', 'golden'};
         otherwise
             error('runAllTests:unknownTag', ...
                 'Unknown tag "%s"; valid: fast|full|golden|all', tag);
