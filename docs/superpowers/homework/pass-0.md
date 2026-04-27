@@ -1,21 +1,21 @@
 # Pass 0 homework
 
-Status: waiting on you. Nothing else proceeds until you send the output of these commands.
+Status: waiting on you (re-run runAllTests after the fix).
 
-## What to run
+## What's done
 
-In MATLAB Command Window:
+- buildSnapshots ran successfully — `tests/golden/snapshots/NOF_H01_1D_Acts.mat` exists, committed.
+- runAllTests was buggy (TestSuite is abstract); fixed in commit `ae69270`.
+
+## What to run now
 
 ```matlab
-cd 'C:\Users\User\pycharmprojects\sphynx'
-startup
 runAllTests('tag','fast')
-run(fullfile(sphynx.util.repoRoot(),'tests','golden','buildSnapshots.m'))
 ```
 
-## Expected output
+(no need to re-run startup unless you closed MATLAB.)
 
-### `runAllTests('tag','fast')`
+## Expected output
 
 ```
 Running 8 tests (tag=fast)
@@ -31,23 +31,11 @@ Breakdown:
 - 7 passed: sanityTest (2) + logTest (5)
 - 1 skipped: smoke placeholder (intentional, real test arrives in Pass B)
 
-### `buildSnapshots`
-
-```
-[INFO] Reading <repo>\Demo\Behavior\NOF_H01_1D\<date>_1\NOF_H01_1D_WorkSpace.mat
-[INFO] Wrote <repo>\tests\golden\snapshots\NOF_H01_1D_Acts.mat (1.x KB)
-```
-
-After this, the file `tests/golden/snapshots/NOF_H01_1D_Acts.mat` should exist.
-
 ## What I do after you send output
 
-1. If anything failed - I fix and send updated homework.
-2. If all green - I:
-   - commit the snapshot .mat
-   - tag `stage-c-pass-0-complete`
-   - immediately start Pass A.1 (zones, Bug-1 fix)
+1. If anything failed - I fix and ask for re-run.
+2. If green - I tag `stage-c-pass-0-complete` and immediately start Pass A.1 (zones, Bug-1 fix).
 
 ## How to send output
 
-Just copy-paste from PowerShell or MATLAB Command Window into the chat. No formatting needed.
+Just copy-paste from PowerShell/MATLAB into the chat.
