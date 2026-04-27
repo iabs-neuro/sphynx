@@ -35,7 +35,7 @@ Breakdown:
 
 ```
 [INFO] Reading <repo>\Demo\Behavior\NOF_H01_1D\<date>_1\NOF_H01_1D_WorkSpace.mat
-[INFO] Wrote <repo>\tests\+golden\snapshots\NOF_H01_1D_Acts.mat (1.x KB)
+[INFO] Wrote <repo>\tests\golden\snapshots\NOF_H01_1D_Acts.mat (1.x KB)
 ```
 
 After this, the file `tests/golden/snapshots/NOF_H01_1D_Acts.mat` should exist.

@@ -176,12 +176,12 @@ sphynx/                                  (repo root)
 │
 ├── tests/
 │   ├── runAllTests.m                    one-shot entry: runtests('tests', ...)
-│   ├── +unit/                           unit tests for pure functions
-│   ├── +synthetic/                      synthetic-DLC tests with known answers
-│   ├── +golden/                         regression vs Demo/NOF_H01 baselines
+│   ├── unit/                           unit tests for pure functions
+│   ├── synthetic/                      synthetic-DLC tests with known answers
+│   ├── golden/                         regression vs Demo/NOF_H01 baselines
 │   │   ├── snapshots/                   tracked .mat snapshots (~few KB each)
 │   │   └── buildSnapshots.m             one-shot script: legacy → snapshots
-│   └── +smoke/
+│   └── smoke/
 │       └── demoPipelineTest.m
 │
 ├── docs/superpowers/specs/2026-04-27-sphynx-stage-c-design.md   (this document)
@@ -263,7 +263,7 @@ This rule is enforced by code review, not by tooling.
 ```
 tests/
 ├── runAllTests.m                       runs everything by default; supports ('tag', 'fast'|'full')
-├── +unit/                              unit tests for pure functions
+├── unit/                              unit tests for pure functions
 │   ├── wrapTest.m
 │   ├── classifySquareTest.m
 │   ├── classifyCircleTest.m
@@ -275,7 +275,7 @@ tests/
 │   ├── ellipseFitTest.m
 │   ├── polygonFitTest.m
 │   └── ...
-├── +synthetic/                         tests with synthetic-DLC fixtures
+├── synthetic/                         tests with synthetic-DLC fixtures
 │   ├── freezingDetectionTest.m
 │   ├── rearDetectionTest.m
 │   ├── speedActsTest.m
@@ -283,8 +283,8 @@ tests/
 │   ├── zoneVisitTest.m                 ← Bug-1
 │   ├── headDirectionContinuityTest.m   ← Bug-2
 │   └── edgeSmoothingTest.m             ← Bug-3
-├── +golden/
-│   ├── buildSnapshots.m                one-shot: legacy BehaviorAnalyzer → tests/+golden/snapshots/
+├── golden/
+│   ├── buildSnapshots.m                one-shot: legacy BehaviorAnalyzer → tests/golden/snapshots/
 │   ├── snapshots/
 │   │   ├── NOF_H01_1D_Acts.mat         numeric Acts fields + body-parts aggregates only
 │   │   ├── NOF_H01_2D_Acts.mat
@@ -294,7 +294,7 @@ tests/
 │   ├── NOF_H01_2D_GoldenTest.m
 │   ├── NOF_H01_3D_GoldenTest.m
 │   └── NOF_H01_4D_GoldenTest.m
-└── +smoke/
+└── smoke/
     └── demoPipelineTest.m              new pipeline runs NOF_H01_1D end-to-end without exception
 ```
 
@@ -310,7 +310,7 @@ These four sessions are the test ground truth. The smoke test uses `NOF_H01_1D` 
 
 ### 8.4 Golden snapshot scope
 
-Each `tests/+golden/snapshots/NOF_H01_{N}D_Acts.mat` contains a single struct with:
+Each `tests/golden/snapshots/NOF_H01_{N}D_Acts.mat` contains a single struct with:
 
 - `Acts` array with fields per act: `ActName`, `ActPercent`, `ActNumber`, `ActMeanTime`, `ActMedianTime`, `Distance`, `ActDuration`, `ActVelocity`.
 - `BodyPartsAggregates` struct with `Tailbase.AverageDistance`, `Tailbase.AverageSpeed`, `Center.AverageDistance`, `Center.AverageSpeed`.
@@ -340,10 +340,10 @@ When a slice intentionally changes behavior (Bug-1, Bug-2, Bug-3, Bug-4 fixes), 
 
 ### 8.7 Performance budgets
 
-- `+unit/` total: **< 30 s** (no video I/O).
-- `+synthetic/` total: **< 60 s** (synthetic DLC, no video I/O).
-- `+smoke/` total: **< 120 s** (one Demo session, no video output).
-- `+golden/` total: **< 300 s** (four Demo sessions, no video output).
+- `unit/` total: **< 30 s** (no video I/O).
+- `synthetic/` total: **< 60 s** (synthetic DLC, no video I/O).
+- `smoke/` total: **< 120 s** (one Demo session, no video output).
+- `golden/` total: **< 300 s** (four Demo sessions, no video output).
 - `runAllTests('tag','fast')` runs unit + synthetic + smoke. **< 4 min total.**
 - `runAllTests('tag','full')` adds golden. **< 9 min total.**
 
@@ -357,7 +357,7 @@ When a slice intentionally changes behavior (Bug-1, Bug-2, Bug-3, Bug-4 fixes), 
 
 | # | Slice | Covers | Estimate |
 |---|---|---|---|
-| 0 | Test infra & branch setup | `sphynx-GUI` branch, `+sphynx/` skeleton, `tests/` skeleton, `runAllTests.m`, `buildSnapshots.m` (one-shot legacy → snapshots), `+smoke/` placeholder, `+util/log`, `+util/progress` (infrastructure used by all later slices), README addendum on running tests | 1–2 d |
+| 0 | Test infra & branch setup | `sphynx-GUI` branch, `+sphynx/` skeleton, `tests/` skeleton, `runAllTests.m`, `buildSnapshots.m` (one-shot legacy → snapshots), `smoke/` placeholder, `+util/log`, `+util/progress` (infrastructure used by all later slices), README addendum on running tests | 1–2 d |
 | 1 | Zones (Bug-1 + zone partitioning feature) | `+util/inMaskSafe`, `+util/circleFit`, `+util/polygonFit`, `+zones/classifySquare`, `+zones/classifyCircle`, `+zones/partitionStrips`. Unit tests + `zoneVisitTest` synthetic | 3–5 d |
 | 2 | Angles (Bug-2) | `+angles/wrap`, `+angles/unwrapForSmooth`, `+angles/headDirection`. Unit tests + `headDirectionContinuityTest` (720° rotation) | 1–2 d |
 | 3 | Velocity & smoothing (Bug-3 + Bug-4) | `+preprocess/smoothTrace` (mirror-pad edges), `+preprocess/computeVelocity` (≤50 cm/s clip before smooth). Unit tests + `velocityClippingTest`, `edgeSmoothingTest` | 2–3 d |
@@ -454,7 +454,7 @@ The legacy `CreatePreset.m` is **not** removed. It stays in the repo as a fallba
 
 - **Fix-P1:** `Preprocess/processVideos.m:16–18` — remove the three hardcoded lines that overwrite input arguments.
 - **Fix-P2:** `Preprocess/processVideos.m:36` — replace `datestr(now)` with `datetime("now")`.
-- **Add tests:** `tests/+unit/+preprocess/getVideoMetadataTest.m`, `getTimestampMetadataTest.m`, `fixFPSmetadataTest.m`.
+- **Add tests:** `tests/unit/+preprocess/getVideoMetadataTest.m`, `getTimestampMetadataTest.m`, `fixFPSmetadataTest.m`.
 - **Doc:** README addendum describing the Preprocess pipeline.
 
 No decomposition; the file is already reasonably structured.

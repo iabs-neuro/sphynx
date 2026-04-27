@@ -58,7 +58,7 @@ After Pass A is green, a separate plan will be written for **Pass B** (slices 4�
 
 tests/
 ├── runAllTests.m                          Pass 0
-├── +unit/
+├── unit/
 │   ├── sanityTest.m                       Pass 0
 │   ├── logTest.m                          Pass 0
 │   ├── inMaskSafeTest.m                   Pass A.1
@@ -71,16 +71,16 @@ tests/
 │   ├── unwrapForSmoothTest.m              Pass A.2
 │   ├── smoothTraceTest.m                  Pass A.3
 │   └── computeVelocityTest.m              Pass A.3
-├── +synthetic/
+├── synthetic/
 │   ├── zoneVisitTest.m                    Pass A.1
 │   ├── headDirectionContinuityTest.m      Pass A.2
 │   ├── velocityClippingTest.m             Pass A.3
 │   └── edgeSmoothingTest.m                Pass A.3
-├── +golden/
+├── golden/
 │   ├── buildSnapshots.m                   Pass 0
 │   └── snapshots/
 │       └── NOF_H01_1D_Acts.mat            Pass 0 (built locally, committed)
-└── +smoke/
+└── smoke/
     └── demoPipelineTest.m                 Pass 0 (placeholder; real pipeline test in Pass B)
 ```
 
@@ -193,11 +193,11 @@ EOF
 
 **Files:**
 - Create: `+sphynx/+util/log.m`
-- Test:   `tests/+unit/logTest.m`
+- Test:   `tests/unit/logTest.m`
 
 - [ ] **Step 1: Write the test**
 
-Create `tests/+unit/logTest.m`:
+Create `tests/unit/logTest.m`:
 
 ```matlab
 function tests = logTest
@@ -239,7 +239,7 @@ end
 
 Run in MATLAB Command Window:
 ```matlab
-runtests('tests/+unit/logTest.m')
+runtests('tests/unit/logTest.m')
 ```
 
 Expected: 5 tests, all FAIL with "Unrecognized function or variable 'sphynx.util.log'".
@@ -292,7 +292,7 @@ end
 - [ ] **Step 4: Run test to verify it passes**
 
 ```matlab
-runtests('tests/+unit/logTest.m')
+runtests('tests/unit/logTest.m')
 ```
 
 Expected: 5 PASSED, 0 FAILED.
@@ -300,7 +300,7 @@ Expected: 5 PASSED, 0 FAILED.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "+sphynx/+util/log.m" tests/+unit/logTest.m
+git add "+sphynx/+util/log.m" tests/unit/logTest.m
 git commit -m "$(cat <<'EOF'
 infra: add sphynx.util.log with level threshold
 
@@ -413,11 +413,11 @@ EOF
 
 **Files:**
 - Create: `tests/runAllTests.m`
-- Create: `tests/+unit/sanityTest.m` (sanity test so runAllTests has something to find)
+- Create: `tests/unit/sanityTest.m` (sanity test so runAllTests has something to find)
 
 - [ ] **Step 1: Write the sanity test**
 
-Create `tests/+unit/sanityTest.m`:
+Create `tests/unit/sanityTest.m`:
 
 ```matlab
 function tests = sanityTest
@@ -464,13 +464,13 @@ function results = runAllTests(varargin)
 
     switch tag
         case 'fast'
-            buckets = {'+unit', '+synthetic', '+smoke'};
+            buckets = {'unit', 'synthetic', 'smoke'};
         case 'full'
-            buckets = {'+unit', '+synthetic', '+smoke', '+golden'};
+            buckets = {'unit', 'synthetic', 'smoke', 'golden'};
         case 'golden'
-            buckets = {'+golden'};
+            buckets = {'golden'};
         case 'all'
-            buckets = {'+unit', '+synthetic', '+smoke', '+golden'};
+            buckets = {'unit', 'synthetic', 'smoke', 'golden'};
         otherwise
             error('runAllTests:unknownTag', ...
                 'Unknown tag "%s"; valid: fast|full|golden|all', tag);
@@ -518,7 +518,7 @@ end
 ```matlab
 startup           % only if not already run this MATLAB session
 cd(sphynx.util.repoRoot())
-runtests('tests/+unit/sanityTest.m')
+runtests('tests/unit/sanityTest.m')
 ```
 
 Expected: 2 tests PASSED.
@@ -534,12 +534,12 @@ Expected: 2 tests PASSED (only sanityTest exists right now); `results` is a Test
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tests/runAllTests.m tests/+unit/sanityTest.m
+git add tests/runAllTests.m tests/unit/sanityTest.m
 git commit -m "$(cat <<'EOF'
 test: add runAllTests entry and sanity test
 
 runAllTests('tag','fast'|'full'|'golden'|'all') discovers tests
-under tests/+unit, +synthetic, +smoke, +golden and runs them
+under tests/unit, synthetic, smoke, golden and runs them
 with SPHYNX_HEADLESS=1 so no windows open.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
@@ -549,15 +549,15 @@ EOF
 
 ---
 
-## Task 0.6 — `tests/+golden/buildSnapshots.m` and snapshot for NOF_H01_1D
+## Task 0.6 — `tests/golden/buildSnapshots.m` and snapshot for NOF_H01_1D
 
 **Files:**
-- Create: `tests/+golden/buildSnapshots.m`
-- Create: `tests/+golden/snapshots/NOF_H01_1D_Acts.mat` (built locally, committed as binary)
+- Create: `tests/golden/buildSnapshots.m`
+- Create: `tests/golden/snapshots/NOF_H01_1D_Acts.mat` (built locally, committed as binary)
 
 - [ ] **Step 1: Implement buildSnapshots**
 
-Create `tests/+golden/buildSnapshots.m`:
+Create `tests/golden/buildSnapshots.m`:
 
 ```matlab
 function buildSnapshots(varargin)
@@ -567,7 +567,7 @@ function buildSnapshots(varargin)
 %   buildSnapshots()                       builds snapshot for NOF_H01_1D
 %   buildSnapshots('sessions', {...})      builds for given list
 %
-%   Output: tests/+golden/snapshots/<session>_Acts.mat
+%   Output: tests/golden/snapshots/<session>_Acts.mat
 %
 %   The snapshot stores ONLY numeric Acts fields and a few body-parts
 %   aggregates — no per-frame time series. ~1-3 KB per session.
@@ -575,14 +575,14 @@ function buildSnapshots(varargin)
 %   Run from MATLAB:
 %     >> tests.golden.buildSnapshots
 %   (or)
-%     >> run('tests/+golden/buildSnapshots.m')
+%     >> run('tests/golden/buildSnapshots.m')
 
     p = inputParser;
     addParameter(p, 'sessions', {'NOF_H01_1D'}, @iscell);
     parse(p, varargin{:});
 
     repo = sphynx.util.repoRoot();
-    snapDir = fullfile(repo, 'tests', '+golden', 'snapshots');
+    snapDir = fullfile(repo, 'tests', 'golden', 'snapshots');
     if ~isfolder(snapDir)
         mkdir(snapDir);
     end
@@ -695,19 +695,19 @@ end
 - [ ] **Step 2: Run buildSnapshots from MATLAB**
 
 ```matlab
-run(fullfile(sphynx.util.repoRoot(), 'tests', '+golden', 'buildSnapshots.m'))
+run(fullfile(sphynx.util.repoRoot(), 'tests', 'golden', 'buildSnapshots.m'))
 ```
 
 Expected console output:
 ```
 [INFO] Reading <repo>/Demo/Behavior/NOF_H01_1D/22-Jan-2026_1/NOF_H01_1D_WorkSpace.mat
-[INFO] Wrote <repo>/tests/+golden/snapshots/NOF_H01_1D_Acts.mat (1.x KB)
+[INFO] Wrote <repo>/tests/golden/snapshots/NOF_H01_1D_Acts.mat (1.x KB)
 ```
 
 - [ ] **Step 3: Inspect the snapshot**
 
 ```matlab
-snap = load(fullfile(sphynx.util.repoRoot(), 'tests', '+golden', 'snapshots', 'NOF_H01_1D_Acts.mat'));
+snap = load(fullfile(sphynx.util.repoRoot(), 'tests', 'golden', 'snapshots', 'NOF_H01_1D_Acts.mat'));
 disp(snap.meta);
 fprintf('Acts: %d entries\n', numel(snap.Acts.ActName));
 disp(snap.Acts.ActName);
@@ -718,7 +718,7 @@ Expected: prints meta struct (snapshotDate, n_frames, FrameRate, legacyGitSha), 
 - [ ] **Step 4: Commit (script + snapshot binary)**
 
 ```bash
-git add tests/+golden/buildSnapshots.m "tests/+golden/snapshots/NOF_H01_1D_Acts.mat"
+git add tests/golden/buildSnapshots.m "tests/golden/snapshots/NOF_H01_1D_Acts.mat"
 git commit -m "$(cat <<'EOF'
 test: golden snapshot builder + NOF_H01_1D baseline
 
@@ -736,14 +736,14 @@ EOF
 
 ---
 
-## Task 0.7 — `tests/+smoke/demoPipelineTest.m` (placeholder)
+## Task 0.7 — `tests/smoke/demoPipelineTest.m` (placeholder)
 
 **Files:**
-- Create: `tests/+smoke/demoPipelineTest.m`
+- Create: `tests/smoke/demoPipelineTest.m`
 
 - [ ] **Step 1: Implement placeholder**
 
-Create `tests/+smoke/demoPipelineTest.m`:
+Create `tests/smoke/demoPipelineTest.m`:
 
 ```matlab
 function tests = demoPipelineTest
@@ -774,7 +774,7 @@ end
 - [ ] **Step 2: Verify behavior**
 
 ```matlab
-runtests('tests/+smoke/demoPipelineTest.m')
+runtests('tests/smoke/demoPipelineTest.m')
 ```
 
 Expected: 1 test, status "Incomplete" with reason "pass-0 placeholder; real test arrives in Pass B". Suite is not failed.
@@ -782,7 +782,7 @@ Expected: 1 test, status "Incomplete" with reason "pass-0 placeholder; real test
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/+smoke/demoPipelineTest.m
+git add tests/smoke/demoPipelineTest.m
 git commit -m "$(cat <<'EOF'
 test: placeholder smoke test for NOF_H01_1D end-to-end
 
@@ -840,7 +840,7 @@ runAllTests('tag','golden')        % golden only
 To rebuild the golden snapshot (after a known intentional change):
 
 ```matlab
-run(fullfile(sphynx.util.repoRoot(),'tests','+golden','buildSnapshots.m'))
+run(fullfile(sphynx.util.repoRoot(),'tests','golden','buildSnapshots.m'))
 ```
 
 Tests run with `SPHYNX_HEADLESS=1` set automatically — no figures or videos
@@ -915,7 +915,7 @@ Once confirmed, Pass A starts.
 
 **Files:**
 - Create: `+sphynx/+util/circleFit.m`
-- Test:   `tests/+unit/circleFitTest.m`
+- Test:   `tests/unit/circleFitTest.m`
 
 - [ ] **Step 1: Read legacy `functions/circfit.m`**
 
@@ -927,7 +927,7 @@ This is the source of behavior to preserve. Note the algorithm: linear least-squ
 
 - [ ] **Step 2: Write the test**
 
-Create `tests/+unit/circleFitTest.m`:
+Create `tests/unit/circleFitTest.m`:
 
 ```matlab
 function tests = circleFitTest
@@ -977,7 +977,7 @@ end
 - [ ] **Step 3: Run test to verify it fails**
 
 ```matlab
-runtests('tests/+unit/circleFitTest.m')
+runtests('tests/unit/circleFitTest.m')
 ```
 
 Expected: 5 FAILED with "Unrecognized function 'sphynx.util.circleFit'".
@@ -1031,7 +1031,7 @@ end
 - [ ] **Step 5: Run test to verify it passes**
 
 ```matlab
-runtests('tests/+unit/circleFitTest.m')
+runtests('tests/unit/circleFitTest.m')
 ```
 
 Expected: 5 PASSED.
@@ -1039,7 +1039,7 @@ Expected: 5 PASSED.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add "+sphynx/+util/circleFit.m" tests/+unit/circleFitTest.m
+git add "+sphynx/+util/circleFit.m" tests/unit/circleFitTest.m
 git commit -m "$(cat <<'EOF'
 feat(util): sphynx.util.circleFit replacing legacy circfit
 
@@ -1058,7 +1058,7 @@ EOF
 
 **Files:**
 - Create: `+sphynx/+util/polygonFit.m`
-- Test:   `tests/+unit/polygonFitTest.m`
+- Test:   `tests/unit/polygonFitTest.m`
 
 - [ ] **Step 1: Read legacy `functions/PolygonFit.m`**
 
@@ -1070,7 +1070,7 @@ Note: PolygonFit takes a list of corner points (clicked by user) and returns the
 
 - [ ] **Step 2: Write the test**
 
-Create `tests/+unit/polygonFitTest.m`:
+Create `tests/unit/polygonFitTest.m`:
 
 ```matlab
 function tests = polygonFitTest
@@ -1108,7 +1108,7 @@ end
 - [ ] **Step 3: Run test, verify fail**
 
 ```matlab
-runtests('tests/+unit/polygonFitTest.m')
+runtests('tests/unit/polygonFitTest.m')
 ```
 
 Expected: 3 FAIL.
@@ -1173,7 +1173,7 @@ end
 - [ ] **Step 5: Run test**
 
 ```matlab
-runtests('tests/+unit/polygonFitTest.m')
+runtests('tests/unit/polygonFitTest.m')
 ```
 
 Expected: 3 PASSED.
@@ -1181,7 +1181,7 @@ Expected: 3 PASSED.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add "+sphynx/+util/polygonFit.m" tests/+unit/polygonFitTest.m
+git add "+sphynx/+util/polygonFit.m" tests/unit/polygonFitTest.m
 git commit -m "$(cat <<'EOF'
 feat(util): sphynx.util.polygonFit replacing legacy PolygonFit
 
@@ -1200,13 +1200,13 @@ EOF
 
 **Files:**
 - Create: `+sphynx/+util/inMaskSafe.m`
-- Test:   `tests/+unit/inMaskSafeTest.m`
+- Test:   `tests/unit/inMaskSafeTest.m`
 
 This is the **direct fix for Bug-1**: when arena polygon touches the frame edge, mask operations in `bwdist` need a padded frame so "outside frame" doesn't read as "inside arena".
 
 - [ ] **Step 1: Write the test**
 
-Create `tests/+unit/inMaskSafeTest.m`:
+Create `tests/unit/inMaskSafeTest.m`:
 
 ```matlab
 function tests = inMaskSafeTest
@@ -1248,7 +1248,7 @@ end
 - [ ] **Step 2: Run, verify fail**
 
 ```matlab
-runtests('tests/+unit/inMaskSafeTest.m')
+runtests('tests/unit/inMaskSafeTest.m')
 ```
 
 Expected: 5 FAIL.
@@ -1294,7 +1294,7 @@ end
 - [ ] **Step 4: Run test**
 
 ```matlab
-runtests('tests/+unit/inMaskSafeTest.m')
+runtests('tests/unit/inMaskSafeTest.m')
 ```
 
 Expected: 5 PASSED.
@@ -1302,7 +1302,7 @@ Expected: 5 PASSED.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "+sphynx/+util/inMaskSafe.m" tests/+unit/inMaskSafeTest.m
+git add "+sphynx/+util/inMaskSafe.m" tests/unit/inMaskSafeTest.m
 git commit -m "$(cat <<'EOF'
 feat(util): sphynx.util.inMaskSafe — frame-edge-safe mask query
 
@@ -1322,13 +1322,13 @@ EOF
 
 **Files:**
 - Create: `+sphynx/+zones/partitionStrips.m`
-- Test:   `tests/+unit/partitionStripsTest.m`
+- Test:   `tests/unit/partitionStripsTest.m`
 
 This implements feature 1.3 for square arenas: divide into N equal vertical or horizontal strips.
 
 - [ ] **Step 1: Write the test**
 
-Create `tests/+unit/partitionStripsTest.m`:
+Create `tests/unit/partitionStripsTest.m`:
 
 ```matlab
 function tests = partitionStripsTest
@@ -1391,7 +1391,7 @@ end
 - [ ] **Step 2: Run, verify fail**
 
 ```matlab
-runtests('tests/+unit/partitionStripsTest.m')
+runtests('tests/unit/partitionStripsTest.m')
 ```
 
 Expected: 5 FAIL.
@@ -1472,7 +1472,7 @@ end
 - [ ] **Step 4: Run test**
 
 ```matlab
-runtests('tests/+unit/partitionStripsTest.m')
+runtests('tests/unit/partitionStripsTest.m')
 ```
 
 Expected: 5 PASSED.
@@ -1480,7 +1480,7 @@ Expected: 5 PASSED.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "+sphynx/+zones/partitionStrips.m" tests/+unit/partitionStripsTest.m
+git add "+sphynx/+zones/partitionStrips.m" tests/unit/partitionStripsTest.m
 git commit -m "$(cat <<'EOF'
 feat(zones): partitionStrips — N equal strips for square arena
 
@@ -1499,7 +1499,7 @@ EOF
 
 **Files:**
 - Create: `+sphynx/+zones/classifyCircle.m`
-- Test:   `tests/+unit/classifyCircleTest.m`
+- Test:   `tests/unit/classifyCircleTest.m`
 
 Generalizes the legacy circle wall/center to ring-based partitioning. For radius r and ring widths `[w_wall, w_middle, w_middle, ...]`:
 - `wall`: outer ring of width `w_wall`
@@ -1509,7 +1509,7 @@ Generalizes the legacy circle wall/center to ring-based partitioning. For radius
 
 - [ ] **Step 1: Write the test**
 
-Create `tests/+unit/classifyCircleTest.m`:
+Create `tests/unit/classifyCircleTest.m`:
 
 ```matlab
 function tests = classifyCircleTest
@@ -1597,7 +1597,7 @@ end
 - [ ] **Step 2: Run, verify fail**
 
 ```matlab
-runtests('tests/+unit/classifyCircleTest.m')
+runtests('tests/unit/classifyCircleTest.m')
 ```
 
 Expected: 5 FAIL.
@@ -1704,7 +1704,7 @@ end
 - [ ] **Step 4: Run test**
 
 ```matlab
-runtests('tests/+unit/classifyCircleTest.m')
+runtests('tests/unit/classifyCircleTest.m')
 ```
 
 Expected: 5 PASSED.
@@ -1714,7 +1714,7 @@ If a test fails because of how `bwdist` rounds, adjust thresholds slightly or re
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "+sphynx/+zones/classifyCircle.m" tests/+unit/classifyCircleTest.m
+git add "+sphynx/+zones/classifyCircle.m" tests/unit/classifyCircleTest.m
 git commit -m "$(cat <<'EOF'
 feat(zones): classifyCircle — generalized ring-based partitioning
 
@@ -1735,7 +1735,7 @@ EOF
 
 **Files:**
 - Create: `+sphynx/+zones/classifySquare.m`
-- Test:   `tests/+unit/classifySquareTest.m`
+- Test:   `tests/unit/classifySquareTest.m`
 
 This is the **direct fix for Bug-1** in the most common case (rectangular open field). Supports two modes:
 - `'corners-walls-center'` — legacy default
@@ -1743,7 +1743,7 @@ This is the **direct fix for Bug-1** in the most common case (rectangular open f
 
 - [ ] **Step 1: Write the test**
 
-Create `tests/+unit/classifySquareTest.m`:
+Create `tests/unit/classifySquareTest.m`:
 
 ```matlab
 function tests = classifySquareTest
@@ -1818,7 +1818,7 @@ end
 - [ ] **Step 2: Run, verify fail**
 
 ```matlab
-runtests('tests/+unit/classifySquareTest.m')
+runtests('tests/unit/classifySquareTest.m')
 ```
 
 Expected: 5 FAIL.
@@ -1943,7 +1943,7 @@ end
 - [ ] **Step 4: Run test**
 
 ```matlab
-runtests('tests/+unit/classifySquareTest.m')
+runtests('tests/unit/classifySquareTest.m')
 ```
 
 Expected: 5 PASSED.
@@ -1951,7 +1951,7 @@ Expected: 5 PASSED.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "+sphynx/+zones/classifySquare.m" tests/+unit/classifySquareTest.m
+git add "+sphynx/+zones/classifySquare.m" tests/unit/classifySquareTest.m
 git commit -m "$(cat <<'EOF'
 feat(zones): classifySquare — Bug-1 fix + new strategies
 
@@ -2076,7 +2076,7 @@ test(fixtures): synthetic DLC fixtures for zone tests
 makeArenaAtFrameEdgeDLC  — arena occupies whole frame (Bug-1)
 makeZoneCrossDLC         — trajectory wall→center→wall→corner
 
-Used by tests/+synthetic/zoneVisitTest.m.
+Used by tests/synthetic/zoneVisitTest.m.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -2088,11 +2088,11 @@ EOF
 ## Task A.1.8 — Synthetic test: zone visits
 
 **Files:**
-- Create: `tests/+synthetic/zoneVisitTest.m`
+- Create: `tests/synthetic/zoneVisitTest.m`
 
 - [ ] **Step 1: Write the test**
 
-Create `tests/+synthetic/zoneVisitTest.m`:
+Create `tests/synthetic/zoneVisitTest.m`:
 
 ```matlab
 function tests = zoneVisitTest
@@ -2154,7 +2154,7 @@ end
 - [ ] **Step 2: Run, verify pass**
 
 ```matlab
-runtests('tests/+synthetic/zoneVisitTest.m')
+runtests('tests/synthetic/zoneVisitTest.m')
 ```
 
 Expected: 2 PASSED.
@@ -2164,7 +2164,7 @@ Expected: 2 PASSED.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/+synthetic/zoneVisitTest.m
+git add tests/synthetic/zoneVisitTest.m
 git commit -m "$(cat <<'EOF'
 test(synthetic): zone-visit detection (Bug-1 coverage)
 
@@ -2217,11 +2217,11 @@ If green → proceed to Pass A.2.
 
 **Files:**
 - Create: `+sphynx/+angles/wrap.m`
-- Test:   `tests/+unit/wrapTest.m`
+- Test:   `tests/unit/wrapTest.m`
 
 - [ ] **Step 1: Write the test**
 
-Create `tests/+unit/wrapTest.m`:
+Create `tests/unit/wrapTest.m`:
 
 ```matlab
 function tests = wrapTest
@@ -2264,7 +2264,7 @@ end
 - [ ] **Step 2: Run, verify fail**
 
 ```matlab
-runtests('tests/+unit/wrapTest.m')
+runtests('tests/unit/wrapTest.m')
 ```
 
 Expected: 6 FAIL.
@@ -2296,7 +2296,7 @@ end
 - [ ] **Step 4: Run test**
 
 ```matlab
-runtests('tests/+unit/wrapTest.m')
+runtests('tests/unit/wrapTest.m')
 ```
 
 Expected: 6 PASSED.
@@ -2304,7 +2304,7 @@ Expected: 6 PASSED.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "+sphynx/+angles/wrap.m" tests/+unit/wrapTest.m
+git add "+sphynx/+angles/wrap.m" tests/unit/wrapTest.m
 git commit -m "$(cat <<'EOF'
 feat(angles): wrap — angles into (-pi, pi]
 
@@ -2321,13 +2321,13 @@ EOF
 
 **Files:**
 - Create: `+sphynx/+angles/unwrapForSmooth.m`
-- Test:   `tests/+unit/unwrapForSmoothTest.m`
+- Test:   `tests/unit/unwrapForSmoothTest.m`
 
 This is the Bug-2 fix: we need a function that unwraps angles, smooths them, then re-wraps — so smoothing across the ±π discontinuity works correctly.
 
 - [ ] **Step 1: Write the test**
 
-Create `tests/+unit/unwrapForSmoothTest.m`:
+Create `tests/unit/unwrapForSmoothTest.m`:
 
 ```matlab
 function tests = unwrapForSmoothTest
@@ -2373,7 +2373,7 @@ end
 - [ ] **Step 2: Run, verify fail**
 
 ```matlab
-runtests('tests/+unit/unwrapForSmoothTest.m')
+runtests('tests/unit/unwrapForSmoothTest.m')
 ```
 
 Expected: 4 FAIL.
@@ -2419,7 +2419,7 @@ end
 - [ ] **Step 4: Run test**
 
 ```matlab
-runtests('tests/+unit/unwrapForSmoothTest.m')
+runtests('tests/unit/unwrapForSmoothTest.m')
 ```
 
 Expected: 4 PASSED.
@@ -2427,7 +2427,7 @@ Expected: 4 PASSED.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "+sphynx/+angles/unwrapForSmooth.m" tests/+unit/unwrapForSmoothTest.m
+git add "+sphynx/+angles/unwrapForSmooth.m" tests/unit/unwrapForSmoothTest.m
 git commit -m "$(cat <<'EOF'
 feat(angles): unwrapForSmooth — Bug-2 fix for circular smoothing
 
@@ -2520,7 +2520,7 @@ EOF
 
 **Files:**
 - Create: `+sphynx/+testing/makeRotatingMouseDLC.m`
-- Create: `tests/+synthetic/headDirectionContinuityTest.m`
+- Create: `tests/synthetic/headDirectionContinuityTest.m`
 
 - [ ] **Step 1: Implement fixture**
 
@@ -2565,7 +2565,7 @@ end
 
 - [ ] **Step 2: Write the synthetic test**
 
-Create `tests/+synthetic/headDirectionContinuityTest.m`:
+Create `tests/synthetic/headDirectionContinuityTest.m`:
 
 ```matlab
 function tests = headDirectionContinuityTest
@@ -2605,7 +2605,7 @@ end
 - [ ] **Step 3: Run, verify pass**
 
 ```matlab
-runtests('tests/+synthetic/headDirectionContinuityTest.m')
+runtests('tests/synthetic/headDirectionContinuityTest.m')
 ```
 
 Expected: 3 PASSED.
@@ -2613,7 +2613,7 @@ Expected: 3 PASSED.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add "+sphynx/+testing/makeRotatingMouseDLC.m" tests/+synthetic/headDirectionContinuityTest.m
+git add "+sphynx/+testing/makeRotatingMouseDLC.m" tests/synthetic/headDirectionContinuityTest.m
 git commit -m "$(cat <<'EOF'
 test(synthetic): head-direction continuity (Bug-2 coverage)
 
@@ -2658,11 +2658,11 @@ git tag stage-c-pass-A2-angles-fixed
 
 **Files:**
 - Create: `+sphynx/+preprocess/smoothTrace.m`
-- Test:   `tests/+unit/smoothTraceTest.m`
+- Test:   `tests/unit/smoothTraceTest.m`
 
 - [ ] **Step 1: Write the test**
 
-Create `tests/+unit/smoothTraceTest.m`:
+Create `tests/unit/smoothTraceTest.m`:
 
 ```matlab
 function tests = smoothTraceTest
@@ -2710,7 +2710,7 @@ end
 - [ ] **Step 2: Run, verify fail**
 
 ```matlab
-runtests('tests/+unit/smoothTraceTest.m')
+runtests('tests/unit/smoothTraceTest.m')
 ```
 
 Expected: 6 FAIL.
@@ -2779,7 +2779,7 @@ end
 - [ ] **Step 4: Run test**
 
 ```matlab
-runtests('tests/+unit/smoothTraceTest.m')
+runtests('tests/unit/smoothTraceTest.m')
 ```
 
 Expected: 6 PASSED. If `testLinearTrendPreserved` fails with > 0.05 error, the mirror-padding may need tweaking — report which assertion failed.
@@ -2787,7 +2787,7 @@ Expected: 6 PASSED. If `testLinearTrendPreserved` fails with > 0.05 error, the m
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "+sphynx/+preprocess/smoothTrace.m" tests/+unit/smoothTraceTest.m
+git add "+sphynx/+preprocess/smoothTrace.m" tests/unit/smoothTraceTest.m
 git commit -m "$(cat <<'EOF'
 feat(preprocess): smoothTrace — Bug-3 fix
 
@@ -2805,11 +2805,11 @@ EOF
 
 **Files:**
 - Create: `+sphynx/+preprocess/computeVelocity.m`
-- Test:   `tests/+unit/computeVelocityTest.m`
+- Test:   `tests/unit/computeVelocityTest.m`
 
 - [ ] **Step 1: Write the test**
 
-Create `tests/+unit/computeVelocityTest.m`:
+Create `tests/unit/computeVelocityTest.m`:
 
 ```matlab
 function tests = computeVelocityTest
@@ -2858,7 +2858,7 @@ end
 - [ ] **Step 2: Run, verify fail**
 
 ```matlab
-runtests('tests/+unit/computeVelocityTest.m')
+runtests('tests/unit/computeVelocityTest.m')
 ```
 
 Expected: 4 FAIL.
@@ -2942,7 +2942,7 @@ end
 - [ ] **Step 4: Run test**
 
 ```matlab
-runtests('tests/+unit/computeVelocityTest.m')
+runtests('tests/unit/computeVelocityTest.m')
 ```
 
 Expected: 4 PASSED.
@@ -2950,7 +2950,7 @@ Expected: 4 PASSED.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "+sphynx/+preprocess/computeVelocity.m" tests/+unit/computeVelocityTest.m
+git add "+sphynx/+preprocess/computeVelocity.m" tests/unit/computeVelocityTest.m
 git commit -m "$(cat <<'EOF'
 feat(preprocess): computeVelocity — Bug-4 clip + Bug-3 edge-aware
 
@@ -2973,8 +2973,8 @@ EOF
 **Files:**
 - Create: `+sphynx/+testing/makeWalkingDLC.m`
 - Create: `+sphynx/+testing/makeJumpyDLC.m`
-- Create: `tests/+synthetic/velocityClippingTest.m`
-- Create: `tests/+synthetic/edgeSmoothingTest.m`
+- Create: `tests/synthetic/velocityClippingTest.m`
+- Create: `tests/synthetic/edgeSmoothingTest.m`
 
 - [ ] **Step 1: Implement walking fixture**
 
@@ -3042,7 +3042,7 @@ end
 
 - [ ] **Step 3: Write velocityClippingTest**
 
-Create `tests/+synthetic/velocityClippingTest.m`:
+Create `tests/synthetic/velocityClippingTest.m`:
 
 ```matlab
 function tests = velocityClippingTest
@@ -3069,7 +3069,7 @@ end
 
 - [ ] **Step 4: Write edgeSmoothingTest**
 
-Create `tests/+synthetic/edgeSmoothingTest.m`:
+Create `tests/synthetic/edgeSmoothingTest.m`:
 
 ```matlab
 function tests = edgeSmoothingTest
@@ -3101,8 +3101,8 @@ end
 - [ ] **Step 5: Run tests, verify pass**
 
 ```matlab
-runtests('tests/+synthetic/velocityClippingTest.m')
-runtests('tests/+synthetic/edgeSmoothingTest.m')
+runtests('tests/synthetic/velocityClippingTest.m')
+runtests('tests/synthetic/edgeSmoothingTest.m')
 ```
 
 Expected: 2 + 2 = 4 PASSED.
@@ -3110,7 +3110,7 @@ Expected: 2 + 2 = 4 PASSED.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add "+sphynx/+testing/makeWalkingDLC.m" "+sphynx/+testing/makeJumpyDLC.m" tests/+synthetic/velocityClippingTest.m tests/+synthetic/edgeSmoothingTest.m
+git add "+sphynx/+testing/makeWalkingDLC.m" "+sphynx/+testing/makeJumpyDLC.m" tests/synthetic/velocityClippingTest.m tests/synthetic/edgeSmoothingTest.m
 git commit -m "$(cat <<'EOF'
 test(synthetic): velocity clipping + edge smoothing (Bug-3, Bug-4)
 
