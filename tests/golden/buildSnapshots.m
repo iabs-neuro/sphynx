@@ -5,20 +5,20 @@ function buildSnapshots(varargin)
 %   buildSnapshots()                       builds snapshot for NOF_H01_1D
 %   buildSnapshots('sessions', {...})      builds for given list
 %
-%   Output: tests/+golden/snapshots/<session>_Acts.mat
+%   Output: tests/golden/snapshots/<session>_Acts.mat
 %
 %   The snapshot stores ONLY numeric Acts fields and a few body-parts
 %   aggregates - no per-frame time series. ~1-3 KB per session.
 %
 %   Run from MATLAB:
-%     >> run(fullfile(sphynx.util.repoRoot(),'tests','+golden','buildSnapshots.m'))
+%     >> run(fullfile(sphynx.util.repoRoot(),'tests','golden','buildSnapshots.m'))
 
     p = inputParser;
     addParameter(p, 'sessions', {'NOF_H01_1D'}, @iscell);
     parse(p, varargin{:});
 
     repo = sphynx.util.repoRoot();
-    snapDir = fullfile(repo, 'tests', '+golden', 'snapshots');
+    snapDir = fullfile(repo, 'tests', 'golden', 'snapshots');
     if ~isfolder(snapDir)
         mkdir(snapDir);
     end
