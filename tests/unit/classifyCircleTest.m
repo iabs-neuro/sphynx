@@ -16,6 +16,8 @@ function testSmallArenaWallAndCenter(testCase)
 end
 
 function testLargeArenaWithMiddleRings(testCase)
+    % R=80, wall=10, middle=20, minC=10:
+    %   wall(10) + middle1(20) + middle2(20) + middle3(20) + center(10)
     H = 400; W = 400; pxlPerCm = 2;
     arenaMask = makeCircleMask(H, W, 200, 200, 80 * pxlPerCm);
     zones = sphynx.zones.classifyCircle(arenaMask, ...
@@ -26,12 +28,14 @@ function testLargeArenaWithMiddleRings(testCase)
     verifyTrue(testCase, ismember('wall', names));
     verifyTrue(testCase, ismember('middle1', names));
     verifyTrue(testCase, ismember('middle2', names));
+    verifyTrue(testCase, ismember('middle3', names));
     verifyTrue(testCase, ismember('center', names));
 end
 
 function testNoCenterIfTooSmall(testCase)
+    % R=15, wall=10: only 5cm radius left, < minC=10, so no center fits.
     H = 200; W = 200; pxlPerCm = 2;
-    arenaMask = makeCircleMask(H, W, 100, 100, 25 * pxlPerCm);
+    arenaMask = makeCircleMask(H, W, 100, 100, 15 * pxlPerCm);
     zones = sphynx.zones.classifyCircle(arenaMask, ...
         'PixelsPerCm', pxlPerCm, ...
         'WallWidthCm', 10, ...

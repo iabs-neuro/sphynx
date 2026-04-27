@@ -44,41 +44,43 @@ function zones = classifyCircle(arenaMask, varargin)
     pad = max(round(wallW + midW * 4 + minC + 10), 20);
     paddedMask = padarray(arenaMask, [pad pad], false, 'both');
     distFromOutside = bwdist(~paddedMask);
+    maxDist = max(distFromOutside(:)); % effective arena "radius"
 
     zones = struct('name',{},'type',{},'maskfilled',{});
 
-    cumW = wallW;
-    wallRingPadded = paddedMask & distFromOutside > 0 & distFromOutside <= wallW;
-    zones(end+1) = mkZone('wall', wallRingPadded, pad);
+    % Wall always exists (outermost ring)
+    wallRing = paddedMask & distFromOutside > 0 & distFromOutside <= wallW;
+    if any(wallRing(:))
+        zones(end+1) = mkZone('wall', wallRing, pad); %#ok<AGROW>
+    end
 
-    ringIdx = 1;
-    while true
-        prevW = cumW;
-        cumW = cumW + midW;
-        ring = paddedMask & distFromOutside > prevW & distFromOutside <= cumW;
-        remaining = paddedMask & distFromOutside > cumW;
-        if any(remaining(:))
-            remainingDist = bwdist(~remaining);
-            maxRemainingRadius = max(remainingDist(:));
-        else
-            maxRemainingRadius = 0;
+    % If no room for center past wall, stop here.
+    if maxDist < wallW + minC
+        return;
+    end
+
+    % Greedy: add middle rings while another middle would still leave
+    % at least minC for the center disk.
+    cumW = wallW;
+    middleIdx = 1;
+    while cumW + midW + minC <= maxDist
+        nextCumW = cumW + midW;
+        ring = paddedMask & distFromOutside > cumW & distFromOutside <= nextCumW;
+        if any(ring(:))
+            zones(end+1) = mkZone(sprintf('middle%d', middleIdx), ring, pad); %#ok<AGROW>
         end
-        if maxRemainingRadius < minC
-            if any(ring(:))
-                zones(end+1) = mkZone(sprintf('middle%d', ringIdx), ring, pad); %#ok<AGROW>
-            end
-            if any(remaining(:))
-                zones(end+1) = mkZone('center', remaining, pad); %#ok<AGROW>
-            end
-            break;
-        else
-            zones(end+1) = mkZone(sprintf('middle%d', ringIdx), ring, pad); %#ok<AGROW>
-            ringIdx = ringIdx + 1;
-        end
-        if ringIdx > 50
+        cumW = nextCumW;
+        middleIdx = middleIdx + 1;
+        if middleIdx > 50
             error('sphynx:classifyCircle:tooManyRings', ...
                 'Computed > 50 middle rings; check input parameters');
         end
+    end
+
+    % Center: everything inside the last middle (or wall, if no middles).
+    centerMask = paddedMask & distFromOutside > cumW;
+    if any(centerMask(:))
+        zones(end+1) = mkZone('center', centerMask, pad); %#ok<AGROW>
     end
 end
 
