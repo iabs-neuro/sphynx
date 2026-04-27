@@ -318,6 +318,8 @@ Each `tests/+golden/snapshots/NOF_H01_{N}D_Acts.mat` contains a single struct wi
 
 Per-frame time series are not stored. Approximate size: 1–3 KB per session, ~10 KB suite.
 
+**Sprint-mode reduced scope:** initial golden built only for `NOF_H01_1D`. Snapshots for `NOF_H01_2D/3D/4D` are added later when the new pipeline is stable.
+
 ### 8.5 Tolerance policy
 
 - Percentages and counts: `abs(new - old) / max(abs(old), 1) ≤ 0.05` (5%).
@@ -367,9 +369,29 @@ When a slice intentionally changes behavior (Bug-1, Bug-2, Bug-3, Bug-4 fixes), 
 | 9 | CreatePreset GUI | `+sphynx/+app/CreatePresetApp.mlapp` — single-page UI over slice-8 functions | 5–7 d |
 | 10 | Preprocess fix + audit | `processVideos.m:16–18` hardcode removal; `datestr(now)` modernization; unit tests for `getVideoMetadata`, `getTimestampMetadata`, `fixFPSmetadata`; README addendum | 2–3 d |
 
-**Total estimate:** ~6 weeks median, realistic range 4–9 weeks given research-side disruptions.
+**Total estimate (sprint mode):** **1.5–2.5 calendar weeks** with the speedups below. Without speedups (single slice in flight, full sequential), the estimate was 4–9 weeks.
 
-After each slice with green tests: candidate for merge into `master`. Tags after key slices: `stage-c-slice-3-bugs-fixed`, `stage-c-slice-6-pipeline-ready`, `stage-c-slice-9-gui-ready`.
+### 9.1 Sprint mode — speedups
+
+The user opted for sprint mode (3–4 hours/day available). The following changes the schedule and how slices are produced:
+
+1. **Batched slice delivery.** Independent slices are merged into single delivery passes:
+   - **Pass A — Bug fixes:** slices 1 + 2 + 3 (zones, angles, velocity). Mutually independent. Code, tests, and findings delivered together.
+   - **Pass B — Core pipeline:** slices 4 + 5 + 6 (body parts, acts, integration + golden baseline).
+   - **Pass C — Aggregation & preset:** slices 7 + 8 (SuperTable, CreatePreset decomposition).
+   - **Pass D — GUI:** slice 9 (App Designer).
+   - **Pass E — Cleanup:** slice 10 (Preprocess).
+   - Slice 0 (test infra) is the prerequisite of everything; delivered alone first.
+
+2. **End-of-pass "homework" packets.** Each delivery ends with an explicit list of MATLAB commands for the user to run — `runAllTests`, smoke checks, golden diff inspection. The next pass starts from the homework results.
+
+3. **Parallel-when-possible.** Within Pass A, slices 1/2/3 do not block each other. Within Pass B, slice 6 depends on 4 and 5; 4 and 5 are independent.
+
+4. **Reduced golden scope in first pass.** Golden snapshot initially built only for `NOF_H01_1D` (smoke session). Snapshots for `NOF_H01_2D/3D/4D` are added in a later pass once the new pipeline is stable. Justification: golden's main value is regression detection during decomposition; one session catches > 90% of regressions, and adding sessions late is cheap.
+
+5. **Tag points adjusted to passes:** `stage-c-pass-A-bugs-fixed`, `stage-c-pass-B-pipeline-ready`, `stage-c-pass-C-preset-ready`, `stage-c-pass-D-gui-ready`, `stage-c-complete`.
+
+After each pass with green tests: candidate for merge into `master` (decision per user).
 
 ---
 
@@ -484,6 +506,8 @@ No decomposition; the file is already reasonably structured.
 | App location | `+sphynx/+app/CreatePresetApp.mlapp`, launched as `sphynx.app.CreatePresetApp()` |
 | Branch name | `sphynx-GUI` |
 | Test learning | Deferred; Claude writes all tests with comments |
+| Delivery mode | Sprint — batched passes A–E (see 9.1), 1.5–2.5 weeks calendar |
+| Initial golden scope | Only `NOF_H01_1D`; other 3 sessions added in a later pass |
 
 ---
 
