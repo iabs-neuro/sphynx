@@ -48,15 +48,15 @@ AngleDop = -pi/2;
 
 if nargin<9
     %% loading video and videotracking files
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\HOS\BehaviorData\2_Combined\');
-    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','w:\Projects\HOS\BehaviorData\3_DLC\');
-    PathOut = uigetdir('w:\Projects\HOS\BehaviorData\5_Behavior\', 'Pick a Directory for Outputs');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','e:\Projects\HOS\BehaviorData_3wave\2_Combined\');
+    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','e:\Projects\HOS\BehaviorData_3wave\3_DLC\');
+    PathOut = uigetdir('e:\Projects\HOS\BehaviorData_3wave\5_Behavior\', 'Pick a Directory for Outputs');
     
     % loading preset file
     answer = questdlg('Do you have preset file?', 'Uploading files', 'Yes','No','Yes');
     switch answer
         case 'Yes'
-            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','w:\Projects\HOS\Behavior\4_Presets\');
+            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','e:\Projects\HOS\BehaviorData_3wave\4_Preset\');
         case 'No'
             [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo,PathVideo,PathOut);
     end
@@ -380,7 +380,7 @@ if PlotOption.main
     open(v);
     h = waitbar(1/n_frames, sprintf('Plotting video, frame %d of %d', 0,  n_frames));
 %     for k=1:n_frames
-    for k=100:1100
+    for k=100:600
 %         if ~mod(k,100)
             h = waitbar(k/n_frames, h, sprintf('Plotting video, frame %d of %d', k,  n_frames));
 %         end
@@ -533,8 +533,17 @@ Acts(5).ActArrayRefine = Acts(5).ActArrayRefine';
 % correct headdirection
 CenterHead.X = BodyPartsTracesMainX(Point.HeadCenter,:);
 CenterHead.Y = BodyPartsTracesMainY(Point.HeadCenter,:);
-[HeadDirection,~] = cart2pol(BodyPartsTracesMainX(Point.MiniscopeUCLA,:)-CenterHead.X,BodyPartsTracesMainY(Point.MiniscopeUCLA,:)-CenterHead.Y);
-HeadDirection = smooth(HeadDirection,Options.FrameRate,'sgolay',DegreeSmoothSGolay)';
+
+Point.HD = Point.MiniscopeUCLA;
+if isempty(Point.HD)
+    Point.HD = Point.Nose;
+end
+
+HeadDirection = [];
+if ~isempty(Point.HD)
+    [HeadDirection,~] = cart2pol(BodyPartsTracesMainX(Point.HD,:)-CenterHead.X,BodyPartsTracesMainY(Point.HD,:)-CenterHead.Y);
+    HeadDirection = smooth(HeadDirection,round(Options.FrameRate),'sgolay',DegreeSmoothSGolay)';
+end
 
 % calculation coordinate features during locomotion
 xlocomotion = MouseCenterX'.*Acts(3).ActArrayRefine;
@@ -561,10 +570,10 @@ Zones(end).maskfilled = single(Zones(strcmp({Zones.name}, 'Center')).maskfilled)
 
 %% Task-specific Acts 
 
-ZonesOption.NameZone = {'WallsAndCornersRealOut' 'CenterMiddle' 'CenterTrue' 'Object1Real' 'Object1RealOut'};
-ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'headcenter'};
-ZonesOption.NameAct = {'walls' 'centermiddle' 'centertrue' 'bowlinside' 'bowlinteraction'};
-ZonesOption.NumBodyPart = [Point.Center Point.Center Point.Center Point.Center Point.HeadCenter];
+ZonesOption.NameZone = {'WallsAndCornersRealOut' 'CenterMiddle' 'CenterTrue' 'Object1RealOut'};
+ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'headcenter'};
+ZonesOption.NameAct = {'walls' 'middle_zone' 'center' 'object_interaction'};
+ZonesOption.NumBodyPart = [Point.Center Point.Center Point.Center Point.HeadCenter];
 
 ZonesOption.NumZone = zeros(1,length(ZonesOption.NameZone));
 for zone = 1:length(ZonesOption.NameZone)
@@ -584,69 +593,48 @@ for zone = 1:length(ZonesOption.NameZone)
     Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
 end
 
-% refining object interaction act
-IndexInteract = find(strcmp({Acts.ActName}, 'bowlinteraction'), 1);
-IndexInside = find(strcmp({Acts.ActName}, 'bowlinside'), 1);
-if ~isempty(IndexInteract)
-    Acts(end+1).ActName = 'bowlinteractreal';    
-    Acts(end).ActArray = Acts(IndexInteract).ActArrayRefine - Acts(IndexInside).ActArrayRefine;
-    Acts(end).ActArray(Acts(end).ActArrayRefine == -1) = 0;
-    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
-    Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
-    Acts(end).Zone = Acts(find(strcmp({Acts.ActName}, 'bowlinteraction'), 1)).Zone;
-end
-
 %% Acts entryIn entryOut object
-VelocityThreshold = 10;
-FramesNumAdd = 15; % for 30 fps
-FramesNumEntry = 30; % for 30 fps
-DistanceObject = [];
-ObjectCenterY  = [];
-ObjectCenterX  = [];
 
-for object  = 1:size(ArenaAndObjects,2)-1
+VelocityThreshold = 5;                                 % cm/s
+% SecondsNumAdd = 0;                                    % window for ...
+% FramesNumAdd = Options.FrameRate*SecondsNumAdd;         % window in frames
+FramesNumAdd = 1;
+SecondsNumEntry = 1;                                    % in seconds
+FramesNumEntry = Options.FrameRate*SecondsNumEntry;    	% 
+
+for object = 1:size(ArenaAndObjects,2)-1
     
     IndexHead = find(strcmp(BodyPartsNames, "headcenter"),1);
     TempMask = single(~Zones(strcmp({Zones.name}, sprintf('Object%dReal', object))).maskfilled);
     TempMask = bwdist(TempMask);
     [~, linearIndex] = max(TempMask(:));
     [CenterY, CenterX] = ind2sub(size(TempMask), linearIndex);
-    switch object
-        case 1
-            DistanceBowl = sqrt((BodyPartsTracesMainX(IndexHead,:)- CenterX).^2+(BodyPartsTracesMainY(IndexHead,:)-CenterY).^2);
-            BowlCenterY = CenterY;
-            BowlCenterX = CenterX;
-        case 2
-            DistanceObject = sqrt((BodyPartsTracesMainX(IndexHead,:)- CenterX).^2+(BodyPartsTracesMainY(IndexHead,:)-CenterY).^2);
-            ObjectCenterY = CenterY;
-            ObjectCenterX = CenterX;
-    end
+
+    DistanceObject1 = sqrt((BodyPartsTracesMainX(IndexHead,:)- CenterX).^2+(BodyPartsTracesMainY(IndexHead,:)-CenterY).^2);
+%     ObjectCenterY1 = CenterY;
+%     ObjectCenterX1 = CenterX;
+
 end
 
 for object  = 1:size(ArenaAndObjects,2)-1
-    switch object
-        case 1
-            TargetDistance = DistanceBowl;
-            IndexInside = find(strcmp({Acts.ActName}, 'bowlinside'), 1);
-            IndexInteract = find(strcmp({Acts.ActName}, 'bowlinteractreal'), 1);
-        case 2
-            TargetDistance = DistanceObject;
-            IndexInside = find(strcmp({Acts.ActName}, 'objectinside'), 1);
-            IndexInteract = find(strcmp({Acts.ActName}, 'objectinteractreal'), 1);
-    end
     
-    TempArrayX = [0 diff(TargetDistance)];
-    TempArrayY = [0 diff(TargetDistance)];
-    %     SmoothWindow = Options.SmoothWindowBigInFrames;
-    SmoothWindow = round(Options.FrameRate);
-    DegreeSmoothSGolay = min(SmoothWindow-1, DegreeSmoothSGolayDefault);
-    DistanceVelocity = sqrt((TempArrayX).^2+(TempArrayY).^2)*Options.FrameRate./Options.pxl2sm;
-    DistanceVelocity  = [interp1(2:n_frames, DistanceVelocity(2:end), 1, 'linear', 'extrap') DistanceVelocity(2:end)];
-    DistanceVelocitySmoothed = smooth(DistanceVelocity,SmoothWindow,'sgolay',DegreeSmoothSGolay);
+    TargetDistance = DistanceObject1;
+    IndexInteract = find(strcmp({Acts.ActName}, 'object_interaction'), 1);
     
+    % Вычисляем расстояние между объектами в каждом кадре (в сантиметрах)
+    DistanceInCm = TargetDistance / Options.pxl2sm;
+    
+    % Вычисляем скорость как производную расстояния (учитываем знак)
+    TempVelocity = [0 diff(DistanceInCm)] * Options.FrameRate;
+    
+    % Интерполируем первое значение для устранения NaN
+    DistanceVelocity = [interp1(2:n_frames, TempVelocity(2:end), 1, 'linear', 'extrap') TempVelocity(2:end)];
+    
+    % Сглаживаем скорость
+    DistanceVelocitySmoothed = -smooth(DistanceVelocity, round(Options.FrameRate/8), 'moving');
+
     % entry calculation
-    CombineInteraction = Acts(IndexInside).ActArrayRefine + Acts(IndexInteract).ActArrayRefine;
-    CombineInteraction(CombineInteraction>1) = 1;
+    CombineInteraction = Acts(IndexInteract).ActArrayRefine;
     
     DistanceVelocitySmoothedThreshold = single(DistanceVelocitySmoothed > VelocityThreshold);
     DistanceVelocitySmoothedThreshold = DistanceVelocitySmoothedThreshold - CombineInteraction;
@@ -655,135 +643,40 @@ for object  = 1:size(ArenaAndObjects,2)-1
     [~,~,~,count_time,frame_in, frame_out] = RefineLine(DistanceVelocitySmoothedThreshold, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
     
     EntryInAllV = zeros(1,n_frames);
-    EntryOutAllV = zeros(1,n_frames);
     for entry = 1:length(frame_in)
         
         % for EntryIn
         frame_out_this = min(frame_out(entry)+FramesNumAdd, n_frames);
         if CombineInteraction(frame_out_this) == 1
             EntryInAllV(frame_in(entry):frame_out(entry)) = ones(1,count_time(entry));
-        end
-        
-        % for EntryOut
-        frame_in_this = max(frame_in(entry)-FramesNumAdd, 1);
-        if CombineInteraction(frame_in_this) == 1
-            EntryOutAllV(frame_in(entry):frame_out(entry)) = ones(1,count_time(entry));
-        end
+        end        
     end
     
-    [CombineInteraction,~,~,~,frame_in, frame_out] = RefineLine(CombineInteraction, 0, Options.FrameRate);
+%     [~,~,~,~,frame_in, frame_out] = RefineLine(CombineInteraction, 0, Options.FrameRate);
     
     EntryInAll = EntryInAllV;
-    EntryOutAll = EntryOutAllV;
     for entry = 1:length(frame_in)
-        
-        frame_out_this = min(frame_out(entry)+FramesNumAdd, n_frames);
-        if sum(EntryOutAllV(frame_out(entry):frame_out_this)) == 0
-            frame_out_this_entry = min(frame_out(entry)+FramesNumEntry, n_frames);
-            EntryOutAll(frame_out(entry):frame_out_this_entry) = ones(1,frame_out_this_entry-frame_out(entry)+1);
-        end
-        
         frame_in_this = max(frame_in(entry)-FramesNumAdd, 1);
         if sum(EntryInAllV(frame_in_this:frame_out(entry))) == 0
             frame_in_this_entry = max(frame_in(entry)-FramesNumEntry, 1);
             EntryInAll(frame_in_this_entry:frame_in(entry)) = ones(1,frame_in(entry)-frame_in_this_entry+1);
         end
-    end
-    
+    end    
     entryInBowl.Inside = zeros(n_frames,1);
-    entryInBowl.Interact = zeros(n_frames,1);
-    entryInBowl.InsideAll = zeros(n_frames,1);
-    entryInBowl.InteractAll = zeros(n_frames,1);
-    entryOutBowl.Inside = zeros(n_frames,1);
-    entryOutBowl.Interact = zeros(n_frames,1);
-    entryOutBowl.InsideAll = zeros(n_frames,1);
-    entryOutBowl.InteractAll = zeros(n_frames,1);
     
-    
-    [~,~,~,~,frame_in_entry_in, frame_out_entry_in] = RefineLine(EntryInAll, 0, 0);
-    [~,~,~,~,frame_in_entry_out, frame_out_entry_out] = RefineLine(EntryOutAll, 0, 0);
-    
-    for entry = 1:length(frame_in_entry_in)
-        if sum(Acts(IndexInside).ActArrayRefine(frame_out_entry_in(entry):frame_in_entry_out(entry))) > 0
-            entryInBowl.InsideAll(frame_in_entry_in(entry):frame_out_entry_in(entry)) = ones(frame_out_entry_in(entry)-frame_in_entry_in(entry)+1,1);
-            entryOutBowl.InsideAll(frame_in_entry_out(entry):frame_out_entry_out(entry)) = ones(frame_out_entry_out(entry)-frame_in_entry_out(entry)+1,1);
-            
-            if sum(EntryInAllV(frame_in_entry_in(entry):frame_out_entry_in(entry))) > 0
-                entryInBowl.Inside(frame_in_entry_in(entry):frame_out_entry_in(entry)) = ones(frame_out_entry_in(entry)-frame_in_entry_in(entry)+1,1);
-            end
-            if sum(EntryOutAllV(frame_in_entry_out(entry):frame_out_entry_out(entry))) > 0
-                entryOutBowl.Inside(frame_in_entry_out(entry):frame_out_entry_out(entry)) = ones(frame_out_entry_out(entry)-frame_in_entry_out(entry)+1,1);
-            end
-        else
-            entryInBowl.InteractAll(frame_in_entry_in(entry):frame_out_entry_in(entry)) = ones(frame_out_entry_in(entry)-frame_in_entry_in(entry)+1,1);
-            entryOutBowl.InteractAll(frame_in_entry_out(entry):frame_out_entry_out(entry)) = ones(frame_out_entry_out(entry)-frame_in_entry_out(entry)+1,1);
-            
-            if sum(EntryInAllV(frame_in_entry_in(entry):frame_out_entry_in(entry))) > 0
-                entryInBowl.Interact(frame_in_entry_in(entry):frame_out_entry_in(entry)) = ones(frame_out_entry_in(entry)-frame_in_entry_in(entry)+1,1);
-            end
-            if sum(EntryOutAllV(frame_in_entry_out(entry):frame_out_entry_out(entry))) > 0
-                entryOutBowl.Interact(frame_in_entry_out(entry):frame_out_entry_out(entry)) = ones(frame_out_entry_out(entry)-frame_in_entry_out(entry)+1,1);
-            end
+    [~,~,~,~,frame_in_entry_in, frame_out_entry_in] = RefineLine(EntryInAll, 0, 0);    
+    for entry = 1:length(frame_in_entry_in)        
+        if sum(EntryInAllV(frame_in_entry_in(entry):frame_out_entry_in(entry))) > 0
+            entryInBowl.Inside(frame_in_entry_in(entry):frame_out_entry_in(entry)) = ones(frame_out_entry_in(entry)-frame_in_entry_in(entry)+1,1);
         end
-    end
+    end       
+
+    Acts(end+1).ActName = 'entry_in_object';
+    Acts(end).ActArray = entryInBowl.Inside;
+    Acts(end).ActArrayRefine = Acts(end).ActArray;
     
-    switch object
-        case 1
-            Acts(end+1).ActName = 'entryInBowlInside';
-            Acts(end).ActArray = entryInBowl.Inside;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryInBowlInteract';
-            Acts(end).ActArray = entryInBowl.Interact;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryInBowlInsideAll';
-            Acts(end).ActArray = entryInBowl.InsideAll;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryInBowlInteractAll';
-            Acts(end).ActArray = entryInBowl.InteractAll;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryOutBowlInside';
-            Acts(end).ActArray = entryOutBowl.Inside;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryOutBowlInteract';
-            Acts(end).ActArray = entryOutBowl.Interact;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryOutBowlInsideAll';
-            Acts(end).ActArray = entryOutBowl.InsideAll;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryOutBowlInteractAll';
-            Acts(end).ActArray = entryOutBowl.InteractAll;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            plotact = 0;
-            plotact2 = 0;
-        case 2
-            Acts(end+1).ActName = 'entryInObjectInside';
-            Acts(end).ActArray = entryInBowl.Inside;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryInObjectInteract';
-            Acts(end).ActArray = entryInBowl.Interact;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryInObjectInsideAll';
-            Acts(end).ActArray = entryInBowl.InsideAll;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryInObjectInteractAll';
-            Acts(end).ActArray = entryInBowl.InteractAll;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryOutObjectInside';
-            Acts(end).ActArray = entryOutBowl.Inside;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryOutObjectInteract';
-            Acts(end).ActArray = entryOutBowl.Interact;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryOutObjectInsideAll';
-            Acts(end).ActArray = entryOutBowl.InsideAll;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            Acts(end+1).ActName = 'entryOutObjectnteractAll';
-            Acts(end).ActArray = entryOutBowl.InteractAll;
-            Acts(end).ActArrayRefine = Acts(end).ActArray;
-            plotact = 8;
-            plotact2 = 2;
-    end
 end
+
 
 %% object in field of view
 
@@ -801,10 +694,10 @@ View.Line.R(View.Line.R<1) = 1;
 View.Line.R(View.Line.R>Options.Height) = Options.Height;
 View.Line.L(View.Line.L>Options.Height) = Options.Height;
 
-[BowlDirection,~] = cart2pol(BowlCenterX-CenterHead.X,BowlCenterY-CenterHead.Y);
+[ObjectDirection,~] = cart2pol(CenterX-CenterHead.X,CenterY-CenterHead.Y);
 
-Acts(end+1).ActName = 'bowlInView';
-Acts(end).ActArray = single(abs(BowlDirection-HeadDirection) < AngelView*pi/180)';
+Acts(end+1).ActName = 'object_in_view';
+Acts(end).ActArray = single(abs(ObjectDirection-HeadDirection) < AngelView*pi/180)';
 Acts(end).ActArray = Acts(end).ActArray - Acts(10).ActArray;
 Acts(end).ActArray(Acts(end).ActArray < 0) = 0;
 Acts(end).ActArrayRefine = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
@@ -820,9 +713,13 @@ for line = 1:size(Acts,2)
     Acts(line).ActMeanSTDTime = round(std(Acts(line).ActDistr),2)/Options.FrameRate;
     Acts(line).ActMedianTime = round(median(Acts(line).ActDistr),2)/Options.FrameRate;
     Acts(line).ActMedianMADTime = round(mad(Acts(line).ActDistr),2)/Options.FrameRate;
+    
     Acts(line).Distance = round(mean(BodyPartsTraces(Point.Center).VelocitySmoothed(logical(Acts(line).ActArrayRefine)))*time(end)*Acts(line).ActPercent/10000,2);
+    
     Acts(line).ActMeanDistance = Acts(line).Distance/Acts(line).ActNumber;
     Acts(line).ActVelocity = Acts(line).Distance/(Acts(line).ActMeanTime*Acts(line).ActNumber)*100;
+    
+    Acts(line).ActDuration = round(Acts(line).ActPercent*n_frames/Options.FrameRate/100,2);
     histogram(Acts(line).ActDistr./Options.FrameRate, ceil(sqrt(length(Acts(line).ActDistr))+1));
     title(sprintf('Histogram of acts duration time: %s', string(Acts(line).ActName)));
     saveas(gcf, sprintf('%s\\ActsHistogram\\%s_act_%s.png', PathOut,Filename,string(Acts(line).ActName)));
@@ -859,10 +756,10 @@ delete(h);
 %% make separate acts videos
 
 if PlotOption.acts
-    MaxPoints = 2000;
-    
+    MaxPoints = 200000;
+    PointsLine = [];
 %     for act = 1:size(Acts,2)
-    for act = [9:19]
+    for act = [5 9 10 11]
         fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
         v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
         v.FrameRate = Options.FrameRate;
@@ -885,15 +782,17 @@ if PlotOption.acts
             end
             
             % field of view
-            if Acts(act).ActName == "bowlInView" || Acts(act).ActName == "objectInView"
+            if Acts(act).ActName == "bowl_in_view" || Acts(act).ActName == "object1_in_view" || Acts(act).ActName == "object2_in_view" || Acts(act).ActName == "object_in_view"
                 RealFrame = insertShape(RealFrame, 'Line', View.Line.L(k,:), 'LineWidth', 3, 'Color', 'red');
                 RealFrame = insertShape(RealFrame, 'Line', View.Line.R(k,:), 'LineWidth', 3, 'Color', 'red');
             end
             
-            % points of bodyparts in a fixed frame of reference
-            for part=1:length(BodyPartsNames)
-                RealFrame = insertShape(RealFrame,'circle', [BodyPartsTraces(part).TraceOriginal.X(k)/Options.x_kcorr BodyPartsTraces(part).TraceOriginal.Y(k) MarkSize*2],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
-                RealFrame = insertShape(RealFrame,'filledcircle', [BodyPartsTracesMainX(part,k)/Options.x_kcorr BodyPartsTracesMainY(part,k) MarkSize],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
+            % trajectory of mouse
+            if Acts(act).ActName == "entry_in_bowl" || Acts(act).ActName == "entry_in_object1" || Acts(act).ActName == "entry_in_object2" || Acts(act).ActName == "entry_in_object"
+                PointsLine = [PointsLine k];
+                for l = 1:length(PointsLine)
+                    RealFrame = insertShape(RealFrame,'filledcircle', [BodyPartsTraces(Point.HeadCenter).TraceOriginal.X(PointsLine(l))/Options.x_kcorr BodyPartsTraces(Point.HeadCenter).TraceOriginal.Y(PointsLine(l)) 2],'Color','green','LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
+                end
             end
             
             writeVideo(v,uint8(RealFrame));

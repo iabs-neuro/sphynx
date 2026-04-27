@@ -18,12 +18,15 @@ behavior_act_params = struct(...
 ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% UNSPECIFIC ACTS %%%%%%%%%%%%%%%%%%%%
 'freezing',                     "ActPercent", ...                               % замирания:                [процент]
 'rear',                         "ActNumber", ...                                % стойки:                   [кол-во]
-... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:NOF/LNOF %%%%%%%%
+... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:NOF/LNOF/HOS %%%%%%%%
 'object1',                    	["ActDuration" "ActPercent"], ...               % мышь взаимодействует с объектом1:                     [длительность, процент]
 'object2',                     	["ActDuration" "ActPercent"], ...               % мышь взаимодействует с объектом2:                     [длительность, процент]
 'object3',                     	["ActDuration" "ActPercent"], ...               % мышь взаимодействует с объектом3:                     [длительность, процент]
 'object4',                    	["ActDuration" "ActPercent"], ...               % мышь взаимодействует с объектом4:                     [длительность, процент]
 'objects',                    	["ActDuration" "ActPercent"], ...               % мышь взаимодействует с объектами:                     [длительность, процент]
+'object_interaction',         	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...  	% мышь взаимодействует с объектом:     	[кол-во, длительность, процент, среднее время на акт]
+'entry_in_object',              "ActNumber", ...                                % целенаправленный подход к объекту:                    [кол-во]
+'object_in_view',              	"ActPercent", ...                               % объект в области зрения:                           	[процент]
 ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:BOF - bowl acts (old names) %%%%%%%%%%%%% 
 'bowlinside',                   ["ActDuration" "ActPercent"], ...               % мышь в миске:                                         [длительность, процент]
 'bowlinteraction',              ["ActDuration" "ActPercent"], ...               % любое взаимодействие с миской:                        [длительность, процент]
@@ -54,6 +57,9 @@ behavior_act_params = struct(...
 'bowl_interaction',           	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...  	% любое взаимодействие с миской:       	[кол-во, длительность, процент, среднее время на акт]               
 'object1_interaction',         	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...  	% любое взаимодействие с объектом №1:   [кол-во, длительность, процент, среднее время на акт]
 'object2_interaction',         	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...  	% любое взаимодействие с объектом №2:   [кол-во, длительность, процент, среднее время на акт]
+'bowl_inside',                  ["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...  	% любое взаимодействие с миской:       	[кол-во, длительность, процент, среднее время на акт]               
+'object1_inside',           	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...  	% любое взаимодействие с объектом №1:   [кол-во, длительность, процент, среднее время на акт]               
+'object2_inside',           	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...  	% любое взаимодействие с объектом №2:   [кол-во, длительность, процент, среднее время на акт]               
 ... 
 'entry_in_bowl',                "ActNumber", ...                                % целенаправленный подход к миске:                    	[кол-во]
 'entry_in_object1',             "ActNumber", ...                                % целенаправленный подход к объекту №1:             	[кол-во]
@@ -78,29 +84,33 @@ behavior_act_params = struct(...
 'slope_down_arms',             	["ActNumber" "ActPercent" "Distance"], ...     	% наклонные вниз рукава:                               	[процент, дистанция]
 'slope_up_arms',              	["ActNumber" "ActPercent" "Distance"], ...     	% наклонные вверх рукава:                              	[процент, дистанция]
 ... 
-'rest_in_straight_arms',       	"ActNumber", ...                                % остановка в прямых рукавах:                           [кол-во]
-'loc_in_straight_arms',       	"ActNumber", ...                                % быстрая побежка в прямых рукавах:                    	[кол-во]
-'walk_in_straight_arms',       	"ActNumber", ...                                % медленная побежка в прямых рукавах:                  	[кол-во]
-'freez_in_straight_arms',      	"ActNumber", ...                                % замирания в прямых рукавах:                           [кол-во]
+... % 'rest_in_straight_arms',       	"ActNumber", ...                                % остановка в прямых рукавах:                           [кол-во]
+... % 'loc_in_straight_arms',       	"ActNumber", ...                                % быстрая побежка в прямых рукавах:                    	[кол-во]
+... % 'walk_in_straight_arms',       	"ActNumber", ...                                % медленная побежка в прямых рукавах:                  	[кол-во]
+... % 'freez_in_straight_arms',      	"ActNumber", ...                                % замирания в прямых рукавах:                           [кол-во]
 ... 
-'rest_in_sloping_arms',       	"ActNumber", ...                                % остановка в наклонных рукавах:                       	[кол-во]
-'loc_in_sloping_arms',       	"ActNumber", ...                                % быстрая побежка в наклонных рукавах:                 	[кол-во]
-'walk_in_sloping_arms',       	"ActNumber", ...                                % медленная побежка в наклонных рукавах:               	[кол-во]
-'freez_in_sloping_arms',      	"ActNumber", ...                                % замирания в наклонных рукавах:                       	[кол-во]
+... % 'rest_in_sloping_arms',       	"ActNumber", ...                                % остановка в наклонных рукавах:                       	[кол-во]
+... % 'loc_in_sloping_arms',            "ActNumber", ...                                % быстрая побежка в наклонных рукавах:                 	[кол-во]
+... % 'walk_in_sloping_arms',       	"ActNumber", ...                                % медленная побежка в наклонных рукавах:               	[кол-во]
+... % 'freez_in_sloping_arms',      	"ActNumber", ...                                % замирания в наклонных рукавах:                       	[кол-во]
 ... 
-'rest_in_slope_down_arms',     	"ActNumber", ...                                % остановка в наклонных вниз рукавах:                  	[кол-во]
-'loc_in_slope_down_arms',      	"ActNumber", ...                                % быстрая побежка в наклонных вниз рукавах:            	[кол-во]
-'walk_in_slope_down_arms',     	"ActNumber", ...                                % медленная побежка в наклонных вниз рукавах:          	[кол-во]
-'freez_in_slope_down_arms',    	"ActNumber", ...                                % замирания в наклонных вниз рукавах:                  	[кол-во]
+... % 'rest_in_slope_down_arms',     	"ActNumber", ...                                % остановка в наклонных вниз рукавах:                  	[кол-во]
+... % 'loc_in_slope_down_arms',      	"ActNumber", ...                                % быстрая побежка в наклонных вниз рукавах:            	[кол-во]
+... % 'walk_in_slope_down_arms',     	"ActNumber", ...                                % медленная побежка в наклонных вниз рукавах:          	[кол-во]
+... % 'freez_in_slope_down_arms',    	"ActNumber", ...                                % замирания в наклонных вниз рукавах:                  	[кол-во]
 ...
-'rest_in_slope_up_arms',       	"ActNumber", ...                                % остановка в наклонных вверх рукавах:                 	[кол-во]
-'loc_in_slope_up_arms',       	"ActNumber", ...                                % быстрая побежка в наклонных вверх рукавах:           	[кол-во]
-'walk_in_slope_up_arms',       	"ActNumber", ...                                % медленная побежка в наклонных вверх рукавах:         	[кол-во]
-'freez_in_slope_up_arms',      	"ActNumber", ...                                % замирания в наклонных вверх рукавах:                	[кол-во]
+... % 'rest_in_slope_up_arms',       	"ActNumber", ...                                % остановка в наклонных вверх рукавах:                 	[кол-во]
+... % 'loc_in_slope_up_arms',       	"ActNumber", ...                                % быстрая побежка в наклонных вверх рукавах:           	[кол-во]
+... % 'walk_in_slope_up_arms',       	"ActNumber", ...                                % медленная побежка в наклонных вверх рукавах:         	[кол-во]
+... % 'freez_in_slope_up_arms',      	"ActNumber", ...                                % замирания в наклонных вверх рукавах:                	[кол-во]
 ... 
+'box_upper',                   	["ActPercent" "Distance"], ...                  % животное перемещается в верхней трети арены:             	[процент, дистанция]
+'box_middle',                 	["ActPercent" "Distance"], ...                  % животное перемещается в средней трети арены:             	[процент, дистанция]
+'box_lower',                   	["ActPercent" "Distance"], ...                  % животное перемещается в нижней трети арены:             	[процент, дистанция]
+...
 'mouse_goes_straight',        	["ActPercent" "Distance"], ...                  % животное перемещается в плоскости (X,Y):             	[процент, дистанция]
 'mouse_goes_up',                ["ActPercent" "Distance"], ...                  % животное перемещается с набором высоты:             	[процент, дистанция]
-'mouse_goes_down',              ["ActPercent" "Distance"], ...                   % животное перемещается со снижением высоты:          	[процент, дистанция]
+'mouse_goes_down',              ["ActPercent" "Distance"], ...                 	% животное перемещается со снижением высоты:          	[процент, дистанция]
 ... %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TASK-SPECIFIC ACTS:NOL %%%%%%%%%%%%%
 'object_control_inside',     	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"], ...              	% мышь в объекте:                                       [длительность, процент]
 'object_control_interaction',  	["ActNumber" "ActDuration" "ActPercent" "ActMeanTime"] ...              	% любое взаимодействие с объектом:                      [длительность, процент]

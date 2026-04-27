@@ -629,7 +629,7 @@ if PlotOption.acts
     MaxPoints = 2000;
     
 %     for act = 1:size(Acts,2)
-    for act = [6 8]
+    for act = [5]
         fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
         v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
         v.FrameRate = Options.FrameRate;

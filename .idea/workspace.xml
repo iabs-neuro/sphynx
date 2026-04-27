@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="50e5479a-2597-4ebf-a590-a47620c72dd0" name="Changes" comment="LNOF added">
+      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/sphynx.iml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/BehaviorAnalyzer.m" beforeDir="false" afterPath="$PROJECT_DIR$/BehaviorAnalyzer.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Commander_behavior.m" beforeDir="false" afterPath="$PROJECT_DIR$/Commander_behavior.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CreatePreset.m" beforeDir="false" afterPath="$PROJECT_DIR$/CreatePreset.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cross-analysis/Commander_3DM_FPS_change.m" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cross-analysis/Commander_BOWL.m" beforeDir="false" afterPath="$PROJECT_DIR$/Cross-analysis/Commander_BOWL.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cross-analysis/Commander_HOS.m" beforeDir="false" afterPath="$PROJECT_DIR$/Cross-analysis/Commander_HOS.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cross-analysis/Commander_NOL.m" beforeDir="false" afterPath="$PROJECT_DIR$/Cross-analysis/Commander_NOL.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cross-analysis/Cross_analysis_3DM.m" beforeDir="false" afterPath="$PROJECT_DIR$/Cross-analysis/Cross_analysis_3DM.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cross-analysis/Cross_analysis_BOWL.m" beforeDir="false" afterPath="$PROJECT_DIR$/Cross-analysis/Cross_analysis_BOWL.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Projects/BehaviorAnalyzer3DM.m" beforeDir="false" afterPath="$PROJECT_DIR$/Projects/BehaviorAnalyzer3DM.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Projects/BehaviorAnalyzerBOWL.m" beforeDir="false" afterPath="$PROJECT_DIR$/Projects/BehaviorAnalyzerBOWL.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Projects/BehaviorAnalyzerHOS.m" beforeDir="false" afterPath="$PROJECT_DIR$/Projects/BehaviorAnalyzerHOS.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Projects/BehaviorAnalyzerLNOF.m" beforeDir="false" afterPath="$PROJECT_DIR$/Projects/BehaviorAnalyzerLNOF.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/functions/Three_DM_z_coordinate.m" beforeDir="false" afterPath="$PROJECT_DIR$/functions/Three_DM_z_coordinate.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/functions/behavior_act_params.m" beforeDir="false" afterPath="$PROJECT_DIR$/functions/behavior_act_params.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/.ipynb_checkpoints/ConcatenateVideos-checkpoint.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/tools/.ipynb_checkpoints/ConcatenateVideos-checkpoint.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/ConcatenateVideos.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/tools/ConcatenateVideos.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/DLC_test.m" beforeDir="false" afterPath="$PROJECT_DIR$/tools/DLC_test.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/DroppedFramesTest.m" beforeDir="false" afterPath="$PROJECT_DIR$/tools/DroppedFramesTest.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/FramesCalculationmanyAviMp4.m" beforeDir="false" afterPath="$PROJECT_DIR$/tools/FramesCalculationmanyAviMp4.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/RenameFunctions.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/tools/RenameFunctions.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/VideoChangeFrameRate.m" beforeDir="false" afterPath="$PROJECT_DIR$/tools/VideoChangeFrameRate.m" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ChangesViewManager">
+    <option name="groupingKeys">
+      <option value="directory" />
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="PREVIOUS_COMMIT_AUTHORS">
+      <list>
+        <option value="Viktor Plusnin &lt;witkax@mail.ru&gt;" />
+        <option value="viktor plusnin &lt;witkax@mail.ru&gt;" />
+      </list>
+    </option>
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 0
+}</component>
+  <component name="ProjectId" id="2k6LBotYJLnhxtSc2bgc38poglN" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "master",
+    "ignore.virus.scanning.warn.message": "true",
+    "last_opened_file_path": "C:/Users/1/PycharmProjects/sphynx/BehaviorAnalyzer.m",
+    "two.files.diff.last.used.file": "C:/Users/1/PycharmProjects/sphynx/BehaviorAnalyzer.m"
+  }
+}]]></component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-5a2391486177-d3b881c8e49f-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-233.13763.11" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="50e5479a-2597-4ebf-a590-a47620c72dd0" name="Changes" comment="" />
+      <created>1722598946939</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1722598946939</updated>
+    </task>
+    <task id="LOCAL-00001" summary="color image added">
+      <option name="closed" value="true" />
+      <created>1727103984218</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1727103984218</updated>
+    </task>
+    <task id="LOCAL-00002" summary="Prac 2024 Morozov SA">
+      <option name="closed" value="true" />
+      <created>1730794285250</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1730794285250</updated>
+    </task>
+    <task id="LOCAL-00003" summary="some fixes">
+      <option name="closed" value="true" />
+      <created>1731354449512</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1731354449512</updated>
+    </task>
+    <task id="LOCAL-00004" summary="natsort added">
+      <option name="closed" value="true" />
+      <created>1733140893948</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1733140893948</updated>
+    </task>
+    <task id="LOCAL-00005" summary="pattern added">
+      <option name="closed" value="true" />
+      <created>1733160484791</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1733160484791</updated>
+    </task>
+    <task id="LOCAL-00006" summary="fix natsort">
+      <option name="closed" value="true" />
+      <created>1733161072568</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1733161072568</updated>
+    </task>
+    <task id="LOCAL-00007" summary="fix natsort">
+      <option name="closed" value="true" />
+      <created>1733161134291</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1733161134291</updated>
+    </task>
+    <task id="LOCAL-00008" summary="auto searching scaling factor">
+      <option name="closed" value="true" />
+      <created>1733228164943</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1733228164943</updated>
+    </task>
+    <task id="LOCAL-00009" summary="FOF exp added&#10;bug fix in refineline">
+      <option name="closed" value="true" />
+      <created>1733334802126</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1733334802126</updated>
+    </task>
+    <task id="LOCAL-00010" summary="fix bug">
+      <option name="closed" value="true" />
+      <created>1734457148018</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1734457148018</updated>
+    </task>
+    <task id="LOCAL-00011" summary="with pxlincm calculations">
+      <option name="closed" value="true" />
+      <created>1736864054534</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1736864054534</updated>
+    </task>
+    <task id="LOCAL-00012" summary="auto searching of bodyparts labels. Exp MSS added">
+      <option name="closed" value="true" />
+      <created>1737123071647</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1737123071648</updated>
+    </task>
+    <task id="LOCAL-00013" summary="Exp HOS added">
+      <option name="closed" value="true" />
+      <created>1737461926097</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1737461926097</updated>
+    </task>
+    <task id="LOCAL-00014" summary="Exp HOS added">
+      <option name="closed" value="true" />
+      <created>1737936127005</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1737936127005</updated>
+    </task>
+    <task id="LOCAL-00015" summary="Cross analysis behavior">
+      <option name="closed" value="true" />
+      <created>1741880376783</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1741880376784</updated>
+    </task>
+    <task id="LOCAL-00016" summary="3DM exp added">
+      <option name="closed" value="true" />
+      <created>1744300643980</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1744300643980</updated>
+    </task>
+    <task id="LOCAL-00017" summary="3DM exp added">
+      <option name="closed" value="true" />
+      <created>1744334523857</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1744334523857</updated>
+    </task>
+    <task id="LOCAL-00018" summary="3DM exp added">
+      <option name="closed" value="true" />
+      <created>1745225958185</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1745225958185</updated>
+    </task>
+    <task id="LOCAL-00019" summary="HUNT and BOWL exp added">
+      <option name="closed" value="true" />
+      <created>1757338356826</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1757338356826</updated>
+    </task>
+    <task id="LOCAL-00020" summary="HOS exp update">
+      <option name="closed" value="true" />
+      <created>1758225043470</created>
+      <option name="number" value="00020" />
+      <option name="presentableId" value="LOCAL-00020" />
+      <option name="project" value="LOCAL" />
+      <updated>1758225043470</updated>
+    </task>
+    <task id="LOCAL-00021" summary="Kalman filter added">
+      <option name="closed" value="true" />
+      <created>1761240800287</created>
+      <option name="number" value="00021" />
+      <option name="presentableId" value="LOCAL-00021" />
+      <option name="project" value="LOCAL" />
+      <updated>1761240800287</updated>
+    </task>
+    <task id="LOCAL-00022" summary="LNOF added">
+      <option name="closed" value="true" />
+      <created>1761241153944</created>
+      <option name="number" value="00022" />
+      <option name="presentableId" value="LOCAL-00022" />
+      <option name="project" value="LOCAL" />
+      <updated>1761241153944</updated>
+    </task>
+    <option name="localTasksCounter" value="23" />
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="color image added" />
+    <MESSAGE value="Prac 2024 Morozov SA" />
+    <MESSAGE value="some fixes" />
+    <MESSAGE value="natsort added" />
+    <MESSAGE value="pattern added" />
+    <MESSAGE value="fix natsort" />
+    <MESSAGE value="auto searching scaling factor" />
+    <MESSAGE value="FOF exp added&#10;bug fix in refineline" />
+    <MESSAGE value="fix bug" />
+    <MESSAGE value="with pxlincm calculations" />
+    <MESSAGE value="auto searching of bodyparts labels. Exp MSS added" />
+    <MESSAGE value="Exp HOS added" />
+    <MESSAGE value="Cross analysis behavior" />
+    <MESSAGE value="3DM exp added" />
+    <MESSAGE value="HUNT and BOWL exp added" />
+    <MESSAGE value="HOS exp update" />
+    <MESSAGE value="Kalman filter added" />
+    <MESSAGE value="LNOF added" />
+    <option name="LAST_COMMIT_MESSAGE" value="LNOF added" />
+  </component>
+</project>

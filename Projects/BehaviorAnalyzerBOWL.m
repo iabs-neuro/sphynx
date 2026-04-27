@@ -33,9 +33,9 @@ DegreeSmoothSGolayDefault = 3;          % length of window for smoothing
 BodyPartsCenterNames = {'mass centre' 'mass center' 'bodycenter' 'center'};
 BodyPartsTailbaseNames = {'tailbase' 'Tailbase' 'Tail base' 'tail base'};
 
-PlotOption.main = 1;
+PlotOption.main = 0;
 PlotOption.acts = 1;
-PlotOption.track = 1;
+PlotOption.track = 0;
 
 MarkSize = 3;
 LineWidth.Traces.Original = 2;
@@ -48,15 +48,15 @@ AngleDop = -pi/2;
 
 if nargin<9
     %% loading video and videotracking files
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\NOL\BehaviorData\1_Raw\');
-    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','w:\Projects\NOL\BehaviorData\2_DLC\');
-    PathOut = uigetdir('w:\Projects\NOL\BehaviorData\4_Behavior\', 'Pick a Directory for Outputs');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','e:\Projects\BOWL\2wave\BehaviorData\2_Combined\');
+    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','e:\Projects\BOWL\2wave\BehaviorData\3_DLC\');
+    PathOut = uigetdir('e:\Projects\BOWL\2wave\BehaviorData\5_Behavior\', 'Pick a Directory for Outputs');
     
     % loading preset file
     answer = questdlg('Do you have preset file?', 'Uploading files', 'Yes','No','Yes');
     switch answer
         case 'Yes'
-            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','w:\Projects\NOL\BehaviorData\3_Preset\');
+            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','e:\Projects\BOWL\2wave\BehaviorData\4_Preset\');
         case 'No'
             [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo,PathVideo,PathOut);
     end
@@ -508,7 +508,7 @@ switch FreezingMode
     case 'NoseAndCenter'
         Acts(4).ActArray = double((BodyPartsTraces(Point.Nose).VelocitySmoothed < Options.velocity_rest*2).*(BodyPartsTraces(Point.Center).VelocitySmoothed < Options.velocity_rest));
     case 'HeadAndCenter'
-        Acts(4).ActArray = double((BodyPartsTraces(Point.HeadCenter).VelocitySmoothed < Options.velocity_rest).*Acts(1).ActArrayRefine);
+        Acts(4).ActArray = double((BodyPartsTraces(Point.HeadCenter).VelocitySmoothed < Options.velocity_rest).*(BodyPartsTraces(Point.Center).VelocitySmoothed < Options.velocity_rest));      
 end
 [Acts(4).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(4).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
 Acts(4).ActArrayRefine = Acts(4).ActArrayRefine';
@@ -583,22 +583,22 @@ Zones(end).maskfilled = single(Zones(strcmp({Zones.name}, 'Center')).maskfilled)
 
 if Filename(end-1) == '1' || Filename(end-1) == '4'    
     % for 1T and 4T
-    ZonesOption.NameZone = {'ArenaCornersAllRealOut' 'ArenaWallsAllRealOut' 'Center' 'Object1RealOut'};
-    ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'headcenter'};
-    ZonesOption.NameAct = {'corners' 'walls' 'center' 'bowl_interaction'};
-    ZonesOption.NumBodyPart = [Point.Center Point.Center Point.Center Point.HeadCenter];
+    ZonesOption.NameZone = {'ArenaCornersAllRealOut' 'ArenaWallsAllRealOut' 'Center' 'Object1RealOut' 'Object1Real'};
+    ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'headcenter' 'headcenter'};
+    ZonesOption.NameAct = {'corners' 'walls' 'center' 'bowl_interaction_any' 'bowl_inside'};
+    ZonesOption.NumBodyPart = [Point.Center Point.Center Point.Center Point.HeadCenter Point.Center];
 elseif Filename(end-1) == '2' || Filename(end-1) == '3'    
     % for {2,3}T
-    ZonesOption.NameZone = {'WallsAndCornersRealOut' 'middlezone' 'center' 'Object1RealOut' 'Object2RealOut' 'Object3RealOut'};
-    ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'headcenter' 'headcenter' 'headcenter'};
-    ZonesOption.NameAct = {'walls' 'middle_zone' 'center' 'bowl_interaction' 'object1_interaction' 'object2_interaction'};
-    ZonesOption.NumBodyPart = [Point.Center Point.Center Point.Center Point.HeadCenter Point.HeadCenter Point.HeadCenter];
+    ZonesOption.NameZone = {'WallsAndCornersRealOut' 'middlezone' 'center' 'Object1RealOut' 'Object1Real' 'Object2RealOut' 'Object2Real' 'Object3RealOut' 'Object3Real'};
+    ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'headcenter' 'headcenter' 'headcenter' 'headcenter' 'headcenter' 'headcenter'};
+    ZonesOption.NameAct = {'walls' 'middle_zone' 'center' 'bowl_interaction_any' 'bowl_inside' 'object1_interaction_any' 'object1_inside' 'object2_interaction_any' 'object2_inside'};
+    ZonesOption.NumBodyPart = [Point.Center Point.Center Point.Center Point.HeadCenter Point.Center Point.HeadCenter Point.Center Point.HeadCenter Point.Center];
 else
     % for 5T
-    ZonesOption.NameZone = {'WallsAndCornersRealOut' 'middlezone' 'center' 'Object1RealOut'};
-    ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'headcenter'};
-    ZonesOption.NameAct = {'walls' 'middle_zone' 'center' 'bowl_interaction'};
-    ZonesOption.NumBodyPart = [Point.Center Point.Center Point.Center Point.HeadCenter]; 
+    ZonesOption.NameZone = {'WallsAndCornersRealOut' 'middlezone' 'center' 'Object1RealOut' 'Object1Real'};
+    ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'headcenter' 'headcenter'};
+    ZonesOption.NameAct = {'walls' 'middle_zone' 'center' 'bowl_interaction_any' 'bowl_inside'};
+    ZonesOption.NumBodyPart = [Point.Center Point.Center Point.Center Point.HeadCenter Point.Center]; 
 end
 
 ZonesOption.NumZone = zeros(1,length(ZonesOption.NameZone));
@@ -619,6 +619,40 @@ for zone = 1:length(ZonesOption.NameZone)
     Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
 end
 
+% refining object interaction act
+IndexInteract = find(strcmp({Acts.ActName}, 'bowl_interaction_any'), 1);
+IndexInside = find(strcmp({Acts.ActName}, 'bowl_inside'), 1);
+if ~isempty(IndexInteract)
+    Acts(end+1).ActName = 'bowl_interaction';    
+    Acts(end).ActArray = Acts(IndexInteract).ActArrayRefine - Acts(IndexInside).ActArrayRefine;
+    Acts(end).ActArray(Acts(end).ActArrayRefine == -1) = 0;
+    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
+    Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
+    Acts(end).Zone = Acts(find(strcmp({Acts.ActName}, 'bowl_interaction'), 1)).Zone;
+end
+
+IndexInteract = find(strcmp({Acts.ActName}, 'object1_interaction_any'), 1);
+IndexInside = find(strcmp({Acts.ActName}, 'object1_inside'), 1);
+if ~isempty(IndexInteract)
+    Acts(end+1).ActName = 'object1_interaction';
+    Acts(end).ActArray = Acts(IndexInteract).ActArrayRefine - Acts(IndexInside).ActArrayRefine;
+    Acts(end).ActArray(Acts(end).ActArrayRefine == -1) = 0;
+    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
+    Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
+    Acts(end).Zone = Acts(find(strcmp({Acts.ActName}, 'object1_interaction'), 1)).Zone;
+end
+
+IndexInteract = find(strcmp({Acts.ActName}, 'object2_interaction_any'), 1);
+IndexInside = find(strcmp({Acts.ActName}, 'object2_inside'), 1);
+if ~isempty(IndexInteract)
+    Acts(end+1).ActName = 'object2_interaction';
+    Acts(end).ActArray = Acts(IndexInteract).ActArrayRefine - Acts(IndexInside).ActArrayRefine;
+    Acts(end).ActArray(Acts(end).ActArrayRefine == -1) = 0;
+    [Acts(end).ActArrayRefine,~,~,~,~,~] = RefineLine(Acts(end).ActArray, Options.MinLengthActInFrames, Options.MinLengthActInFrames);
+    Acts(end).ActArrayRefine = Acts(end).ActArrayRefine';
+    Acts(end).Zone = Acts(find(strcmp({Acts.ActName}, 'object2_interaction'), 1)).Zone;
+end
+
 %% Acts entryIn entryOut object
 
 VelocityThreshold = 5;                                 % cm/s
@@ -626,7 +660,7 @@ VelocityThreshold = 5;                                 % cm/s
 % FramesNumAdd = Options.FrameRate*SecondsNumAdd;         % window in frames
 FramesNumAdd = 1;
 SecondsNumEntry = 1;                                    % in seconds
-FramesNumEntry = Options.FrameRate*SecondsNumEntry;    	% 
+FramesNumEntry = round(Options.FrameRate*SecondsNumEntry);    	% 
 
 for object = 1:size(ArenaAndObjects,2)-1
     
@@ -859,17 +893,18 @@ save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 if PlotOption.acts
     colorbase = jet(BodyPartsNumber);
-    MaxPoints = 1000000;    
-    
-    PointsLine = [];
+    MaxPoints = 20000000;    
+       
     if Filename(end-1) == '2' || Filename(end-1) == '3'
-        act_for_plot = [9:14];
+        act_for_plot = [10 12 14 15:17];
     else
-        act_for_plot = [9 10];
+        act_for_plot = [10 11];
     end
     
-    %     for act = 1:size(Acts,2)
+%         for act = 1:size(Acts,2)
     for act = act_for_plot
+        
+        PointsLine = [];
         fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
         v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
         v.FrameRate = Options.FrameRate;

@@ -14,6 +14,7 @@ FileNames = {
     '4R-test' '4R-training' '5L-test' '5L-training' '5R-test' '5R-training' ...
     };
 
+
 FilesNumber = length(FileNames);
 
 %% main part
@@ -25,7 +26,7 @@ Duration = zeros(1,FilesNumber);
 AllActs = struct('SessionName', '',  'Acts', []);
 
 %%
-for file = 3:length(FileNames)
+for file = 1:length(FileNames)
 
     FilenameVideo = sprintf('%s.mp4', FileNames{file});
     FilenameDLC = sprintf('%sDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv',FileNames{file});

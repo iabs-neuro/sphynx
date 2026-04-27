@@ -2,7 +2,7 @@
 folder_path = uigetdir('', 'Выберите папку с CSV файлами');
 
 % Получить список CSV файлов в указанной папке
-csv_files = dir(fullfile(folder_path, '*4D*.csv'));
+csv_files = dir(fullfile(folder_path, '*.csv'));
 
 thr = 1.5;
 

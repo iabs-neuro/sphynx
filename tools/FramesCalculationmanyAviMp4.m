@@ -1,6 +1,6 @@
 %% только видео
 
-TotalRealTime = 900;
+TotalRealTime = 600;
 
 % Выберите видео файлы
 [filenames, pathname] = uigetfile({'*.avi;*.mp4;*.m4v;*.tif', 'Video Files (*.avi, *.mp4, *.m4v, *.tif)'}, 'Выберите видео файлы', 'MultiSelect', 'on', 'd:\Projects\H_mice\RawCombineVideo\');
@@ -80,15 +80,15 @@ end
 if ~iscell(filenames)
     filenames = {filenames};
 end
-
+filenames = filenames';
 % Проверяем расширения файлов, чтобы определить тип файлов (видео или CSV)
 fileExt = cellfun(@(x) x(end-2:end), filenames, 'UniformOutput', false);
 
 if all(strcmp(fileExt, 'csv'))
     % Обработка CSV файлов
-    totalRows = cell(size(filenames));
-    totalCols = cell(size(filenames));
-    totalTime = cell(size(filenames));
+    totalRows = cell(size(filenames))';
+    totalCols = cell(size(filenames))';
+    totalTime = cell(size(filenames))';
     TotalTotalRows = 0;
     
     % Обходим все выбранные CSV файлы
@@ -98,6 +98,10 @@ if all(strcmp(fileExt, 'csv'))
         
         % Читаем CSV файл и считаем количество строк
         csvData = readtable(csvPath);
+        
+%         ts = csvData.("TimeStamp_ms_");
+%         totalTime{i} = (ts(end) - ts(1)) / 1000 ;
+
         csvDataArray = table2array(csvData);
         totalRows{i} = height(csvData);
         totalCols{i} = width(csvData);
@@ -257,4 +261,4 @@ function totalFrames = getTotalFramesFFmpeg(videoPath)
     end
 end
 %% пееркодировать ffv1 в mp4 через ffmpeg в командной строке
-% ffmpeg -i w:\Projects\RFC\1_Raw\RFC_F10_1D\2024_10_18\17_24_02\Miniscope\3.avi -c:v libx264 -preset fast -crf 23 w:\Projects\RFC\1_Raw\RFC_F10_1D\2024_10_18\17_24_02\Miniscope\3_avi.mp4
+%  ffmpeg -i E:\Projects\LNOF\BehaviorData\1_Raw\LNOF_J20_1D\LNOF_J20_1D_237.avi -c:v libx264 -preset fast -crf 23 E:\Projects\LNOF\BehaviorData\1_Raw\LNOF_J20_1D\LNOF_J20_1D_237.avi.mp4

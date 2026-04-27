@@ -2,15 +2,21 @@ function DLC_test(PathDLC, FilenameDLC, PathOut, MultiAnimalOpt)
 % script for checking DLC performance
 
 StartTime = 1;
-LikelihoodThreshold = 0.6;
+Options.LikelihoodThreshold = 0.3;
 FrameRate = 30;
-pxl2sm = 8.1;
+Options.pxl2sm = 8.1;
 BodyPartsNamesDef.Center = {'mass centre' 'mass center' 'bodycenter' 'bodycentre' 'body center' 'center'};
 BodyPartsNamesDef.Tailbase = {'tailbase' 'Tailbase' 'Tail base' 'tail base'};
 TraceOption = 'Smoothed';           % {'Interpolated', 'Original', 'Smoothed'}
 DegreeSmoothSGolayDefault = 3; % degree of smoothing
-SmoothWindowSmallInSeconds = 0.1;
+SmoothWindowSmallInSeconds = 0.01;
 SmoothWindowBigInSeconds = 0.25;
+Options.x_kcorr = 1;
+Options.StatusBodyPartThreshold = 99;                                   % threshold for missing bodyparts
+
+PlotOption.main = 1;
+PlotOption.acts = 1;
+PlotOption.track = 1;
 
 SmoothWindowSmallInFrames = round(FrameRate*SmoothWindowSmallInSeconds);
 SmoothWindowBigInFrames = round(FrameRate*SmoothWindowBigInSeconds);
@@ -22,6 +28,7 @@ LineWidth.Traces.Smoothed = 1;
 
 %% loading videotracking files
 if nargin<4
+    %%
     [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','g:\_Projects\');
     PathOut = uigetdir('g:\_Projects\', 'Pick a Directory for Outputs');
     MultiAnimalOpt = 0;
@@ -79,51 +86,71 @@ save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 %% all body parts detection
 
 ExtraLinesNumber = 0;
-
-BodyPartsTraces = struct('BodyPartName', [],'TraceOriginal', [],'TraceLikelihood', [], 'TraceInterpolated', [], 'TraceSmoothed', [],'PercentNaN', [],'PercentLikeliHoodSubThreshold', [],'AverageDistance', [],'AverageSpeed', []);
+BodyPartsTraces = struct('BodyPartName', [], 'TraceOriginal', [],'TraceLikelihood', [], 'PercentNaN', [],'PercentLikeliHoodSubThreshold', [], 'Status', [], 'TraceInterpolated', [], 'TraceSmoothed', [], 'AverageDistance', [],'AverageSpeed', []);
 BodyPartsTracesMainX = zeros(BodyPartsNumber,n_frames);
 BodyPartsTracesMainY = zeros(BodyPartsNumber,n_frames);
+
 for part=1:BodyPartsNumber
-% for part=1:13
     BodyPartsTraces(part).BodyPartName = BodyPartsNames{part};
-    BodyPartsTraces(part).TraceOriginal.X = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)));
+    BodyPartsTraces(part).TraceOriginal.X = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)))*Options.x_kcorr;
     BodyPartsTraces(part).TraceOriginal.Y = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+1));
-    BodyPartsTraces(part).TraceLikelihood = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+2));
+    BodyPartsTraces(part).TraceLikelihood = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+2)); 
     
     TempArrayX = BodyPartsTraces(part).TraceOriginal.X;
     TempArrayY = BodyPartsTraces(part).TraceOriginal.Y;
+    
     TempArrayX(isnan(BodyPartsTraces(part).TraceOriginal.X)) = 0;
     TempArrayY(isnan(BodyPartsTraces(part).TraceOriginal.Y)) = 0;
     
-    BodyPartsTraces(part).PercentNaN.X = round(sum(isnan(BodyPartsTraces(part).TraceOriginal.X))/n_frames*100,2);
-    BodyPartsTraces(part).PercentNaN.Y = round(sum(isnan(BodyPartsTraces(part).TraceOriginal.Y))/n_frames*100,2);
-    BodyPartsTraces(part).PercentLikeliHoodSubThreshold = [round(sum(BodyPartsTraces(part).TraceLikelihood > 0.99)/n_frames*100,2)...
-        round(sum(BodyPartsTraces(part).TraceLikelihood > 0.95)/n_frames*100,2)...
-        round(sum(BodyPartsTraces(part).TraceLikelihood > 0.6)/n_frames*100,2)];
+%     TempArrayX(TempArrayX>Options.Width*Options.x_kcorr) = 0;
+%     TempArrayY(TempArrayY>Options.Height) = 0;
     
-
-     TempArrayX(BodyPartsTraces(part).TraceLikelihood < LikelihoodThreshold) = 0;
-     TempArrayY(BodyPartsTraces(part).TraceLikelihood < LikelihoodThreshold) = 0;
+    TempArrayX(TempArrayX<0) = 0;
+    TempArrayY(TempArrayY<0) = 0;
     
-    %TempArrayX(TempArrayX<10) = 0;
-    %TempArrayY(TempArrayY<10) = 0;
+    TempArrayX(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold) = 0;
+    TempArrayY(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold) = 0;
     
-    TempArrayInt.X = interp1(frames(TempArrayX ~=0), TempArrayX(TempArrayX ~=0), find(TempArrayX == 0),'linear');
-    TempArrayInt.Y = interp1(frames(TempArrayY ~=0), TempArrayY(TempArrayY ~=0), find(TempArrayY == 0),'linear');
+    BodyPartsTraces(part).PercentNaN = mean([round(sum(isnan(BodyPartsTraces(part).TraceOriginal.X))/n_frames*100,2) round(sum(isnan(BodyPartsTraces(part).TraceOriginal.Y))/n_frames*100,2)]);
+    BodyPartsTraces(part).PercentLikeliHoodSubThreshold = round(sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100,2);
+    
+    if sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100 > Options.StatusBodyPartThreshold
+        disp(['Bodypart ', BodyPartsTraces(part).BodyPartName, ' not found. Percent undetected timestamps: ', num2str(sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100)]);
+        BodyPartsTraces(part).Status = 'NotFound';
+        continue;
+    else
+        BodyPartsTraces(part).Status = 'Good';
+    end
+    
+    TempArrayInt.X = interp1(frames(TempArrayX ~=0), TempArrayX(TempArrayX ~=0), find(TempArrayX == 0), 'pchip');
+    TempArrayInt.Y = interp1(frames(TempArrayY ~=0), TempArrayY(TempArrayY ~=0), find(TempArrayY == 0), 'pchip');
+    
+    TempArrayInt.X(TempArrayInt.X<1) = 1;
+    TempArrayInt.Y(TempArrayInt.Y<1) = 1;
+%     
+%     TempArrayInt.X(TempArrayInt.X>Options.Width*Options.x_kcorr) = Options.Width;
+%     TempArrayInt.Y(TempArrayInt.Y>Options.Height) = Options.Height;
     
     TempArrayX(TempArrayX == 0) = TempArrayInt.X;
     TempArrayY(TempArrayY == 0) = TempArrayInt.Y;
     BodyPartsTraces(part).TraceInterpolated.X = TempArrayX;
     BodyPartsTraces(part).TraceInterpolated.Y = TempArrayY;
     
-    if any(ismember(BodyPartsNamesDef.Center, BodyPartsTraces(part).BodyPartName)) || any(ismember(BodyPartsNamesDef.Tailbase, BodyPartsTraces(part).BodyPartName))
-        SmoothWindow = SmoothWindowBigInFrames;
-    else
-        SmoothWindow = SmoothWindowSmallInFrames;
-    end
+%     if any(ismember(BodyPartsCenterNames, BodyPartsTraces(part).BodyPartName)) || any(ismember(BodyPartsTailbaseNames, BodyPartsTraces(part).BodyPartName))
+        SmoothWindow = 10;
+%     else
+%         SmoothWindow = Options.SmoothWindowSmallInFrames;
+%     end
+
     DegreeSmoothSGolay = min(SmoothWindow-1, DegreeSmoothSGolayDefault);
     BodyPartsTraces(part).TraceSmoothed.X = smooth(BodyPartsTraces(part).TraceInterpolated.X,SmoothWindow,'sgolay',DegreeSmoothSGolay);
     BodyPartsTraces(part).TraceSmoothed.Y = smooth(BodyPartsTraces(part).TraceInterpolated.Y,SmoothWindow,'sgolay',DegreeSmoothSGolay);
+    
+    BodyPartsTraces(part).TraceSmoothed.X(BodyPartsTraces(part).TraceSmoothed.X<1) = 1;
+    BodyPartsTraces(part).TraceSmoothed.Y(BodyPartsTraces(part).TraceSmoothed.Y<1) = 1;
+    
+%     BodyPartsTraces(part).TraceSmoothed.X(BodyPartsTraces(part).TraceSmoothed.X>Options.Width*Options.x_kcorr) = 1;
+%     BodyPartsTraces(part).TraceSmoothed.Y(BodyPartsTraces(part).TraceSmoothed.Y>Options.Height) = 1;
     
     switch TraceOption
         case 'Original'
@@ -151,31 +178,41 @@ for part=1:BodyPartsNumber
     saveas(gcf, sprintf('%s\\BodyPartsTraces\\%s_%s_Likelihood.png', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
     delete(gcf);
     
-    h = figure('Position', Screensize);
-    plot(time,BodyPartsTraces(part).TraceOriginal.X./pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
-    plot(time,BodyPartsTraces(part).TraceInterpolated.X./pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
-    plot(time,BodyPartsTraces(part).TraceSmoothed.X./pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
-    legend({'Original','Interpolated','Smoothed'});
-    title(sprintf('Body part: %s %s. X coordinate',IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-    xlabel('Time, s');
-    ylabel('Coordinate, cm');
-    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_X_coordinate.png', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_X_coordinate.fig', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-    delete(h);    
-    
-    h = figure('Position', Screensize);
-    plot(time,BodyPartsTraces(part).TraceOriginal.Y./pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
-    plot(time,BodyPartsTraces(part).TraceInterpolated.Y./pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
-    plot(time,BodyPartsTraces(part).TraceSmoothed.Y./pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
-    legend({'Original','Interpolated','Smoothed'});
-    title(sprintf('Body part: %s %s. Y coordinate',IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-    xlabel('Time, s');
-    ylabel('Coordinate, cm');
-    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_Y_coordinate.png', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-    saveas(h, sprintf('%s\\BodyPartsTraces\\%s_%s_Y_coordinate.fig', PathOut,IndividualsNames{part},BodyPartsTraces(part).BodyPartName));
-    delete(h);
-%     
+    if PlotOption.track
+        h = figure('Position', Screensize);
+        plot(time,BodyPartsTraces(part).TraceOriginal.X./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
+        plot(time,BodyPartsTraces(part).TraceInterpolated.X./Options.pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
+        plot(time,BodyPartsTraces(part).TraceSmoothed.X./Options.pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
+        legend({'Original','Interpolated','Smoothed'});
+        title(sprintf('Body part: %s. X coordinate',BodyPartsTraces(part).BodyPartName));
+        xlabel('Time, s');
+        ylabel('Coordinate, cm');
+        saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.png', PathOut,BodyPartsTraces(part).BodyPartName));
+        saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.fig', PathOut,BodyPartsTraces(part).BodyPartName));
+        delete(h);
+        
+        h = figure('Position', Screensize);
+        plot(time,BodyPartsTraces(part).TraceOriginal.Y./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
+        plot(time,BodyPartsTraces(part).TraceInterpolated.Y./Options.pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
+        plot(time,BodyPartsTraces(part).TraceSmoothed.Y./Options.pxl2sm,'g', 'LineWidth', LineWidth.Traces.Smoothed);
+        legend({'Original','Interpolated','Smoothed'});
+        title(sprintf('Body part: %s. Y coordinate',BodyPartsTraces(part).BodyPartName));
+        xlabel('Time, s');
+        ylabel('Coordinate, cm');
+        saveas(h, sprintf('%s\\BodyPartsTraces\\%s_Y_coordinate.png', PathOut,BodyPartsTraces(part).BodyPartName));
+        saveas(h, sprintf('%s\\BodyPartsTraces\\%s_Y_coordinate.fig', PathOut,BodyPartsTraces(part).BodyPartName));
+        delete(h);
+    end
 end
+
+points_for_delete = find(strcmp({BodyPartsTraces.Status}, 'NotFound'));
+BodyPartsNames(points_for_delete) = [];
+BodyPartsOptions(points_for_delete) = [];
+BodyPartsTracesMainX(points_for_delete,:) = [];
+BodyPartsTracesMainY(points_for_delete,:) = [];
+BodyPartsTraces(points_for_delete) = [];
+BodyPartsNumber = length(BodyPartsNames);
+  
 
 save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 %% 

@@ -1,4 +1,4 @@
-function [Acts, BodyPartsTraces, Point, Options, session] = BehaviorAnalyzer3DM(PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut,StartTime, EndTime, PathPreset, FilenamePreset)
+function [Acts, BodyPartsTraces, Point, Options, session] = BehaviorAnalyzer3DM(most_frequent, PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut,StartTime, EndTime, PathPreset, FilenamePreset)
 % VVP. GAR. Deep Behavior analyses tool
 % 27.03.25 2DM OF experiment
 
@@ -35,9 +35,9 @@ BodyPartsCenterNames = {'mass centre' 'mass center' 'bodycenter' 'center'};
 BodyPartsTailbaseNames = {'tailbase' 'Tailbase' 'Tail base' 'tail base'};
 tunnel_window_size = 1;                 % in seconds to smooth 3DM
 
-PlotOption.main = 1;
-PlotOption.acts = 1;
-PlotOption.track = 1;
+PlotOption.main = 0;
+PlotOption.acts = 0;
+PlotOption.track = 0;
 
 MarkSize = 3;
 LineWidth.Traces.Original = 2;
@@ -48,17 +48,19 @@ AngleDop = -pi/2;
 
 %% loading all data
 
-if nargin<9
+if nargin<10
     %% loading video and videotracking files
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\3DM\BehaviorData\2_Combined\');
-    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','w:\Projects\3DM\BehaviorData\4_DLC\');
-    PathOut = uigetdir('w:\Projects\3DM\BehaviorData\5_Behavior\', 'Pick a Directory for Outputs');
+    
+    most_frequent = 2;
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','e:\Projects\3DM\BehaviorData\3wave\2_Combined\');
+    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','e:\Projects\3DM\BehaviorData\3wave\3_DLC\');
+    PathOut = uigetdir('e:\Projects\3DM\BehaviorData\3wave\5_Behavior\', 'Pick a Directory for Outputs');
     
     % loading preset file
     answer = questdlg('Do you have preset file?', 'Uploading files', 'Yes','No','Yes');
     switch answer
         case 'Yes'
-            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','w:\Projects\3DM\BehaviorData\3_Preset\');
+            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','e:\Projects\3DM\BehaviorData\3wave\4_Preset\');
         case 'No'
             [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo,PathVideo,PathOut);
     end
@@ -76,7 +78,7 @@ load(sprintf('%s//%s', PathPreset, FilenamePreset), 'Options', 'Zones', 'tunnels
 
 Options.MiddleCenterCm = 20;
 Options.StatusBodyPartThreshold = 98;                                   % threshold for missing bodyparts
-Options.LikelihoodThreshold = 0.6;
+Options.LikelihoodThreshold = 0.4;
 Options.VelocityMax = 50;                                               % threshold for maxima velocity
 
 % reading video file
@@ -172,30 +174,36 @@ BodyPartsTraces = struct('BodyPartName', [], 'TraceOriginal', [],'TraceLikelihoo
 BodyPartsTracesMainX = zeros(BodyPartsNumber,n_frames);
 BodyPartsTracesMainY = zeros(BodyPartsNumber,n_frames);
 
+
 for part=1:BodyPartsNumber
     BodyPartsTraces(part).BodyPartName = BodyPartsNames{part};
     BodyPartsTraces(part).TraceOriginal.X = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)))*Options.x_kcorr;
     BodyPartsTraces(part).TraceOriginal.Y = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+1));
-    BodyPartsTraces(part).TraceLikelihood = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+2));
+    BodyPartsTraces(part).TraceLikelihood = table2array(file(StartTime+ExtraLinesNumber:EndTime+ExtraLinesNumber,BodyPartsOptions(part)+2)); 
     
     TempArrayX = BodyPartsTraces(part).TraceOriginal.X;
     TempArrayY = BodyPartsTraces(part).TraceOriginal.Y;
+    
     TempArrayX(isnan(BodyPartsTraces(part).TraceOriginal.X)) = 0;
     TempArrayY(isnan(BodyPartsTraces(part).TraceOriginal.Y)) = 0;
     
     TempArrayX(TempArrayX>Options.Width*Options.x_kcorr) = 0;
     TempArrayY(TempArrayY>Options.Height) = 0;
     
+    % поправка на ножку стула
+    mask = ((TempArrayX < 147*Options.x_kcorr) & (TempArrayY > 242)) | ((TempArrayX < 173*Options.x_kcorr) & (TempArrayY > 729));
+    TempArrayX(mask) = 0;
+    TempArrayY(mask) = 0;
+
     TempArrayX(TempArrayX<0) = 0;
     TempArrayY(TempArrayY<0) = 0;
-
+    
     TempArrayX(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold) = 0;
     TempArrayY(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold) = 0;
     
     BodyPartsTraces(part).PercentNaN = mean([round(sum(isnan(BodyPartsTraces(part).TraceOriginal.X))/n_frames*100,2) round(sum(isnan(BodyPartsTraces(part).TraceOriginal.Y))/n_frames*100,2)]);
     BodyPartsTraces(part).PercentLikeliHoodSubThreshold = round(sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100,2);
-
-    %% ToDo threshold
+    
     if sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100 > Options.StatusBodyPartThreshold
         disp(['Bodypart ', BodyPartsTraces(part).BodyPartName, ' not found. Percent undetected timestamps: ', num2str(sum(BodyPartsTraces(part).TraceLikelihood < Options.LikelihoodThreshold)/n_frames*100)]);
         BodyPartsTraces(part).Status = 'NotFound';
@@ -203,14 +211,14 @@ for part=1:BodyPartsNumber
     else
         BodyPartsTraces(part).Status = 'Good';
     end
-
-    TempArrayInt.X = interp1(frames(TempArrayX ~=0), TempArrayX(TempArrayX ~=0), find(TempArrayX == 0), 'pchip', 'extrap');
-    TempArrayInt.Y = interp1(frames(TempArrayY ~=0), TempArrayY(TempArrayY ~=0), find(TempArrayY == 0), 'pchip', 'extrap');
+    
+    TempArrayInt.X = interp1(frames(TempArrayX ~=0), TempArrayX(TempArrayX ~=0), find(TempArrayX == 0), 'pchip');
+    TempArrayInt.Y = interp1(frames(TempArrayY ~=0), TempArrayY(TempArrayY ~=0), find(TempArrayY == 0), 'pchip');
     
     TempArrayInt.X(TempArrayInt.X<1) = 1;
     TempArrayInt.Y(TempArrayInt.Y<1) = 1;
     
-    TempArrayInt.X(TempArrayInt.X>fix(Options.Width*Options.x_kcorr)) = fix(Options.Width*Options.x_kcorr);
+    TempArrayInt.X(TempArrayInt.X>Options.Width*Options.x_kcorr) = Options.Width;
     TempArrayInt.Y(TempArrayInt.Y>Options.Height) = Options.Height;
     
     TempArrayX(TempArrayX == 0) = TempArrayInt.X;
@@ -226,15 +234,12 @@ for part=1:BodyPartsNumber
     DegreeSmoothSGolay = min(SmoothWindow-1, DegreeSmoothSGolayDefault);
     BodyPartsTraces(part).TraceSmoothed.X = smooth(BodyPartsTraces(part).TraceInterpolated.X,SmoothWindow,'sgolay',DegreeSmoothSGolay);
     BodyPartsTraces(part).TraceSmoothed.Y = smooth(BodyPartsTraces(part).TraceInterpolated.Y,SmoothWindow,'sgolay',DegreeSmoothSGolay);
-%     BodyPartsTraces(part).TraceSmoothed.X = smooth(BodyPartsTraces(part).TraceInterpolated.X,SmoothWindow,'rloess');
-%     BodyPartsTraces(part).TraceSmoothed.Y = smooth(BodyPartsTraces(part).TraceInterpolated.Y,SmoothWindow,'rloess');    
-    
     
     BodyPartsTraces(part).TraceSmoothed.X(BodyPartsTraces(part).TraceSmoothed.X<1) = 1;
     BodyPartsTraces(part).TraceSmoothed.Y(BodyPartsTraces(part).TraceSmoothed.Y<1) = 1;
     
-    BodyPartsTraces(part).TraceSmoothed.X(BodyPartsTraces(part).TraceSmoothed.X>fix(Options.Width*Options.x_kcorr)) = fix(Options.Width*Options.x_kcorr);
-    BodyPartsTraces(part).TraceSmoothed.Y(BodyPartsTraces(part).TraceSmoothed.Y>Options.Height) = Options.Height;
+    BodyPartsTraces(part).TraceSmoothed.X(BodyPartsTraces(part).TraceSmoothed.X>Options.Width*Options.x_kcorr) = 1;
+    BodyPartsTraces(part).TraceSmoothed.Y(BodyPartsTraces(part).TraceSmoothed.Y>Options.Height) = 1;
     
     switch TraceOption
         case 'Original'
@@ -283,24 +288,12 @@ BodyPartsTracesMainY(points_for_delete,:) = [];
 BodyPartsTraces(points_for_delete) = [];
 BodyPartsNumber = length(BodyPartsNames);
 
-% save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
+save(sprintf('%s\\%s_WorkSpace.mat',PathOut, Filename));
 
 %% 3DM experiment specific calculations
 
 % searching all bodyparts
 Point = find_bodyPart(BodyPartsNames);
-
-% add bottom and start zones in tunnels structure
-tunnels.count = length(tunnels.mask);
-tunnels.mask{tunnels.count+2} = Zones(7).maskfilled;
-for tunnel = 1:tunnels.count
-    tunnels.mask{tunnels.count+2-tunnel} = tunnels.mask{tunnels.count+1-tunnel};
-end
-tunnels.mask{1} = Zones(4).maskfilled;
-tunnels.zscored = [1 tunnels.zscored];
-tunnels.binarized = [0 tunnels.binarized];
-tunnels.discreted = [0 tunnels.discreted];
-tunnels.count = length(tunnels.mask);
 
 tunnels.act = zeros(1,n_frames);
 
@@ -312,14 +305,14 @@ for frame = 1:500
         if tunnels.mask{tunnel, 1}(round(BodyPartsTracesMainY(Point.Center,frame)), round(BodyPartsTracesMainX(Point.Center,frame)/Options.x_kcorr))
             start_tunnel = [start_tunnel tunnel];
         end
-    end    
+    end
 end
 
 histogram(start_tunnel,'BinMethod','integer');
 saveas(gcf, sprintf('%s\\%s_Start_point.png', PathOut, Filename));
 delete(gcf);
-
-[unique_values, ~, ~] = unique(start_tunnel);
+% 
+% [unique_values, ~, ~] = unique(start_tunnel);
 % counts = accumarray(ic, 1);
 
 % [~, max_idx] = max(counts);
@@ -339,12 +332,12 @@ delete(gcf);
 %     most_frequent = [];
 % end
 
-most_frequent = find(ismember(2:32, unique_values), 1, 'first');
-if isempty(most_frequent)
-    most_frequent = [];
-else
-    most_frequent = most_frequent + 1; % так как ищем начиная с 2
-end
+% most_frequent = find(ismember(2:32, unique_values), 1, 'first');
+% if isempty(most_frequent)
+%     most_frequent = [];
+% else
+%     most_frequent = most_frequent + 1; % так как ищем начиная с 2
+% end
 
 if isempty(most_frequent)
     fprintf('Стартовый рукав: %d\n', 1);
@@ -370,7 +363,8 @@ for frame = 1:n_frames
             tunnels.act(frame) = min(tunnel_this_frame_real);
         end
         queue = [tunnels.act(frame)-2,tunnels.act(frame)-1,tunnels.act(frame),tunnels.act(frame)+1,tunnels.act(frame)+2];
-        
+%         queue = [max(2,tunnels.act(frame)-3), tunnels.act(frame)-2,tunnels.act(frame)-1,tunnels.act(frame),tunnels.act(frame)+1,tunnels.act(frame)+2];
+%         queue = [tunnels.act(frame)-1,tunnels.act(frame),tunnels.act(frame)+1];
     else
         tunnels.act(frame) = queue(3);
     end
@@ -763,8 +757,8 @@ if PlotOption.main
     open(v);
     h = waitbar(1/n_frames, sprintf('Plotting video, frame %d of %d', 0,  n_frames));
     %     for k=1:n_frames
-    start_frame = 1;
-    duration_second = 10;
+    start_frame = 9*60*30;
+    duration_second = 90;
     for k=start_frame:start_frame + round(Options.FrameRate)*duration_second
         if ~mod(k,10)
             h = waitbar(k/n_frames, h, sprintf('Plotting video, frame %d of %d', k,  n_frames));
@@ -775,9 +769,9 @@ if PlotOption.main
         IM(:,:,1) = BlackFrame;
         IM(:,:,2) = BlackFrame;
         IM(:,:,3) = BlackFrame;
-        for part=1:length(BodyPartsNames)
-            IM = insertShape(IM,'filledcircle', [BodyPartsX_polar(part,k) BodyPartsY_polar(part,k) MarkSize],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
-        end
+%         for part=1:length(BodyPartsNames)
+%             IM = insertShape(IM,'filledcircle', [BodyPartsX_polar(part,k) BodyPartsY_polar(part,k) MarkSize],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
+%         end
         
         % points of bodyparts in a fixed frame of reference
         for part=1:length(BodyPartsNames)
@@ -1246,7 +1240,7 @@ if PlotOption.acts
     colorbase = jet(BodyPartsNumber);
     MaxPoints = 1000;
 %     for act = 1:size(Acts,2)
-    for act = [3 7 12]
+    for act = [3 6 12 13]
 
         fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
         v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');

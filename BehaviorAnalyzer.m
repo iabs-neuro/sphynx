@@ -33,7 +33,7 @@ DegreeSmoothSGolayDefault = 3;          % length of window for smoothing
 BodyPartsCenterNames = {'mass centre' 'mass center' 'bodycenter' 'center'};
 BodyPartsTailbaseNames = {'tailbase' 'Tailbase' 'Tail base' 'tail base'};
 
-PlotOption.main = 1;
+PlotOption.main = 0;
 PlotOption.acts = 1;
 PlotOption.track = 1;
 
@@ -152,6 +152,7 @@ Screensize = get(0, 'Screensize');
 if EndTime == 0
     EndTime = size(file,1);
 end
+EndTime = min(EndTime, size(file,1));
 
 n_frames = EndTime-StartTime+1;                                 % number of frames for pure experiment
 time = (1:n_frames)/Options.FrameRate;
@@ -381,7 +382,7 @@ if PlotOption.main
     open(v);
     h = waitbar(1/n_frames, sprintf('Plotting video, frame %d of %d', 0,  n_frames));
 %     for k=1:n_frames
-    for k=4000:5000
+    for k=4000:4100
 %         if ~mod(k,100)
             h = waitbar(k/n_frames, h, sprintf('Plotting video, frame %d of %d', k,  n_frames));
 %         end
@@ -607,7 +608,8 @@ legend(['Speed' {Acts(1:3).ActName} 'Freezing' 'Rear']);
 title('Acts division by speed');
 xlabel('Time, s');
 ylabel('Speed, cm/s');
-saveas(h, sprintf('%s\\%s_acts.fig', PathOut,Filename));
+saveas(h, sprintf('%s\\%s_velocity_acts.fig', PathOut,Filename));
+saveas(h, sprintf('%s\\%s_velocity_acts.png', PathOut,Filename));
 delete(h);
 
 h = figure('Position', Screensize);
@@ -626,10 +628,10 @@ delete(h);
 %% make separate acts videos
 
 if PlotOption.acts
-    MaxPoints = 300;
+    MaxPoints = 20000000;
     
-    for act = 1:size(Acts,2)
-%     for act = [1:10]
+%     for act = 1:size(Acts,2)
+    for act = [4 5]
         fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
         v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
         v.FrameRate = Options.FrameRate;
