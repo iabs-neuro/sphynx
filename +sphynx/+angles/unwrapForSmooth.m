@@ -25,7 +25,9 @@ function out = unwrapForSmooth(angles, windowLen, varargin)
     if numel(unwrapped) < windowLen
         smoothed = unwrapped;
     else
-        smoothed = smooth(unwrapped, windowLen, 'sgolay', polyOrder);
+        % Use sgolayfilt (Signal Processing Toolbox) instead of
+        % smooth(...,'sgolay',...) (Curve Fitting Toolbox dependency).
+        smoothed = sgolayfilt(unwrapped, polyOrder, windowLen);
     end
     out = sphynx.angles.wrap(smoothed);
 end
