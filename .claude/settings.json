@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git tag *)",
+      "Bash(git stash *)",
+      "Bash(git rebase *)",
+      "Bash(git merge *)",
+      "Bash(git mv *)",
+      "Bash(git rm *)",
+      "Bash(git status *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git show *)",
+      "Bash(git branch *)",
+      "Bash(git blame *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git restore *)",
+      "Bash(git revert *)",
+      "Bash(git cherry-pick *)",
+      "Bash(git remote *)",
+      "Bash(git ls-files *)",
+      "Bash(git ls-tree *)",
+      "Bash(git rev-parse *)",
+      "Bash(git symbolic-ref *)",
+      "Bash(git describe *)",
+      "Bash(git reflog *)",
+      "Bash(jq *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(echo *)",
+      "Bash(printf *)",
+      "Bash(true)",
+      "Bash(mkdir -p *)",
+      "Bash(touch *)"
+    ],
+    "deny": [
+      "Bash(git push *)",
+      "Bash(git reset --hard *)",
+      "Bash(git reset --hard)",
+      "Bash(git clean -f *)",
+      "Bash(git clean -f)",
+      "Bash(git branch -D *)"
+    ]
+  }
+}
