@@ -40,7 +40,9 @@ function results = runAllTests(varargin)
     cleaner = onCleanup(@() setenv('SPHYNX_HEADLESS', prevHeadless));
 
     import matlab.unittest.TestSuite;
-    suite = TestSuite.empty(0,1);
+    % matlab.unittest.TestSuite is abstract; concrete tests are
+    % matlab.unittest.Test arrays returned by fromFolder/fromClass/etc.
+    suite = matlab.unittest.Test.empty;
     for i = 1:numel(buckets)
         bucketDir = fullfile(here, buckets{i});
         if isfolder(bucketDir)
