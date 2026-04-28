@@ -1,27 +1,28 @@
 classdef CreatePresetApp < handle
 % CREATEPRESETAPP  Single-window preset builder for sphynx.
 %
-%   sphynx.app.CreatePresetApp() opens a uifigure-based preset editor.
-%   Layout: left column of step-panels (Load -> Calibration -> Arena
-%   -> Objects -> Zones -> Save), right column with a large preview
-%   axes. Each panel has a `?` help button.
+%   sphynx.app.CreatePresetApp() opens a uifigure-based two-tab editor:
+%     Tab 1: Create Preset (full preset builder)
+%     Tab 2: Analyze Session (placeholder for batch run, Pass E)
+%
+%   Tab 1 layout: left column of step-panels (Load -> Calibration ->
+%   Arena -> Objects -> Zones -> Save+Plot), right column with a
+%   large preview axes + NextFrame button.
 %
 %   Implementation: hand-written `handle` class using uifigure +
-%   uigridlayout (modern alternative to App Designer .mlapp).
-%   All compute/IO logic delegated to +sphynx/+preset/* and
-%   +sphynx/+pipeline/*. The app is a thin shell.
+%   uitabgroup + uigridlayout. Compute / IO logic lives in
+%   +sphynx/+preset/* and +sphynx/+pipeline/*; this file is a thin
+%   shell with state management.
 %
 %   Built for MATLAB R2020a.
-%
-%   Public-state struct (`State`) is mutable and exposed for tests.
-%   Programmatic API: setVideo, setOutDir, setPixelsPerCm, setArena,
-%   addObject, addZones (replaces buildZones), savePreset.
 
     properties
         Figure
+        TabGroup
+        TabCreate
+        TabAnalyze
         % Layout containers
         OuterGrid
-        LeftScroll
         LeftGrid
         RightGrid
         % Panels
@@ -31,12 +32,12 @@ classdef CreatePresetApp < handle
         ObjectsPanel
         ZonesPanel
         SavePanel
-        % Load panel components
+        % Load
         ProjectRootField
         VideoPathField
         OutDirField
         PresetPathField
-        % Calibration components
+        % Calibration
         DistanceYField
         DistanceXField
         PxlPerCmYLabel
@@ -44,26 +45,28 @@ classdef CreatePresetApp < handle
         PxlPerCmAvgLabel
         XKcorrLabel
         ExpTypeDropDown
-        % Arena components
+        % Arena
         ArenaGeometryDropDown
         ArenaStatusLabel
-        % Objects components
+        % Objects
         ObjectGeometryDropDown
         ObjectsListBox
-        % Zones components
+        % Zones
         ZonesStrategyDropDown
         WallWidthField
         MiddleWidthField
         NumStripsField
         StripDirDropDown
         ObjectZoneWidthField
-        AppliedZonesListBox
+        ZonesCountLabel
+        % Save / plot
+        PlotAllCheckbox
         % Preview
         PreviewAxes
         FrameIndexLabel
         % Status
         StatusBar
-        % State (public for tests)
+        % State
         State
     end
 
@@ -72,6 +75,7 @@ classdef CreatePresetApp < handle
             app.State = sphynx.app.CreatePresetApp.emptyState();
             app.buildUI();
             sphynx.util.log('info', '[App] CreatePresetApp opened');
+            app.refocus();
         end
 
         function delete(app)
@@ -80,7 +84,7 @@ classdef CreatePresetApp < handle
             end
         end
 
-        % --- Programmatic API (also used by tests) ----------------------------
+        % --- Programmatic API (stable for tests) ----------------------------
         function setVideo(app, path)
             try
                 gframe = sphynx.preset.pickGoodFrame(path, 'FrameIndex', 1);
@@ -92,11 +96,12 @@ classdef CreatePresetApp < handle
                 app.State.width = gframe.width;
                 app.State.frameIndex = 1;
                 if ~isempty(app.VideoPathField); app.VideoPathField.Value = path; end
+                if ~isempty(app.FrameIndexLabel)
+                    app.FrameIndexLabel.Text = sprintf('Frame %d / %d', 1, app.State.numFrames);
+                end
                 app.refreshPreview();
                 app.status(sprintf('Loaded video: %dx%d, %d frames @ %.1f fps', ...
                     app.State.width, app.State.height, app.State.numFrames, app.State.frameRate));
-                sphynx.util.log('info', '[App] setVideo path=%s w=%d h=%d frames=%d fps=%.2f', ...
-                    path, app.State.width, app.State.height, app.State.numFrames, app.State.frameRate);
             catch ME
                 app.status(sprintf('Video load failed: %s', ME.message));
             end
@@ -105,17 +110,16 @@ classdef CreatePresetApp < handle
         function setOutDir(app, dir)
             app.State.outDir = dir;
             if ~isempty(app.OutDirField); app.OutDirField.Value = dir; end
-            sphynx.util.log('info', '[App] setOutDir %s', dir);
+            app.status(sprintf('Output dir: %s', dir));
         end
 
         function setProjectRoot(app, dir)
             app.State.projectRoot = dir;
             if ~isempty(app.ProjectRootField); app.ProjectRootField.Value = dir; end
-            sphynx.util.log('info', '[App] setProjectRoot %s', dir);
+            app.status(sprintf('Project root: %s', dir));
         end
 
         function setPixelsPerCm(app, pxlAvg, varargin)
-            % setPixelsPerCm(avg) or setPixelsPerCm(avg, 'Y', y, 'X', x, 'KCorr', kc)
             p = inputParser;
             addParameter(p, 'Y', NaN);
             addParameter(p, 'X', NaN);
@@ -126,7 +130,7 @@ classdef CreatePresetApp < handle
             app.State.pxlPerCmX = ifNaN(p.Results.X, pxlAvg);
             app.State.x_kcorr = p.Results.KCorr;
             app.refreshCalibLabels();
-            sphynx.util.log('info', '[App] setPixelsPerCm avg=%.3f Y=%.3f X=%.3f kcorr=%.3f', ...
+            sphynx.util.log('info', '[App] pxl/cm: avg=%.3f Y=%.3f X=%.3f kcorr=%.3f', ...
                 pxlAvg, app.State.pxlPerCmY, app.State.pxlPerCmX, app.State.x_kcorr);
         end
 
@@ -137,10 +141,10 @@ classdef CreatePresetApp < handle
                 app.State.arena = arena;
                 app.ArenaStatusLabel.Text = sprintf('Arena: %s OK', geometry);
                 app.refreshPreview();
-                sphynx.util.log('info', '[App] setArena geometry=%s npoints=%d', geometry, size(points,1));
+                onZoneStrategyChanged(app);   % object-zone field may change
+                sphynx.util.log('info', '[App] arena geometry=%s npoints=%d', geometry, size(points,1));
             catch ME
                 app.status(sprintf('Arena failed: %s', ME.message));
-                sphynx.util.log('warn', '[App] setArena ERROR: %s', ME.message);
             end
         end
 
@@ -155,96 +159,123 @@ classdef CreatePresetApp < handle
                 end
                 app.refreshObjectsList();
                 app.refreshPreview();
-                sphynx.util.log('info', '[App] addObject geometry=%s npoints=%d total=%d', ...
-                    geometry, size(points,1), numel(app.State.objects));
+                onZoneStrategyChanged(app);
+                sphynx.util.log('info', '[App] object %d added geometry=%s', numel(app.State.objects), geometry);
             catch ME
                 app.status(sprintf('Object failed: %s', ME.message));
-                sphynx.util.log('warn', '[App] addObject ERROR: %s', ME.message);
             end
         end
 
-        function addZones(app)
-            % Compute zones with current strategy+params and ADD them to
-            % the cumulative State.zones set (replaces buildZones — old
-            % name overwrote each time).
-            if isempty(app.State.arena)
-                app.status('Define arena first');
-                return;
+        function removeSelectedObject(app)
+            if isempty(app.State.objects); return; end
+            idx = find(strcmp(app.ObjectsListBox.Items, app.ObjectsListBox.Value), 1);
+            if isempty(idx); return; end
+            removed = app.State.objects(idx).type;
+            app.State.objects(idx) = [];
+            % Renumber remaining objects so their type labels stay sequential
+            for k = 1:numel(app.State.objects)
+                app.State.objects(k).type = sprintf('Object%d', k);
             end
-            try
-                strategy = app.ZonesStrategyDropDown.Value;
-                wallCm = app.WallWidthField.Value;        % numeric field, use directly
-                switch strategy
-                    case 'corners-walls-center'
-                        Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, ...
-                            'Strategy', 'corners-walls-center', ...
-                            'PixelsPerCm', app.State.pxlPerCm, ...
-                            'WallWidthCm', wallCm, ...
-                            'CornerPoints', cornerPointsFromArena(app.State.arena));
-                    case 'strips'
-                        Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, ...
-                            'Strategy', 'strips', ...
-                            'NumStrips', app.NumStripsField.Value, ...
-                            'StripDirection', app.StripDirDropDown.Value);
-                    case 'circle-rings'
-                        Z = sphynx.preset.buildZonesCircle(app.State.arena.mask, ...
-                            'PixelsPerCm', app.State.pxlPerCm, ...
-                            'WallWidthCm', wallCm, ...
-                            'MiddleWidthCm', app.MiddleWidthField.Value);
-                    case 'none'
-                        Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, 'Strategy', 'none');
-                end
-                % Append (don't overwrite) to support combined strategies
-                if isempty(app.State.zones)
-                    app.State.zones = Z;
-                else
-                    app.State.zones(end+1:end+numel(Z)) = Z;
-                end
-                app.refreshAppliedZonesList();
-                app.refreshPreview();
-                app.status(sprintf('Added %d zones (%s); total=%d', ...
-                    numel(Z), strategy, numel(app.State.zones)));
-                sphynx.util.log('info', '[App] addZones strategy=%s added=%d total=%d', ...
-                    strategy, numel(Z), numel(app.State.zones));
-            catch ME
-                app.status(sprintf('Zones failed: %s', ME.message));
-                sphynx.util.log('warn', '[App] addZones ERROR: %s', ME.message);
+            app.refreshObjectsList();
+            app.refreshPreview();
+            onZoneStrategyChanged(app);
+            sphynx.util.log('info', '[App] removed %s; %d remain', removed, numel(app.State.objects));
+        end
+
+        function previewZones(app)
+            % Build zones with current strategy+params and SHOW them on
+            % preview, but do not commit to State.zones.
+            Z = computeZonesFromUI(app);
+            if isempty(Z); return; end
+            app.State.previewZones = Z;
+            app.refreshPreview();
+            app.status(sprintf('Previewing %d zones (%s)', numel(Z), app.ZonesStrategyDropDown.Value));
+        end
+
+        function addZones(app)
+            Z = computeZonesFromUI(app);
+            if isempty(Z); return; end
+            if isempty(app.State.zones)
+                app.State.zones = Z;
+            else
+                app.State.zones(end+1:end+numel(Z)) = Z;
+            end
+            app.State.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
+            app.refreshZonesCount();
+            app.refreshPreview();
+            sphynx.util.log('info', '[App] added %d zones (%s); total committed = %d', ...
+                numel(Z), app.ZonesStrategyDropDown.Value, numel(app.State.zones));
+            for k = 1:numel(Z)
+                sphynx.util.log('info', '       zone[%d] = %s', numel(app.State.zones)-numel(Z)+k, Z(k).name);
             end
         end
 
         function clearZones(app)
             app.State.zones = struct('name', {}, 'type', {}, 'maskfilled', {});
-            app.refreshAppliedZonesList();
+            app.State.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
+            app.refreshZonesCount();
             app.refreshPreview();
-            sphynx.util.log('info', '[App] clearZones');
+            app.status('Cleared all zones');
         end
 
         function savePreset(app)
-            if isempty(app.State.outDir)
-                app.status('Set output directory first');
-                return;
-            end
-            if isempty(app.State.arena)
-                app.status('Define arena first');
-                return;
-            end
+            if isempty(app.State.outDir); app.status('Set output dir'); return; end
+            if isempty(app.State.arena); app.status('Define arena first'); return; end
             try
                 Options = app.assembleOptions();
                 ArenaAndObjects = app.assembleArenaAndObjects();
                 Zones = app.State.zones;
-                if isempty(Zones)
-                    Zones = struct('name', {}, 'type', {}, 'maskfilled', {});
-                end
+                if isempty(Zones); Zones = struct('name',{},'type',{},'maskfilled',{}); end
                 [~, baseName, ~] = fileparts(app.State.videoPath);
                 if isempty(baseName); baseName = 'preset'; end
                 outPath = fullfile(app.State.outDir, sprintf('%s_Preset.mat', baseName));
                 save(outPath, 'Options', 'Zones', 'ArenaAndObjects');
-                app.status(sprintf('Saved preset: %s', outPath));
-                sphynx.util.log('info', '[App] savePreset wrote %s', outPath);
+                app.status(sprintf('Saved: %s', outPath));
             catch ME
                 app.status(sprintf('Save failed: %s', ME.message));
-                sphynx.util.log('warn', '[App] savePreset ERROR: %s', ME.message);
             end
+        end
+
+        function makePlot(app)
+            if isempty(app.State.frame); app.status('Load video first'); return; end
+            if isempty(app.State.outDir); app.status('Set output dir'); return; end
+            plotAll = false;
+            if ~isempty(app.PlotAllCheckbox); plotAll = app.PlotAllCheckbox.Value; end
+            [~, baseName, ~] = fileparts(app.State.videoPath);
+            if isempty(baseName); baseName = 'preset'; end
+
+            % Always: one combined plot (arena + objects + all zones)
+            fh = figure('Visible', 'off', 'Position', [100 100 800 600]);
+            cleanup1 = onCleanup(@() closeIfValid(fh));
+            ax = axes(fh);
+            drawState(ax, app.State, true);
+            title(ax, sprintf('%s — combined layout', baseName), 'Interpreter', 'none');
+            outPath = fullfile(app.State.outDir, sprintf('%s_layout.png', baseName));
+            exportgraphics(ax, outPath);
+            sphynx.util.log('info', '[App] saved plot %s', outPath);
+            clear cleanup1;
+
+            % Optional: one per zone
+            if plotAll && ~isempty(app.State.zones)
+                for k = 1:numel(app.State.zones)
+                    fh2 = figure('Visible', 'off', 'Position', [100 100 800 600]);
+                    cleanup2 = onCleanup(@() closeIfValid(fh2));
+                    ax2 = axes(fh2);
+                    drawState(ax2, app.State, false);
+                    z = app.State.zones(k);
+                    if (isnumeric(z.maskfilled) || islogical(z.maskfilled))
+                        hold(ax2, 'on');
+                        [r, c] = find(z.maskfilled);
+                        scatter(ax2, c, r, 1, 'b', 'filled', 'MarkerFaceAlpha', 0.1);
+                    end
+                    title(ax2, sprintf('%s — zone: %s', baseName, z.name), 'Interpreter', 'none');
+                    outPath2 = fullfile(app.State.outDir, sprintf('%s_zone_%s.png', baseName, sanitize(z.name)));
+                    exportgraphics(ax2, outPath2);
+                    sphynx.util.log('info', '[App] saved plot %s', outPath2);
+                    clear cleanup2;
+                end
+            end
+            app.status(sprintf('Plots saved to %s', app.State.outDir));
         end
 
         function nextFrame(app)
@@ -258,70 +289,38 @@ classdef CreatePresetApp < handle
                 if ~isempty(app.FrameIndexLabel)
                     app.FrameIndexLabel.Text = sprintf('Frame %d / %d', app.State.frameIndex, app.State.numFrames);
                 end
-                sphynx.util.log('info', '[App] nextFrame -> %d', app.State.frameIndex);
             catch ME
                 app.status(sprintf('NextFrame failed: %s', ME.message));
             end
         end
     end
 
-    % ====== UI builders (private) ============================================
+    % ========== UI builders =================================================
     methods (Access = private)
         function buildUI(app)
-            app.Figure = uifigure('Name', 'sphynx — Create Preset', ...
-                'Position', [80, 80, 1280, 800], 'Visible', 'on');
+            app.Figure = uifigure('Name', 'sphynx — Preset & Analyze', ...
+                'Position', [80, 80, 1300, 820], 'Visible', 'on');
+            app.TabGroup = uitabgroup(app.Figure, 'Position', [1 1 1300 820]);
+            app.TabCreate = uitab(app.TabGroup, 'Title', 'Create Preset');
+            app.TabAnalyze = uitab(app.TabGroup, 'Title', 'Analyze Session');
 
-            app.OuterGrid = uigridlayout(app.Figure, [1, 2]);
-            app.OuterGrid.ColumnWidth = {520, '1x'};
-            app.OuterGrid.RowHeight = {'1x'};
+            buildCreateTab(app);
+            buildAnalyzeTab(app);
+        end
 
-            % Left side: scroll-friendly grid of panels
-            app.LeftGrid = uigridlayout(app.OuterGrid, [7, 1]);
-            app.LeftGrid.Layout.Column = 1;
-            app.LeftGrid.RowHeight = {180, 200, 90, 160, 240, 80, 30};
-            app.LeftGrid.RowSpacing = 5;
-            app.LeftGrid.Padding = [5 5 5 5];
-
-            app.LoadPanel    = uipanel(app.LeftGrid, 'Title', '1. Load');
-            app.CalibPanel   = uipanel(app.LeftGrid, 'Title', '2. Calibration');
-            app.ArenaPanel   = uipanel(app.LeftGrid, 'Title', '3. Arena');
-            app.ObjectsPanel = uipanel(app.LeftGrid, 'Title', '4. Objects');
-            app.ZonesPanel   = uipanel(app.LeftGrid, 'Title', '5. Zones');
-            app.SavePanel    = uipanel(app.LeftGrid, 'Title', '6. Save / Run');
-            statusPanel      = uipanel(app.LeftGrid, 'Title', 'Status');
-
-            buildLoadPanel(app);
-            buildCalibPanel(app);
-            buildArenaPanel(app);
-            buildObjectsPanel(app);
-            buildZonesPanel(app);
-            buildSavePanel(app);
-            buildStatusPanel(app, statusPanel);
-
-            % Right side: large preview + NextFrame
-            app.RightGrid = uigridlayout(app.OuterGrid, [2, 1]);
-            app.RightGrid.Layout.Column = 2;
-            app.RightGrid.RowHeight = {'1x', 40};
-            previewWrap = uipanel(app.RightGrid, 'Title', 'Preview');
-            previewGrid = uigridlayout(previewWrap, [1, 1]);
-            app.PreviewAxes = uiaxes(previewGrid);
-            app.PreviewAxes.XTick = []; app.PreviewAxes.YTick = [];
-
-            ctrlPanel = uipanel(app.RightGrid);
-            cg = uigridlayout(ctrlPanel, [1, 4]);
-            cg.ColumnWidth = {120, 100, 100, '1x'};
-            bNext = uibutton(cg, 'Text', 'Next frame', ...
-                'ButtonPushedFcn', @(~,~) app.nextFrame());
-            bNext.Layout.Row = 1; bNext.Layout.Column = 1;
-            app.FrameIndexLabel = uilabel(cg, 'Text', 'Frame -- / --');
-            app.FrameIndexLabel.Layout.Row = 1; app.FrameIndexLabel.Layout.Column = 2;
+        function refocus(app)
+            % Bring app figure back to front (after a log/status / external focus)
+            if ~isempty(app.Figure) && isvalid(app.Figure)
+                figure(app.Figure);
+            end
         end
 
         function status(app, msg)
             if ~isempty(app.StatusBar) && isvalid(app.StatusBar)
                 app.StatusBar.Text = msg;
             end
-            sphynx.util.log('info', '[App.status] %s', msg);
+            sphynx.util.log('info', '[App] %s', msg);
+            app.refocus();
         end
 
         function refreshPreview(app)
@@ -329,24 +328,35 @@ classdef CreatePresetApp < handle
             cla(app.PreviewAxes);
             imshow(app.State.frame, 'Parent', app.PreviewAxes);
             hold(app.PreviewAxes, 'on');
+            % Arena
             if ~isempty(app.State.arena) && ~isempty(app.State.arena.border_x)
                 plot(app.PreviewAxes, app.State.arena.border_x(:), app.State.arena.border_y(:), ...
                     'k-', 'LineWidth', 2);
             end
-            for k = 1:numel(app.State.objects)
-                plot(app.PreviewAxes, app.State.objects(k).border_x(:), app.State.objects(k).border_y(:), ...
-                    'g-', 'LineWidth', 2);
+            % Objects, with selection highlight
+            selIdx = -1;
+            if ~isempty(app.ObjectsListBox) && ~isempty(app.ObjectsListBox.Value)
+                selIdx = find(strcmp(app.ObjectsListBox.Items, app.ObjectsListBox.Value), 1);
             end
+            for k = 1:numel(app.State.objects)
+                if k == selIdx
+                    lw = 3.5; col = [1 0.5 0];   % orange highlight
+                else
+                    lw = 1.5; col = [0 0.7 0];   % green
+                end
+                plot(app.PreviewAxes, app.State.objects(k).border_x(:), app.State.objects(k).border_y(:), ...
+                    '-', 'Color', col, 'LineWidth', lw);
+            end
+            % Committed zones — light blue
             if ~isempty(app.State.zones)
-                colors = lines(numel(app.State.zones));
                 for k = 1:numel(app.State.zones)
-                    z = app.State.zones(k);
-                    if ~isnumeric(z.maskfilled) && ~islogical(z.maskfilled); continue; end
-                    [r, c] = find(z.maskfilled);
-                    if ~isempty(r)
-                        scatter(app.PreviewAxes, c, r, 1, colors(k,:), 'filled', ...
-                            'MarkerFaceAlpha', 0.05);
-                    end
+                    drawZoneOverlay(app.PreviewAxes, app.State.zones(k), [0 0.5 1], 0.05);
+                end
+            end
+            % Preview-only zones (not yet committed) — magenta
+            if ~isempty(app.State.previewZones)
+                for k = 1:numel(app.State.previewZones)
+                    drawZoneOverlay(app.PreviewAxes, app.State.previewZones(k), [1 0 1], 0.10);
                 end
             end
             hold(app.PreviewAxes, 'off');
@@ -355,6 +365,7 @@ classdef CreatePresetApp < handle
         function refreshObjectsList(app)
             if isempty(app.State.objects)
                 app.ObjectsListBox.Items = {};
+                app.ObjectsListBox.Value = {};
                 return;
             end
             items = arrayfun(@(o) sprintf('%s (%s)', o.type, o.geometry), ...
@@ -362,14 +373,10 @@ classdef CreatePresetApp < handle
             app.ObjectsListBox.Items = items;
         end
 
-        function refreshAppliedZonesList(app)
-            if isempty(app.State.zones)
-                app.AppliedZonesListBox.Items = {};
-                return;
+        function refreshZonesCount(app)
+            if ~isempty(app.ZonesCountLabel)
+                app.ZonesCountLabel.Text = sprintf('Committed zones: %d', numel(app.State.zones));
             end
-            items = arrayfun(@(z) sprintf('%s (%s)', z.name, z.type), ...
-                app.State.zones, 'UniformOutput', false);
-            app.AppliedZonesListBox.Items = items;
         end
 
         function refreshCalibLabels(app)
@@ -435,42 +442,103 @@ classdef CreatePresetApp < handle
             s.pxlPerCmY = NaN;
             s.pxlPerCmX = NaN;
             s.x_kcorr = 1;
+            s.calibPoints = [];
             s.arena = [];
             s.objects = struct('type', {}, 'geometry', {}, 'border_x', {}, 'border_y', {}, ...
                                 'border_separate_x', {}, 'border_separate_y', {}, 'mask', {});
             s.zones = struct('name', {}, 'type', {}, 'maskfilled', {});
+            s.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
         end
     end
 end
 
-% ========== Panel builders (helper local functions) =====================
+% =================== Tab builders =========================================
+
+function buildCreateTab(app)
+    app.OuterGrid = uigridlayout(app.TabCreate, [1, 2]);
+    app.OuterGrid.ColumnWidth = {520, '1x'};
+    app.OuterGrid.RowHeight = {'1x'};
+
+    app.LeftGrid = uigridlayout(app.OuterGrid, [7, 1]);
+    app.LeftGrid.Layout.Column = 1;
+    app.LeftGrid.RowHeight = {180, 200, 90, 170, 240, 70, 30};
+    app.LeftGrid.RowSpacing = 5;
+    app.LeftGrid.Padding = [5 5 5 5];
+
+    app.LoadPanel    = uipanel(app.LeftGrid, 'Title', '1. Load');
+    app.CalibPanel   = uipanel(app.LeftGrid, 'Title', '2. Calibration');
+    app.ArenaPanel   = uipanel(app.LeftGrid, 'Title', '3. Arena');
+    app.ObjectsPanel = uipanel(app.LeftGrid, 'Title', '4. Objects');
+    app.ZonesPanel   = uipanel(app.LeftGrid, 'Title', '5. Zones');
+    app.SavePanel    = uipanel(app.LeftGrid, 'Title', '6. Save / Plot');
+    statusPanel      = uipanel(app.LeftGrid, 'Title', 'Status');
+
+    buildLoadPanel(app);
+    buildCalibPanel(app);
+    buildArenaPanel(app);
+    buildObjectsPanel(app);
+    buildZonesPanel(app);
+    buildSavePanel(app);
+    buildStatusPanel(app, statusPanel);
+
+    % Right column
+    app.RightGrid = uigridlayout(app.OuterGrid, [2, 1]);
+    app.RightGrid.Layout.Column = 2;
+    app.RightGrid.RowHeight = {'1x', 40};
+    previewWrap = uipanel(app.RightGrid, 'Title', 'Preview (committed zones=blue, preview=magenta)');
+    pg = uigridlayout(previewWrap, [1, 1]);
+    app.PreviewAxes = uiaxes(pg);
+    app.PreviewAxes.XTick = []; app.PreviewAxes.YTick = [];
+
+    ctrlPanel = uipanel(app.RightGrid);
+    cg = uigridlayout(ctrlPanel, [1, 3]);
+    cg.ColumnWidth = {120, 150, '1x'};
+    bNext = uibutton(cg, 'Text', 'Next frame', ...
+        'ButtonPushedFcn', @(~,~) app.nextFrame());
+    bNext.Layout.Row = 1; bNext.Layout.Column = 1;
+    app.FrameIndexLabel = uilabel(cg, 'Text', 'Frame -- / --');
+    app.FrameIndexLabel.Layout.Row = 1; app.FrameIndexLabel.Layout.Column = 2;
+end
+
+function buildAnalyzeTab(app)
+    g = uigridlayout(app.TabAnalyze, [3, 1]);
+    g.RowHeight = {30, 30, '1x'};
+    lbl1 = uilabel(g, 'Text', 'Analyze Session — placeholder', 'FontSize', 16);
+    lbl1.Layout.Row = 1;
+    lbl2 = uilabel(g, 'Text', ['This tab will host the batch run UI for sphynx.pipeline.runBatch ' ...
+        'and sphynx.pipeline.analyzeSession. For now, run from the Command Window:']);
+    lbl2.Layout.Row = 2;
+    txt = uitextarea(g, 'Value', { ...
+        'cfg = sphynx.pipeline.defaultConfig();', ...
+        'cfg.paths.dlc = ''<repo>/Demo/DLC/<file>.csv'';', ...
+        'cfg.paths.preset = ''<saved preset>.mat'';', ...
+        'cfg.io.saveWorkspace = true;', ...
+        'cfg.paths.outDir = ''<output dir>'';', ...
+        'result = sphynx.pipeline.analyzeSession(cfg);'}, ...
+        'Editable', 'off');
+    txt.Layout.Row = 3;
+end
+
+% =================== Panel builders =======================================
 
 function buildLoadPanel(app)
     g = uigridlayout(app.LoadPanel, [4 3]);
     g.RowHeight = {25, 25, 25, 25};
-    g.ColumnWidth = {110, '1x', 50};
+    g.ColumnWidth = {110, '1x', 70};
 
-    addRow(g, 1, 'Project root:', @() pickDir(app, 'setProjectRoot'), ...
-        @() refreshAppField(app, 'ProjectRootField'), 'projectRoot', app);
-    addRow(g, 2, 'Video file:',   @() pickVideoStart(app), ...
-        @() refreshAppField(app, 'VideoPathField'), 'videoPath', app);
-    addRow(g, 3, 'Output dir:',   @() pickDirStart(app, 'setOutDir'), ...
-        @() refreshAppField(app, 'OutDirField'), 'outDir', app);
-    addRow(g, 4, 'Existing preset:', @() pickPresetStart(app), ...
-        @() refreshAppField(app, 'PresetPathField'), 'presetPath', app);
-
-    % Help button at top-right of panel — we use a 5th narrow column trick
-    % by piggy-backing onto the panel border (no extra column reqd here).
+    addRow(g, 1, 'Project root:', @() pickDirAndApply(app, 'setProjectRoot'), 'projectRoot', app);
+    addRow(g, 2, 'Video file:',   @() pickVideoStart(app), 'videoPath', app);
+    addRow(g, 3, 'Output dir:',   @() pickDirAndApply(app, 'setOutDir'), 'outDir', app);
+    addRow(g, 4, 'Existing preset:', @() pickPresetStart(app), 'presetPath', app);
 end
 
-function addRow(g, row, labelText, btnFcn, ~, fieldKey, app)
+function addRow(g, row, labelText, btnFcn, fieldKey, app)
     lbl = uilabel(g, 'Text', labelText);
     lbl.Layout.Row = row; lbl.Layout.Column = 1;
     fld = uieditfield(g, 'text', 'Value', '');
     fld.Layout.Row = row; fld.Layout.Column = 2;
     btn = uibutton(g, 'Text', 'Browse', 'ButtonPushedFcn', @(~,~) btnFcn());
     btn.Layout.Row = row; btn.Layout.Column = 3;
-    % Bind field handle into the app
     switch fieldKey
         case 'projectRoot'; app.ProjectRootField = fld;
         case 'videoPath';   app.VideoPathField = fld;
@@ -482,14 +550,17 @@ end
 function buildCalibPanel(app)
     g = uigridlayout(app.CalibPanel, [4 4]);
     g.RowHeight = {28, 28, 28, 28};
-    g.ColumnWidth = {130, 90, 90, '1x'};
+    g.ColumnWidth = {180, 90, 180, 60};
 
-    bCalib = uibutton(g, 'Text', 'Calibrate (4 clicks)', ...
-        'ButtonPushedFcn', @(~,~) onCalibrate(app));
-    bCalib.Layout.Row = 1; bCalib.Layout.Column = 1;
-    bHelp = uibutton(g, 'Text', '?', ...
+    bChoose = uibutton(g, 'Text', 'Calibration. Choose points', ...
+        'ButtonPushedFcn', @(~,~) onCalibrateChoose(app));
+    bChoose.Layout.Row = 1; bChoose.Layout.Column = [1 2];
+    bCompute = uibutton(g, 'Text', 'Calibration. Calculation', ...
+        'ButtonPushedFcn', @(~,~) onCalibrateCompute(app));
+    bCompute.Layout.Row = 1; bCompute.Layout.Column = 3;
+    bInfo = uibutton(g, 'Text', 'INFO', ...
         'ButtonPushedFcn', @(~,~) showHelp('Calibration', helpCalibrationText()));
-    bHelp.Layout.Row = 1; bHelp.Layout.Column = 4;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
 
     lblY = uilabel(g, 'Text', 'cm Y (1->2):');
     lblY.Layout.Row = 2; lblY.Layout.Column = 1;
@@ -520,7 +591,7 @@ end
 function buildArenaPanel(app)
     g = uigridlayout(app.ArenaPanel, [2 4]);
     g.RowHeight = {28, 25};
-    g.ColumnWidth = {110, 130, 160, 50};
+    g.ColumnWidth = {110, 130, 160, 60};
     lblGeom = uilabel(g, 'Text', 'Geometry:');
     lblGeom.Layout.Row = 1; lblGeom.Layout.Column = 1;
     app.ArenaGeometryDropDown = uidropdown(g, ...
@@ -529,17 +600,17 @@ function buildArenaPanel(app)
     bArena = uibutton(g, 'Text', 'Pick arena points', ...
         'ButtonPushedFcn', @(~,~) onPickArena(app));
     bArena.Layout.Row = 1; bArena.Layout.Column = 3;
-    bHelp = uibutton(g, 'Text', '?', ...
+    bInfo = uibutton(g, 'Text', 'INFO', ...
         'ButtonPushedFcn', @(~,~) showHelp('Arena', helpArenaText()));
-    bHelp.Layout.Row = 1; bHelp.Layout.Column = 4;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
     app.ArenaStatusLabel = uilabel(g, 'Text', 'Arena: <none>');
     app.ArenaStatusLabel.Layout.Row = 2; app.ArenaStatusLabel.Layout.Column = [1 4];
 end
 
 function buildObjectsPanel(app)
-    g = uigridlayout(app.ObjectsPanel, [2 4]);
-    g.RowHeight = {28, '1x'};
-    g.ColumnWidth = {110, 130, 130, 50};
+    g = uigridlayout(app.ObjectsPanel, [3 4]);
+    g.RowHeight = {28, '1x', 28};
+    g.ColumnWidth = {110, 130, 130, 60};
     lblObjGeom = uilabel(g, 'Text', 'Geometry:');
     lblObjGeom.Layout.Row = 1; lblObjGeom.Layout.Column = 1;
     app.ObjectGeometryDropDown = uidropdown(g, ...
@@ -548,16 +619,22 @@ function buildObjectsPanel(app)
     bAdd = uibutton(g, 'Text', '+ Add object', ...
         'ButtonPushedFcn', @(~,~) onAddObject(app));
     bAdd.Layout.Row = 1; bAdd.Layout.Column = 3;
-    bHelp = uibutton(g, 'Text', '?', ...
+    bInfo = uibutton(g, 'Text', 'INFO', ...
         'ButtonPushedFcn', @(~,~) showHelp('Objects', helpObjectsText()));
-    bHelp.Layout.Row = 1; bHelp.Layout.Column = 4;
-    app.ObjectsListBox = uilistbox(g, 'Items', {});
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
+
+    app.ObjectsListBox = uilistbox(g, 'Items', {}, ...
+        'ValueChangedFcn', @(~,~) app.refreshPreview());
     app.ObjectsListBox.Layout.Row = 2; app.ObjectsListBox.Layout.Column = [1 4];
+
+    bRemove = uibutton(g, 'Text', 'Remove selected', ...
+        'ButtonPushedFcn', @(~,~) app.removeSelectedObject());
+    bRemove.Layout.Row = 3; bRemove.Layout.Column = [1 2];
 end
 
 function buildZonesPanel(app)
     g = uigridlayout(app.ZonesPanel, [6 4]);
-    g.RowHeight = {28, 28, 28, 28, 28, '1x'};
+    g.RowHeight = {28, 28, 28, 28, 28, 28};
     g.ColumnWidth = {110, 90, 110, 90};
 
     lblStrat = uilabel(g, 'Text', 'Strategy:');
@@ -566,15 +643,14 @@ function buildZonesPanel(app)
         'Items', {'corners-walls-center', 'strips', 'circle-rings', 'none'}, ...
         'ValueChangedFcn', @(~,~) onZoneStrategyChanged(app));
     app.ZonesStrategyDropDown.Layout.Row = 1; app.ZonesStrategyDropDown.Layout.Column = [2 3];
-    bHelp = uibutton(g, 'Text', '?', ...
+    bInfo = uibutton(g, 'Text', 'INFO', ...
         'ButtonPushedFcn', @(~,~) showHelp('Zones', helpZonesText()));
-    bHelp.Layout.Row = 1; bHelp.Layout.Column = 4;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
 
     lblWall = uilabel(g, 'Text', 'Wall (cm):');
     lblWall.Layout.Row = 2; lblWall.Layout.Column = 1;
     app.WallWidthField = uieditfield(g, 'numeric', 'Value', 3, 'Limits', [0, Inf]);
     app.WallWidthField.Layout.Row = 2; app.WallWidthField.Layout.Column = 2;
-
     lblMid = uilabel(g, 'Text', 'Middle (cm):');
     lblMid.Layout.Row = 2; lblMid.Layout.Column = 3;
     app.MiddleWidthField = uieditfield(g, 'numeric', 'Value', 20, 'Limits', [0.1, Inf]);
@@ -594,31 +670,36 @@ function buildZonesPanel(app)
     app.ObjectZoneWidthField = uieditfield(g, 'numeric', 'Value', 2.5, 'Limits', [0, Inf]);
     app.ObjectZoneWidthField.Layout.Row = 4; app.ObjectZoneWidthField.Layout.Column = 2;
 
-    bAdd = uibutton(g, 'Text', 'Add to zones', ...
+    bPreview = uibutton(g, 'Text', 'Preview zones', ...
+        'ButtonPushedFcn', @(~,~) app.previewZones());
+    bPreview.Layout.Row = 5; bPreview.Layout.Column = 1;
+    bAdd = uibutton(g, 'Text', 'Add to set', ...
         'ButtonPushedFcn', @(~,~) app.addZones());
-    bAdd.Layout.Row = 5; bAdd.Layout.Column = 1;
+    bAdd.Layout.Row = 5; bAdd.Layout.Column = 2;
     bClear = uibutton(g, 'Text', 'Clear all', ...
         'ButtonPushedFcn', @(~,~) app.clearZones());
-    bClear.Layout.Row = 5; bClear.Layout.Column = 2;
+    bClear.Layout.Row = 5; bClear.Layout.Column = 3;
 
-    app.AppliedZonesListBox = uilistbox(g, 'Items', {});
-    app.AppliedZonesListBox.Layout.Row = 6; app.AppliedZonesListBox.Layout.Column = [1 4];
+    app.ZonesCountLabel = uilabel(g, 'Text', 'Committed zones: 0');
+    app.ZonesCountLabel.Layout.Row = 6; app.ZonesCountLabel.Layout.Column = [1 4];
 
-    onZoneStrategyChanged(app);  % set initial enable state
+    onZoneStrategyChanged(app);
 end
 
 function buildSavePanel(app)
-    g = uigridlayout(app.SavePanel, [1 3]);
-    g.ColumnWidth = {130, 170, 50};
+    g = uigridlayout(app.SavePanel, [1 4]);
+    g.ColumnWidth = {130, 130, 130, 60};
     bSave = uibutton(g, 'Text', 'Save preset', ...
         'ButtonPushedFcn', @(~,~) app.savePreset());
     bSave.Layout.Row = 1; bSave.Layout.Column = 1;
-    bRun = uibutton(g, 'Text', 'Run analyzeSession', ...
-        'ButtonPushedFcn', @(~,~) onRunAnalyze(app));
-    bRun.Layout.Row = 1; bRun.Layout.Column = 2;
-    bHelp = uibutton(g, 'Text', '?', ...
-        'ButtonPushedFcn', @(~,~) showHelp('Save / Run', helpSaveText()));
-    bHelp.Layout.Row = 1; bHelp.Layout.Column = 3;
+    bPlot = uibutton(g, 'Text', 'Make plot', ...
+        'ButtonPushedFcn', @(~,~) app.makePlot());
+    bPlot.Layout.Row = 1; bPlot.Layout.Column = 2;
+    app.PlotAllCheckbox = uicheckbox(g, 'Text', 'plot all zones', 'Value', false);
+    app.PlotAllCheckbox.Layout.Row = 1; app.PlotAllCheckbox.Layout.Column = 3;
+    bInfo = uibutton(g, 'Text', 'INFO', ...
+        'ButtonPushedFcn', @(~,~) showHelp('Save / Plot', helpSaveText()));
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
 end
 
 function buildStatusPanel(app, parent)
@@ -626,15 +707,15 @@ function buildStatusPanel(app, parent)
     app.StatusBar = uilabel(g, 'Text', 'Ready');
 end
 
-% ========== Callbacks =====================================================
+% =================== Callbacks ============================================
 
 function onZoneStrategyChanged(app)
     s = app.ZonesStrategyDropDown.Value;
-    set(app.WallWidthField,    'Enable', enableIfAny(s, {'corners-walls-center', 'circle-rings'}));
-    set(app.MiddleWidthField,  'Enable', enableIfAny(s, {'circle-rings'}));
-    set(app.NumStripsField,    'Enable', enableIfAny(s, {'strips'}));
-    set(app.StripDirDropDown,  'Enable', enableIfAny(s, {'strips'}));
-    set(app.ObjectZoneWidthField, 'Enable', toOnOff(~isempty(app.State.objects)));
+    app.WallWidthField.Enable    = enableIfAny(s, {'corners-walls-center', 'circle-rings'});
+    app.MiddleWidthField.Enable  = enableIfAny(s, {'circle-rings'});
+    app.NumStripsField.Enable    = enableIfAny(s, {'strips'});
+    app.StripDirDropDown.Enable  = enableIfAny(s, {'strips'});
+    app.ObjectZoneWidthField.Enable = toOnOff(~isempty(app.State.objects));
 end
 
 function v = enableIfAny(s, list)
@@ -645,15 +726,27 @@ function s = toOnOff(b)
     if b; s = 'on'; else; s = 'off'; end
 end
 
-function onCalibrate(app)
-    if isempty(app.State.frame)
-        app.status('Load video first');
+function onCalibrateChoose(app)
+    if isempty(app.State.frame); app.status('Load video first'); return; end
+    fh = figure('Name', 'Click 4 calibration points');
+    cleanup = onCleanup(@() closeIfValid(fh));
+    imshow(app.State.frame); hold on;
+    title('Click 4 points: Y-pair (1, 2), then X-pair (3, 4)');
+    [xPts, yPts] = ginput(4);
+    app.State.calibPoints = [xPts(:), yPts(:)];
+    clear cleanup;
+    app.status(sprintf('Got %d calibration points; now click "Calibration. Calculation"', size(app.State.calibPoints,1)));
+    app.refocus();
+end
+
+function onCalibrateCompute(app)
+    if isempty(app.State.calibPoints) || size(app.State.calibPoints, 1) < 4
+        app.status('Click "Choose points" first (need 4 points)');
         return;
     end
-    % Use sphynx.preset.pixelsPerCm with GUI-supplied distances (no command-line)
     [pxlAvg, kcorr] = sphynx.preset.pixelsPerCm(app.State.frame, ...
+        'Points', app.State.calibPoints, ...
         'DistancesCm', [app.DistanceYField.Value, app.DistanceXField.Value]);
-    % Recompute Y and X separately for display
     app.setPixelsPerCm(pxlAvg, 'Y', pxlAvg, 'X', pxlAvg / kcorr, 'KCorr', kcorr);
 end
 
@@ -665,9 +758,9 @@ function onPickArena(app)
         app.State.arena = arena;
         app.ArenaStatusLabel.Text = sprintf('Arena: %s OK', geometry);
         app.refreshPreview();
-        sphynx.util.log('info', '[App] arena defined geometry=%s', geometry);
-        % Re-run zone enable logic in case object-zone field state changed
         onZoneStrategyChanged(app);
+        sphynx.util.log('info', '[App] arena geometry=%s', geometry);
+        app.refocus();
     catch ME
         app.status(sprintf('Arena failed: %s', ME.message));
     end
@@ -686,42 +779,36 @@ function onAddObject(app)
         end
         app.refreshObjectsList();
         app.refreshPreview();
+        onZoneStrategyChanged(app);
         sphynx.util.log('info', '[App] object added geometry=%s total=%d', geometry, numel(app.State.objects));
-        onZoneStrategyChanged(app);  % object-zone field becomes enabled
+        app.refocus();
     catch ME
         app.status(sprintf('Object failed: %s', ME.message));
     end
 end
 
-function onRunAnalyze(app)
-    app.status('Run analyzeSession from CLI: cfg = sphynx.pipeline.defaultConfig(); see docs.');
-end
+% =================== Helpers ==============================================
 
-function pickDir(app, methodName)
-    startDir = pickStart(app, '');
+function pickDirAndApply(app, methodName)
+    startDir = pickStart(app);
     d = uigetdir(startDir, 'Select directory');
-    if isequal(d, 0); return; end
+    if isequal(d, 0); app.refocus(); return; end
     app.(methodName)(d);
-end
-
-function pickDirStart(app, methodName)
-    startDir = pickStart(app, '');
-    d = uigetdir(startDir, 'Select directory');
-    if isequal(d, 0); return; end
-    app.(methodName)(d);
+    app.refocus();
 end
 
 function pickVideoStart(app)
-    startDir = pickStart(app, '');
+    startDir = pickStart(app);
     [f, p] = uigetfile({'*.mp4;*.avi;*.mov', 'Video files'}, 'Select video', startDir);
-    if isequal(f, 0); return; end
+    if isequal(f, 0); app.refocus(); return; end
     app.setVideo(fullfile(p, f));
+    app.refocus();
 end
 
 function pickPresetStart(app)
-    startDir = pickStart(app, '');
+    startDir = pickStart(app);
     [f, p] = uigetfile({'*.mat', 'Preset .mat'}, 'Select preset', startDir);
-    if isequal(f, 0); return; end
+    if isequal(f, 0); app.refocus(); return; end
     app.State.presetPath = fullfile(p, f);
     app.PresetPathField.Value = app.State.presetPath;
     preset = sphynx.io.readPreset(app.State.presetPath);
@@ -731,107 +818,51 @@ function pickPresetStart(app)
             'X', preset.Options.pxl2sm / kcorr, 'KCorr', kcorr);
     end
     app.status(sprintf('Loaded preset: %s', f));
+    app.refocus();
 end
 
-function startDir = pickStart(app, fallback)
+function startDir = pickStart(app)
     if ~isempty(app.State.projectRoot) && isfolder(app.State.projectRoot)
         startDir = app.State.projectRoot;
     else
-        startDir = fallback;
+        startDir = '';
     end
 end
 
-function refreshAppField(~, ~)
-    % Hook for binding refresh; no-op (the field updates via setter)
+function Z = computeZonesFromUI(app)
+    Z = struct('name', {}, 'type', {}, 'maskfilled', {});
+    if isempty(app.State.arena)
+        app.status('Define arena first');
+        return;
+    end
+    try
+        strategy = app.ZonesStrategyDropDown.Value;
+        wallCm = app.WallWidthField.Value;
+        switch strategy
+            case 'corners-walls-center'
+                Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, ...
+                    'Strategy', 'corners-walls-center', ...
+                    'PixelsPerCm', app.State.pxlPerCm, ...
+                    'WallWidthCm', wallCm, ...
+                    'CornerPoints', cornerPointsFromArena(app.State.arena));
+            case 'strips'
+                Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, ...
+                    'Strategy', 'strips', ...
+                    'NumStrips', app.NumStripsField.Value, ...
+                    'StripDirection', app.StripDirDropDown.Value);
+            case 'circle-rings'
+                Z = sphynx.preset.buildZonesCircle(app.State.arena.mask, ...
+                    'PixelsPerCm', app.State.pxlPerCm, ...
+                    'WallWidthCm', wallCm, ...
+                    'MiddleWidthCm', app.MiddleWidthField.Value);
+            case 'none'
+                Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, 'Strategy', 'none');
+        end
+    catch ME
+        app.status(sprintf('Zone build failed: %s', ME.message));
+        Z = struct('name', {}, 'type', {}, 'maskfilled', {});
+    end
 end
-
-% ========== Help text and dialog =========================================
-
-function showHelp(title, text)
-    msgbox(text, title, 'help', 'modal');
-end
-
-function txt = helpCalibrationText()
-    txt = {
-        'Calibration: convert pixels to centimeters.';
-        '';
-        'You need to know the REAL distance in cm between two pairs';
-        'of points on the video — typically along arena walls.';
-        '';
-        '1) Enter the cm distance for vertical pair (points 1 -> 2)';
-        '   into the "cm Y" field.';
-        '2) Enter the cm distance for horizontal pair (3 -> 4) into "cm X".';
-        '3) Click "Calibrate (4 clicks)".';
-        '4) Click 4 points on the preview frame in the order:';
-        '   point 1 (top), point 2 (bottom), point 3 (left), point 4 (right).';
-        '5) Read the resulting Y, X, avg pxl/cm and kcorr (X/Y ratio).';
-        '';
-        'If kcorr deviates from 1 by more than ~3% the camera has';
-        'unequal vertical/horizontal scale — keep this in mind.';
-    };
-end
-
-function txt = helpArenaText()
-    txt = {
-        'Define the arena boundary on the current preview frame.';
-        '';
-        '1) Choose geometry: Polygon (clicks corners), Circle (>=3 pts on rim),';
-        '   Ellipse (>=5 pts on rim), or O-maze (>=3 pts outer + >=3 pts inner).';
-        '2) Click "Pick arena points".';
-        '3) Click points on the preview, then press ENTER.';
-        '4) The polygon outline appears in black.';
-    };
-end
-
-function txt = helpObjectsText()
-    txt = {
-        'Add objects (food bowls, novel objects, etc.) on the arena.';
-        '';
-        '1) Choose object geometry.';
-        '2) Click "+ Add object", then click points + ENTER.';
-        '3) Repeat for each object. Up to 4 named objects supported by';
-        '   downstream zone acts.';
-    };
-end
-
-function txt = helpZonesText()
-    txt = {
-        'Build spatial-zone masks based on the arena (and objects).';
-        '';
-        'Strategies:';
-        '  corners-walls-center : square arena split into corner, wall,';
-        '       and center zones. Wall (cm) controls wall width.';
-        '  strips : split arena into N equal-width strips.';
-        '  circle-rings : concentric rings (wall + middle1.. + center)';
-        '       for round arenas. Wall and Middle widths in cm.';
-        '  none : no spatial subdivision.';
-        '';
-        'You can ADD multiple strategies (e.g., corners-walls-center';
-        'PLUS strips). Use "Clear all" to reset.';
-        '';
-        'Object zone (cm): inflated radius around each object that counts';
-        'as object interaction. Enabled only when objects are defined.';
-        '';
-        'Implicit "outside-wall" 10 cm offset is always applied internally';
-        'to wall/corner/center calculations (matches legacy default). It';
-        'is not exposed in the UI.';
-    };
-end
-
-function txt = helpSaveText()
-    txt = {
-        'Save the assembled preset to <output_dir>/<videobase>_Preset.mat.';
-        '';
-        '"Run analyzeSession" is a placeholder reminder: launch the';
-        'pipeline from the MATLAB Command Window with:';
-        '   cfg = sphynx.pipeline.defaultConfig();';
-        '   cfg.paths.dlc = ''.../DLC/<file>.csv'';';
-        '   cfg.paths.preset = ''<the saved preset>'';';
-        '   sphynx.pipeline.analyzeSession(cfg);';
-    };
-end
-
-% ========== Helpers =========================================================
 
 function v = ifNaN(x, fallback)
     if isnan(x); v = fallback; else; v = x; end
@@ -851,4 +882,133 @@ function pts = cornerPointsFromArena(arena)
     else
         pts = [];
     end
+end
+
+function drawZoneOverlay(ax, z, color, alpha)
+    if ~isnumeric(z.maskfilled) && ~islogical(z.maskfilled); return; end
+    [r, c] = find(z.maskfilled);
+    if isempty(r); return; end
+    scatter(ax, c, r, 1, color, 'filled', 'MarkerFaceAlpha', alpha);
+end
+
+function drawState(ax, S, drawZones)
+    imshow(S.frame, 'Parent', ax);
+    hold(ax, 'on');
+    if ~isempty(S.arena) && ~isempty(S.arena.border_x)
+        plot(ax, S.arena.border_x(:), S.arena.border_y(:), 'k-', 'LineWidth', 2);
+    end
+    for k = 1:numel(S.objects)
+        plot(ax, S.objects(k).border_x(:), S.objects(k).border_y(:), '-', ...
+            'Color', [0 0.7 0], 'LineWidth', 1.5);
+    end
+    if drawZones
+        for k = 1:numel(S.zones)
+            drawZoneOverlay(ax, S.zones(k), [0 0.5 1], 0.07);
+        end
+    end
+    hold(ax, 'off');
+end
+
+function s = sanitize(name)
+    s = regexprep(name, '[^a-zA-Z0-9_-]', '_');
+end
+
+function closeIfValid(h)
+    if ~isempty(h) && isvalid(h); close(h); end
+end
+
+% =================== Help text ============================================
+
+function showHelp(title, text)
+    msgbox(text, title, 'help', 'modal');
+end
+
+function txt = helpCalibrationText()
+    txt = {
+        'Calibration: convert pixels to centimeters.';
+        '';
+        'Step 1 - "Calibration. Choose points":';
+        '   Click 4 points on the preview frame in this order:';
+        '     point 1 - top of vertical reference';
+        '     point 2 - bottom of vertical reference';
+        '     point 3 - left of horizontal reference';
+        '     point 4 - right of horizontal reference';
+        '   The picture closes when all 4 are clicked.';
+        '';
+        'Step 2 - enter the real cm distances into the cm Y / cm X';
+        'fields.';
+        '';
+        'Step 3 - "Calibration. Calculation": computes pxl/cm for Y,';
+        'X, average, and the X/Y correction factor (kcorr). If kcorr';
+        'differs from 1 by more than ~3%, your camera scale is';
+        'unequal between axes — keep this in mind.';
+    };
+end
+
+function txt = helpArenaText()
+    txt = {
+        'Define the arena boundary on the current preview frame.';
+        '';
+        '1) Choose geometry: Polygon (clicks corners), Circle (>=3 pts on rim),';
+        '   Ellipse (>=5 pts on rim), or O-maze (>=3 pts outer + >=3 pts inner).';
+        '2) Click "Pick arena points".';
+        '3) Click points on the temp window; press ENTER. Window closes.';
+        '4) The polygon outline appears in black on the preview.';
+    };
+end
+
+function txt = helpObjectsText()
+    txt = {
+        'Add objects (food bowls, novel objects, etc.) on the arena.';
+        '';
+        '1) Choose object geometry.';
+        '2) Click "+ Add object", click points, ENTER. Window closes.';
+        '3) Up to 4 named objects supported by downstream zone acts.';
+        '4) Select an object in the list to highlight it on the preview.';
+        '5) Use "Remove selected" to delete the highlighted object.';
+    };
+end
+
+function txt = helpZonesText()
+    txt = {
+        'Build spatial-zone masks based on the arena (and objects).';
+        '';
+        'Strategies:';
+        '  corners-walls-center : square arena split into corner, wall,';
+        '       and center zones. Wall (cm) controls wall width.';
+        '  strips : split arena into N equal-width strips.';
+        '  circle-rings : concentric rings (wall + middle1.. + center)';
+        '       for round arenas. Wall and Middle widths in cm.';
+        '  none : no spatial subdivision.';
+        '';
+        '"Preview zones" shows the proposed partition on the preview';
+        '(magenta) without committing.';
+        '"Add to set" commits the previewed zones to the final set';
+        '(blue). You can call it multiple times with different';
+        'strategies to combine partitions.';
+        '"Clear all" removes every committed zone.';
+        '';
+        'Object zone (cm) is the inflated radius around each object';
+        'that counts as object interaction. Field is enabled only';
+        'when objects are defined.';
+        '';
+        'Implicit "outside-wall" 10 cm offset is always applied';
+        'internally to wall/corner/center calculations (legacy';
+        'default). It is not exposed in the UI.';
+    };
+end
+
+function txt = helpSaveText()
+    txt = {
+        '"Save preset": writes <output_dir>/<videobase>_Preset.mat';
+        'with Options + Zones + ArenaAndObjects in the legacy shape';
+        '(consumed by both the legacy BehaviorAnalyzer.m and the';
+        'new sphynx.pipeline.analyzeSession).';
+        '';
+        '"Make plot": always saves <videobase>_layout.png — the';
+        'combined preview (arena + objects + all committed zones).';
+        '';
+        'Check "plot all zones" to ALSO save one PNG per individual';
+        'zone (<videobase>_zone_<name>.png).';
+    };
 end

@@ -31,7 +31,8 @@ function arena = readArenaGeometry(frame, geometry, varargin)
     th = linspace(0, 2*pi, 20000)';
 
     if isempty(p.Results.Points)
-        figure; imshow(frame); hold on;
+        fh = figure; imshow(frame); hold on;
+        cleanup = onCleanup(@() closeIfValid(fh));
         switch geometry
             case 'O-maze'
                 uiwait(msgbox('Indicate at least 3 points of OUTER border', 'O-maze', 'modal'));
@@ -43,6 +44,7 @@ function arena = readArenaGeometry(frame, geometry, varargin)
                 [px, py] = ginput;
                 pts = [px(:), py(:)];
         end
+        clear cleanup;  % closes figure now
     else
         pts = p.Results.Points;
     end
@@ -86,5 +88,11 @@ function arena = readArenaGeometry(frame, geometry, varargin)
         arena.mask = outerMask & ~innerMask;
     else
         arena.mask = imfill(sphynx.preset.maskFromBorder(H, W, arena.border_x, arena.border_y), 'holes');
+    end
+end
+
+function closeIfValid(h)
+    if ~isempty(h) && isvalid(h)
+        close(h);
     end
 end
