@@ -33,9 +33,9 @@ function testProgrammaticDriveSquareArena(testCase)
     app.setArena('Polygon', cornerPts);
     verifyEqual(testCase, app.State.arena.geometry, 'Polygon');
 
-    % Build corners-walls-center zones
+    % Build corners-walls-center zones (Add to set, accumulating)
     app.ZonesStrategyDropDown.Value = 'corners-walls-center';
-    app.WallWidthField.Value = '3';
-    app.buildZones();
+    app.WallWidthField.Value = 3;
+    app.addZones();
     verifyGreaterThan(testCase, numel(app.State.zones), 0);
 end
