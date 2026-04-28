@@ -27,6 +27,12 @@ function [refined, runs] = refineAct(line, minRunLen1, minRunLen0)
 %        glued to nothing).
 %     3. Re-enumerate the surviving 1-runs.
 
+    if isempty(line)
+        refined = logical(line);
+        runs = struct('frameIn', {}, 'frameOut', {}, 'duration', {});
+        return;
+    end
+
     line = logical(line(:)');
     n = numel(line);
 
@@ -63,7 +69,13 @@ function [refined, runs] = refineAct(line, minRunLen1, minRunLen0)
 end
 
 function [runStarts, runEnds] = findRuns(line, value)
-    transitions = diff([~value, line == value, ~value]);
+    % Mark frames matching value, pad with FALSE on both sides so
+    % aug always transitions correctly regardless of which value we
+    % search for. (Earlier bug: padding with ~value caused the
+    % sentinel to coincide with the marker for value=false.)
+    marker = (line == value);
+    aug = [false, marker, false];
+    transitions = diff(aug);
     runStarts = find(transitions == 1);
     runEnds = find(transitions == -1) - 1;
 end
