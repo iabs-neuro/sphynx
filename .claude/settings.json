@@ -30,6 +30,8 @@
       "Bash(git describe *)",
       "Bash(git reflog *)",
       "Bash(jq *)",
+      "Bash(matlab *)",
+      "Bash(matlab.exe *)",
       "Bash(ls *)",
       "Bash(cat *)",
       "Bash(head *)",
