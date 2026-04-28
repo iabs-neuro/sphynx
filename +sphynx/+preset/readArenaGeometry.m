@@ -81,10 +81,10 @@ function arena = readArenaGeometry(frame, geometry, varargin)
     end
 
     if strcmp(geometry, 'O-maze')
-        outerMask = imfill(sphynx.preset.maskFromBorder(H, W, arena.border_x(:,1), arena.border_y(:,1)));
-        innerMask = imfill(sphynx.preset.maskFromBorder(H, W, arena.border_x(:,2), arena.border_y(:,2)));
+        outerMask = imfill(sphynx.preset.maskFromBorder(H, W, arena.border_x(:,1), arena.border_y(:,1)), 'holes');
+        innerMask = imfill(sphynx.preset.maskFromBorder(H, W, arena.border_x(:,2), arena.border_y(:,2)), 'holes');
         arena.mask = outerMask & ~innerMask;
     else
-        arena.mask = imfill(sphynx.preset.maskFromBorder(H, W, arena.border_x, arena.border_y));
+        arena.mask = imfill(sphynx.preset.maskFromBorder(H, W, arena.border_x, arena.border_y), 'holes');
     end
 end
