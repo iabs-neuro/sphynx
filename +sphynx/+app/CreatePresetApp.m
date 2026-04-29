@@ -365,15 +365,37 @@ classdef CreatePresetApp < handle
 
         function refreshPreview(app)
             if isempty(app.State.frame); return; end
-            cla(app.PreviewAxes);
-            imshow(app.State.frame, 'Parent', app.PreviewAxes);
-            hold(app.PreviewAxes, 'on');
-            % Arena outline (black)
+            ax = app.PreviewAxes;
+            cla(ax);
+            % Use raw image() instead of imshow() — image() coexists with
+            % patch + FaceAlpha cleanly in uiaxes (imshow re-locks props).
+            image(ax, app.State.frame);
+            ax.YDir = 'reverse';
+            ax.DataAspectRatio = [1 1 1];
+            ax.XLim = [0.5, size(app.State.frame, 2) + 0.5];
+            ax.YLim = [0.5, size(app.State.frame, 1) + 0.5];
+            ax.XTick = []; ax.YTick = [];
+            ax.Box = 'on';
+            hold(ax, 'on');
+            % Zones (filled patches) — drawn first so arena/object outlines stay on top
+            if ~isempty(app.State.zones)
+                cmap = colorPaletteForZones(numel(app.State.zones));
+                for k = 1:numel(app.State.zones)
+                    drawZoneFilled(ax, app.State.zones(k), cmap(k,:), 0.18);
+                end
+            end
+            if ~isempty(app.State.previewZones)
+                cmap = colorPaletteForZones(numel(app.State.previewZones));
+                for k = 1:numel(app.State.previewZones)
+                    drawZoneFilled(ax, app.State.previewZones(k), cmap(k,:), 0.28);
+                end
+            end
+            % Arena outline
             if ~isempty(app.State.arena) && ~isempty(app.State.arena.border_x)
-                plot(app.PreviewAxes, app.State.arena.border_x(:), app.State.arena.border_y(:), ...
+                plot(ax, app.State.arena.border_x(:), app.State.arena.border_y(:), ...
                     'k-', 'LineWidth', 2);
             end
-            % Objects, with selection highlight
+            % Objects with selection highlight
             selIdx = -1;
             if ~isempty(app.ObjectsListBox) && ~isempty(app.ObjectsListBox.Value)
                 selIdx = find(strcmp(app.ObjectsListBox.Items, app.ObjectsListBox.Value), 1);
@@ -384,23 +406,10 @@ classdef CreatePresetApp < handle
                 else
                     lw = 1.5; col = [0 0.7 0];
                 end
-                plot(app.PreviewAxes, app.State.objects(k).border_x(:), app.State.objects(k).border_y(:), ...
+                plot(ax, app.State.objects(k).border_x(:), app.State.objects(k).border_y(:), ...
                     '-', 'Color', col, 'LineWidth', lw);
             end
-            % Zones — outlines only (no patch fill, safer in uiaxes)
-            if ~isempty(app.State.zones)
-                cmap = colorPaletteForZones(numel(app.State.zones));
-                for k = 1:numel(app.State.zones)
-                    drawZoneOutline(app.PreviewAxes, app.State.zones(k), cmap(k,:));
-                end
-            end
-            if ~isempty(app.State.previewZones)
-                cmap = colorPaletteForZones(numel(app.State.previewZones));
-                for k = 1:numel(app.State.previewZones)
-                    drawZoneOutline(app.PreviewAxes, app.State.previewZones(k), cmap(k,:));
-                end
-            end
-            hold(app.PreviewAxes, 'off');
+            hold(ax, 'off');
         end
 
         function refreshObjectsList(app)
@@ -596,12 +605,15 @@ function buildCalibPanel(app)
     g.ColumnWidth = {'fit', 'fit', 'fit', 'fit'};
 
     bChoose = uibutton(g, 'Text', 'Calibration. Choose points', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onCalibrateChoose(app));
     bChoose.Layout.Row = 1; bChoose.Layout.Column = [1 2];
     bCompute = uibutton(g, 'Text', 'Calibration. Calculation', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onCalibrateCompute(app));
     bCompute.Layout.Row = 1; bCompute.Layout.Column = 3;
     bInfo = uibutton(g, 'Text', 'INFO', ...
+        'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Calibration', helpCalibrationText()));
     bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
 
@@ -633,64 +645,77 @@ end
 
 function buildArenaPanel(app)
     nGeom = 4;       % Polygon / Circle / Ellipse / O-maze
-    g = uigridlayout(app.ArenaPanel, [2, nGeom + 2]);
+    % Layout: nGeom geometry buttons | spacer | action btn | INFO btn
+    nCols = nGeom + 3;
+    g = uigridlayout(app.ArenaPanel, [2, nCols]);
     g.RowHeight = {28, 25};
-    g.ColumnWidth = repmat({'fit'}, 1, nGeom + 2);
+    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {16}, repmat({'fit'}, 1, 2)];
     g.ColumnSpacing = 4;
 
     geometries = {'Polygon', 'Circle', 'Ellipse', 'O-maze'};
     app.ArenaGeometryButtons = cell(1, numel(geometries));
     for i = 1:numel(geometries)
         b = uibutton(g, 'state', 'Text', geometries{i}, ...
+            'BackgroundColor', semanticColor('geometry'), ...
             'ValueChangedFcn', @(src, ~) onArenaGeometryToggle(app, src));
         b.Layout.Row = 1; b.Layout.Column = i;
         if i == 1; b.Value = true; end
         app.ArenaGeometryButtons{i} = b;
     end
 
+    % column nGeom+1 is the spacer (kept empty)
     bArena = uibutton(g, 'Text', 'Pick arena points', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onPickArena(app));
-    bArena.Layout.Row = 1; bArena.Layout.Column = nGeom + 1;
+    bArena.Layout.Row = 1; bArena.Layout.Column = nGeom + 2;
     bInfo = uibutton(g, 'Text', 'INFO', ...
+        'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Arena', helpArenaText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 2;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 3;
 
     app.ArenaStatusLabel = uilabel(g, 'Text', 'Arena: <none>');
-    app.ArenaStatusLabel.Layout.Row = 2; app.ArenaStatusLabel.Layout.Column = [1 nGeom + 2];
+    app.ArenaStatusLabel.Layout.Row = 2; app.ArenaStatusLabel.Layout.Column = [1 nCols];
 end
 
 function buildObjectsPanel(app)
     nGeom = 3;       % Polygon / Circle / Ellipse
-    g = uigridlayout(app.ObjectsPanel, [3, nGeom + 2]);
+    nCols = nGeom + 3;
+    g = uigridlayout(app.ObjectsPanel, [3, nCols]);
     g.RowHeight = {28, '1x', 28};
-    g.ColumnWidth = repmat({'fit'}, 1, nGeom + 2);
+    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {16}, repmat({'fit'}, 1, 2)];
     g.ColumnSpacing = 4;
 
     geometries = {'Polygon', 'Circle', 'Ellipse'};
     app.ObjectGeometryButtons = cell(1, numel(geometries));
     for i = 1:numel(geometries)
         b = uibutton(g, 'state', 'Text', geometries{i}, ...
+            'BackgroundColor', semanticColor('geometry'), ...
             'ValueChangedFcn', @(src, ~) onObjectGeometryToggle(app, src));
         b.Layout.Row = 1; b.Layout.Column = i;
         if i == 1; b.Value = true; end
         app.ObjectGeometryButtons{i} = b;
     end
 
+    % column nGeom+1 is the spacer
     bAdd = uibutton(g, 'Text', '+ Add', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onAddObject(app));
-    bAdd.Layout.Row = 1; bAdd.Layout.Column = nGeom + 1;
+    bAdd.Layout.Row = 1; bAdd.Layout.Column = nGeom + 2;
     bInfo = uibutton(g, 'Text', 'INFO', ...
+        'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Objects', helpObjectsText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 2;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 3;
 
     app.ObjectsListBox = uilistbox(g, 'Items', {}, ...
         'ValueChangedFcn', @(~,~) app.refreshPreview());
-    app.ObjectsListBox.Layout.Row = 2; app.ObjectsListBox.Layout.Column = [1 nGeom + 2];
+    app.ObjectsListBox.Layout.Row = 2; app.ObjectsListBox.Layout.Column = [1 nCols];
 
     bRemove = uibutton(g, 'Text', 'Remove', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.removeSelectedObject());
     bRemove.Layout.Row = 3; bRemove.Layout.Column = 1;
     bReplace = uibutton(g, 'Text', 'Replace', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.replaceSelectedObject());
     bReplace.Layout.Row = 3; bReplace.Layout.Column = 2;
 end
@@ -732,6 +757,7 @@ function buildZonesPanel(app)
         'ValueChangedFcn', @(~,~) onZoneStrategyChanged(app));
     app.ZonesStrategyDropDown.Layout.Row = 1; app.ZonesStrategyDropDown.Layout.Column = [2 3];
     bInfo = uibutton(g, 'Text', 'INFO', ...
+        'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Zones', helpZonesText()));
     bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
 
@@ -759,12 +785,15 @@ function buildZonesPanel(app)
     app.ObjectZoneWidthField.Layout.Row = 4; app.ObjectZoneWidthField.Layout.Column = 2;
 
     bPreview = uibutton(g, 'Text', 'Preview zones', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.previewZones());
     bPreview.Layout.Row = 5; bPreview.Layout.Column = 1;
     bAdd = uibutton(g, 'Text', 'Add to set', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.addZones());
     bAdd.Layout.Row = 5; bAdd.Layout.Column = 2;
     bClear = uibutton(g, 'Text', 'Clear all', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.clearZones());
     bClear.Layout.Row = 5; bClear.Layout.Column = 3;
 
@@ -778,14 +807,17 @@ function buildSavePanel(app)
     g = uigridlayout(app.SavePanel, [1 4]);
     g.ColumnWidth = {'fit', 'fit', 'fit', 'fit'};
     bSave = uibutton(g, 'Text', 'Save preset', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.savePreset());
     bSave.Layout.Row = 1; bSave.Layout.Column = 1;
     bPlot = uibutton(g, 'Text', 'Make plot', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.makePlot());
     bPlot.Layout.Row = 1; bPlot.Layout.Column = 2;
     app.PlotAllCheckbox = uicheckbox(g, 'Text', 'plot all zones', 'Value', false);
     app.PlotAllCheckbox.Layout.Row = 1; app.PlotAllCheckbox.Layout.Column = 3;
     bInfo = uibutton(g, 'Text', 'INFO', ...
+        'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Save / Plot', helpSaveText()));
     bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
 end
@@ -859,37 +891,52 @@ function onPickArena(app)
 end
 
 function onAddObject(app)
+    % Loop adding the same object until the user confirms it (Yes) or
+    % asks to delete it. "No (redo)" pops the bad object first so the
+    % old mask is NOT shown on preview while the user re-picks.
     if isempty(app.State.frame); app.status('Load video first'); return; end
     geometry = app.State.objectGeometry;
-    try
-        obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry);
-        obj.type = sprintf('Object%d', numel(app.State.objects) + 1);
-        if isempty(app.State.objects)
-            app.State.objects = obj;
-        else
-            app.State.objects(end+1) = obj;
+    while true
+        try
+            obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry);
+            obj.type = sprintf('Object%d', numel(app.State.objects) + 1);
+            if isempty(app.State.objects)
+                app.State.objects = obj;
+            else
+                app.State.objects(end+1) = obj;
+            end
+            app.refreshObjectsList();
+            app.refreshPreview();
+            onZoneStrategyChanged(app);
+            sphynx.util.log('info', '[App] object %s added geometry=%s', obj.type, geometry);
+            app.refocus();
+            choice = uiconfirm(app.Figure, ...
+                sprintf('Is %s correct?', obj.type), 'Confirm object', ...
+                'Options', {'Yes', 'No (redo)', 'No (delete)'}, ...
+                'DefaultOption', 1, 'CancelOption', 2);
+            switch choice
+                case 'Yes'
+                    return;
+                case 'No (redo)'
+                    % Drop the just-added object so its mask leaves the
+                    % preview before the next picker opens.
+                    app.State.objects(end) = [];
+                    app.refreshObjectsList();
+                    app.refreshPreview();
+                    sphynx.util.log('info', '[App] redoing %s', obj.type);
+                    continue;
+                case 'No (delete)'
+                    app.State.objects(end) = [];
+                    app.refreshObjectsList();
+                    app.refreshPreview();
+                    onZoneStrategyChanged(app);
+                    sphynx.util.log('info', '[App] object discarded');
+                    return;
+            end
+        catch ME
+            app.status(sprintf('Object failed: %s', ME.message));
+            return;
         end
-        app.refreshObjectsList();
-        app.refreshPreview();
-        onZoneStrategyChanged(app);
-        sphynx.util.log('info', '[App] object added geometry=%s total=%d', geometry, numel(app.State.objects));
-        app.refocus();
-        % "Is it correct?" gate
-        choice = uiconfirm(app.Figure, ...
-            sprintf('Is %s correct?', obj.type), 'Confirm object', ...
-            'Options', {'Yes', 'No (redo)', 'No (delete)'}, ...
-            'DefaultOption', 1, 'CancelOption', 2);
-        switch choice
-            case 'No (redo)'
-                app.replaceSelectedObject();
-            case 'No (delete)'
-                app.State.objects(end) = [];
-                app.refreshObjectsList();
-                app.refreshPreview();
-                sphynx.util.log('info', '[App] object discarded');
-        end
-    catch ME
-        app.status(sprintf('Object failed: %s', ME.message));
     end
 end
 
@@ -1075,6 +1122,16 @@ end
 
 function showHelp(title, text)
     msgbox(text, title, 'help', 'modal');
+end
+
+function c = semanticColor(category)
+    % Pastel button-tinting by semantic role.
+    switch category
+        case 'geometry'; c = [1.00, 0.97, 0.78];   % light yellow — selectors
+        case 'action';   c = [1.00, 0.88, 0.85];   % light red    — do-something
+        case 'info';     c = [0.85, 0.92, 1.00];   % light blue   — INFO/help
+        otherwise;       c = [0.96, 0.96, 0.96];   % default grey
+    end
 end
 
 function txt = helpCalibrationText()
