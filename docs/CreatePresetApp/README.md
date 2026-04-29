@@ -8,6 +8,9 @@ the legacy `BehaviorAnalyzer.m` and the new
 
 Built on `uifigure` + `uigridlayout`. R2020a or newer required.
 
+> Status: v10 — production-ready for preset building.
+> Backlog of planned improvements is in `TODO.md`.
+
 ## Launch
 
 ```matlab
@@ -15,67 +18,87 @@ startup
 sphynx.app.CreatePresetApp()
 ```
 
+The window opens maximized. Two tabs: **Create Preset** (this doc) and
+**Analyze Session** (placeholder for future batch UI).
+
 ## Window layout
 
 ```
-+---------------------------------------------------------------+
-|                          [tabs]                               |
-|  Create Preset  |  Analyze Session                            |
-+---------------------------------------------------------------+
-| 1. Load              |                                        |
-| 2. Calibration       |          Preview                       |
-| 3. Arena             |    (frame + arena +                    |
-| 4. Objects           |     objects + zones)                   |
-| 5. Zones             |                                        |
-| 6. Save / Plot       |                                        |
-|                      | [Next frame] [Frame N/M]               |
-|                      | [Target ▼] [Step] [Left][Right][Up]... |
-+---------------------------------------------------------------+
++--------------------------------------------------------------------+
+|                          [Create Preset] [Analyze Session]         |
++--------------------------------------------------------------------+
+| 1. Load                          |                                 |
+| 2. Calibration                   |        Preview                  |
+| 3. Arena                         |   (frame + arena outlines +     |
+| 4. Objects                       |    object outlines +            |
+| 5. Zones                         |    zone outlines)               |
+| 6. Save                          |                                 |
+|  (left column scrollable)        +---------------------------------+
+|                                  | [Next frame] [Frame N/M]        |
+|                                  | [Target ▾] [Step] (nav strip)   |
+|                                  +---------------------------------+
+|                                  | [Left][Right][Up][Down]         |
+|                                  | [Rot ↺][Rot ↻]                  |
+|                                  +---------------------------------+
+|                                  |  Log (scrollable, last 500)     |
++--------------------------------------------------------------------+
 ```
 
-Left column: stacked panels with the preset-building workflow.
-Right column: large live preview + frame navigation + transform
-strip (move/rotate selected target).
+The left column is wrapped in a `Scrollable` panel — when the window
+is short, all panels stay readable, scrollbar appears.
+
+## Color convention (buttons & overlays)
+
+Buttons:
+- **pale yellow** — geometry selectors (Polygon / Circle / Ellipse / O-maze)
+- **pale rose**   — actions (Browse, Pick, Add, Save, etc.)
+- **pale teal**   — `INFO` help buttons
+
+Preview & saved plots:
+- **black**           — arena boundary
+- **green**           — object boundary
+- **orange thick**    — currently selected object in the list
+- **palette colors**  — committed zones (each zone gets its own color)
+- **magenta tint**    — preview-only zones (not yet committed)
 
 ## Workflow
 
-1. **Load** — pick a project root (acts as the default starting
-   directory for the other file dialogs), then choose:
-   - Video file (`.mp4`, `.avi`, `.mov`)
-   - Output dir (where presets and plots are saved, organized into
-     subfolders per session)
-   - Optional: existing preset to seed calibration values
-2. **Calibration** — define pixels-per-cm by picking 4 reference
-   points on the frame.
-3. **Arena** — choose geometry (Polygon / Circle / Ellipse / O-maze)
+1. **Load** — pick a project root (default starting directory for
+   subsequent dialogs), select Video, Output dir, optionally an
+   existing preset to seed the calibration.
+2. **Calibration** — click 4 reference points on the frame, type the
+   real-world cm distances for the Y and X pairs, then **Compute**.
+   The app shows pxl/cm separately for Y and X, plus the `kcorr`
+   correction factor.
+3. **Arena** — pick a geometry (Polygon / Circle / Ellipse / O-maze)
    and click points on the frame.
-4. **Objects** — add objects one at a time. Each Add Object pops a
-   "Is it correct?" dialog with Yes / No (redo) / No (delete) so
-   you can iterate without leaving stale masks on the preview.
-5. **Zones** — pick a partitioning strategy and Preview / Add to set
-   / Clear all. Multiple strategies can be combined (corners-walls-
-   center + strips, for example). Object zones are automatically
-   added when objects exist.
-6. **Save / Plot** — Save preset writes
-   `<output_dir>/<videobase>/<videobase>_Preset.mat` and also
-   auto-saves a combined-layout PNG next to it. Make plot can save
-   one PNG per zone in addition.
+4. **Objects** — add objects one at a time. After each Add, an
+   "Is it correct?" dialog (Yes / No (redo) / No (delete)) loops
+   until the user confirms. Selected object highlights orange on
+   the preview.
+5. **Zones** — pick a strategy and **Preview** then **Add to set**.
+   Multiple strategies stack. Object zones added automatically
+   when objects exist. Zones are auto-cleared with a warning when
+   geometry changes (move / rotate / rename / replace / new object)
+   so committed zones never reflect stale geometry.
+6. **Save** — writes the `.mat` to
+   `<output_dir>/<videobase>/<videobase>_Preset.mat` and saves
+   the combined-layout PNG next to it. If `plot all zones` is
+   checked, also one PNG per individual zone.
 
 ## Move / Rotate
 
-Below the preview there is a transform strip:
-
-- **Target** dropdown: Arena, Object1, Object2, ...
-- **Step (px)**: pixel step for translation, or degrees for rotation
-- **Left / Right / Up / Down**: translate selected target
-- **Rot CCW / Rot CW**: rotate selected target around its centroid
-- **Refit mask**: recompute the binary mask from the updated outline
-  (you don't have to call this after every nudge — only once when
-  the layout looks right, before Save preset)
-
-Use this when loading an existing preset over a new video where
-the camera shifted slightly: nudge the arena to align, then
-Refit mask.
+Below the preview:
+- **Target** dropdown: `All` (arena + every object), `Arena`,
+  `Object1`, `Object2`, ...
+- **Step (px)** numeric field — pixels for translation, degrees
+  for rotation.
+- **Left / Right / Up / Down** translate the selected target.
+- **Rot ↺ / Rot ↻** rotate around the target's centroid (CCW / CW).
+  *Known issue: when target is `All`, each child rotates around
+  its own centroid instead of a shared pivot. See `TODO.md` #6.*
+- Masks are auto-recomputed from the (possibly transformed) outline
+  on `Preview` and `Add to set` — no separate Refit button needed.
 
 ## Output: the preset file
 
@@ -105,8 +128,8 @@ Options.ObjectZoneWidthCm     : float
 ```
 
 Pipeline-side parameters (likelihood threshold, velocity thresholds,
-body-part choices) live in `sphynx.pipeline.defaultConfig` — they are
-not stored in the preset.
+body-part choices) live in `sphynx.pipeline.defaultConfig`, NOT in
+the preset.
 
 ### ArenaAndObjects
 
@@ -131,30 +154,38 @@ type        : 'area' | 'point'
 maskfilled  : H x W logical (for 'area') OR 1x2 [x y] (for 'point')
 ```
 
-The zones produced depend on the strategies you applied. Possible
-names from `corners-walls-center`:
+Zones produced depend on the strategies you applied (you can stack
+several).
 
-- `corners`              — corner regions inside the arena
-- `walls`                — wall regions inside the arena (between corners)
-- `walls_and_corners`    — union of walls and corners (inside arena)
-- `center`               — interior beyond wall width
-- `arena_realout`        — arena polygon inflated outward by wall width
-- `walls_and_corners_realout` — walls+corners region INCLUDING the
-  outside-wall ring (to absorb tracking jitter just outside arena)
+**`corners-walls-center`** strategy (square / polygon arena):
+- `corners`                    — corner regions inside the arena
+- `walls`                      — wall segments inside the arena
+- `walls_and_corners`          — union of walls + corners (inside)
+- `center`                     — interior beyond wall width
+- `arena_realout`              — arena polygon inflated outward by `wallW`
+- `corners_realout`            — corners + outside-ring near corners
+- `walls_realout`              — walls + outside-ring near walls (not corners)
+- `walls_and_corners_realout`  — combined inside + outside ring
 
-From `circle-rings` (round arenas): `wall`, `middle1`, `middle2`, ...,
-`center`. From `strips`: `strip1` ... `stripN`.
+**`strips`** strategy:
+- `strip1` ... `stripN`             — N equal strips inside arena
+- `strip1_realout` ... `stripN_realout` — same N strips, computed
+  on arena inflated outward by `wallW` (catches tracking jitter
+  outside arena)
 
-Object zones (added automatically when objects exist):
+**`circle-rings`** strategy (round arenas):
+- `wall`, `middle1`, `middle2`, ..., `center`
 
-- `Object<N>Real`     — the object polygon itself
-- `Object<N>RealOut`  — object area inflated by ObjectZoneWidthCm
+**`none`** strategy:
+- `arena` (single zone covering the whole arena)
+
+**Object zones** (added automatically when objects exist):
+- `Object<N>Real`     — object polygon
+- `Object<N>RealOut`  — object inflated by `ObjectZoneWidthCm`
 - `Object<N>Out`      — the inflation ring only (surrounding zone)
-- `ObjectAllReal`, `ObjectAllRealOut`, `ObjectAllOut` — combined
-  (added automatically when 2 or more objects exist)
+- `ObjectAllReal`, `ObjectAllRealOut`, `ObjectAllOut` (when ≥2 objects)
 
-Point zones:
-
+**Point-type zones** (auto-added for layout introspection):
 - `ArenaCorner1` ... `ArenaCornerN` — arena corner coordinates (Polygon)
 - `Object<N>Center` — centroid of object N
 
@@ -163,31 +194,23 @@ Point zones:
 ```
 <output_dir>/
   <videobase>/
-    <videobase>_Preset.mat       # preset file
-    <videobase>_layout.png       # combined layout (always)
-    <videobase>_zone_<name>.png  # one per zone (only when "plot all zones")
+    <videobase>_Preset.mat       # preset file (always)
+    <videobase>_layout.png       # combined preview (always on Save)
+    <videobase>_zone_<name>.png  # one per zone (when "plot all zones")
 ```
 
-## Color convention (preview & plots)
+## Help inside the app
 
-- Black line: arena boundary
-- Green line: object boundary; orange thick line: currently selected
-  object in the list
-- Filled translucent regions with palette of 8 colors: zones (committed)
-- Filled translucent regions in magenta: zones being previewed
-  (not yet committed)
-
-## Help
-
-Each panel has an `INFO` button that opens a help dialog with the
-specific instructions for that panel.
+Each panel has an `INFO` button that opens a short help dialog with
+panel-specific instructions. Long-form how-to is in
+`user_guide_en.md` and `user_guide_ru.md`.
 
 ## See also
 
 - `sphynx.preset.readArenaGeometry` — pure interactive geometry picker
-  used by the app
 - `sphynx.preset.buildZonesSquare` / `buildZonesCircle` — adapters
   over `sphynx.zones.classifySquare` / `classifyCircle`
-- `sphynx.preset.buildObjectZones` — object zones builder
+- `sphynx.preset.buildObjectZones` — object-zone builder
 - `sphynx.pipeline.analyzeSession` — consumes the preset to compute
   behavioral acts
+- `TODO.md` (this folder) — backlog of planned improvements
