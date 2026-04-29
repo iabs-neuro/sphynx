@@ -182,11 +182,38 @@ classdef CreatePresetApp < handle
             sphynx.util.log('info', '[App] removed %s; %d remain', removed, numel(app.State.objects));
         end
 
+        function replaceSelectedObject(app)
+            if isempty(app.State.objects); app.status('No object selected'); return; end
+            idx = find(strcmp(app.ObjectsListBox.Items, app.ObjectsListBox.Value), 1);
+            if isempty(idx); app.status('No object selected'); return; end
+            geometry = app.ObjectGeometryDropDown.Value;
+            try
+                obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry);
+                obj.type = app.State.objects(idx).type;     % preserve label
+                app.State.objects(idx) = obj;
+                app.refreshObjectsList();
+                app.refreshPreview();
+                sphynx.util.log('info', '[App] replaced %s with new %s', obj.type, geometry);
+                app.refocus();
+            catch ME
+                app.status(sprintf('Replace failed: %s', ME.message));
+            end
+        end
+
         function previewZones(app)
             % Build zones with current strategy+params and SHOW them on
             % preview, but do not commit to State.zones.
             Z = computeZonesFromUI(app);
             if isempty(Z); return; end
+            % Include object zones in the preview too, so what user sees
+            % is what will be committed
+            if ~isempty(app.State.objects)
+                Zobj = sphynx.preset.buildObjectZones(app.State.objects, ...
+                    app.State.height, app.State.width, ...
+                    'PixelsPerCm', app.State.pxlPerCm, ...
+                    'ZoneWidthCm', app.ObjectZoneWidthField.Value);
+                Z = [Z, Zobj];
+            end
             app.State.previewZones = Z;
             app.refreshPreview();
             app.status(sprintf('Previewing %d zones (%s)', numel(Z), app.ZonesStrategyDropDown.Value));
@@ -195,6 +222,14 @@ classdef CreatePresetApp < handle
         function addZones(app)
             Z = computeZonesFromUI(app);
             if isempty(Z); return; end
+            % Also add per-object zones if objects are defined
+            if ~isempty(app.State.objects)
+                Zobj = sphynx.preset.buildObjectZones(app.State.objects, ...
+                    app.State.height, app.State.width, ...
+                    'PixelsPerCm', app.State.pxlPerCm, ...
+                    'ZoneWidthCm', app.ObjectZoneWidthField.Value);
+                Z = [Z, Zobj];
+            end
             if isempty(app.State.zones)
                 app.State.zones = Z;
             else
@@ -328,7 +363,20 @@ classdef CreatePresetApp < handle
             cla(app.PreviewAxes);
             imshow(app.State.frame, 'Parent', app.PreviewAxes);
             hold(app.PreviewAxes, 'on');
-            % Arena
+            % Committed zones first (so arena+object outlines stay on top)
+            if ~isempty(app.State.zones)
+                cmap = colorPaletteForZones(numel(app.State.zones));
+                for k = 1:numel(app.State.zones)
+                    drawZoneOverlay(app.PreviewAxes, app.State.zones(k), cmap(k,:), 0.18);
+                end
+            end
+            if ~isempty(app.State.previewZones)
+                cmap = colorPaletteForZones(numel(app.State.previewZones));
+                for k = 1:numel(app.State.previewZones)
+                    drawZoneOverlay(app.PreviewAxes, app.State.previewZones(k), cmap(k,:), 0.25);
+                end
+            end
+            % Arena outline
             if ~isempty(app.State.arena) && ~isempty(app.State.arena.border_x)
                 plot(app.PreviewAxes, app.State.arena.border_x(:), app.State.arena.border_y(:), ...
                     'k-', 'LineWidth', 2);
@@ -340,24 +388,12 @@ classdef CreatePresetApp < handle
             end
             for k = 1:numel(app.State.objects)
                 if k == selIdx
-                    lw = 3.5; col = [1 0.5 0];   % orange highlight
+                    lw = 3.5; col = [1 0.5 0];
                 else
-                    lw = 1.5; col = [0 0.7 0];   % green
+                    lw = 1.5; col = [0 0.7 0];
                 end
                 plot(app.PreviewAxes, app.State.objects(k).border_x(:), app.State.objects(k).border_y(:), ...
                     '-', 'Color', col, 'LineWidth', lw);
-            end
-            % Committed zones — light blue
-            if ~isempty(app.State.zones)
-                for k = 1:numel(app.State.zones)
-                    drawZoneOverlay(app.PreviewAxes, app.State.zones(k), [0 0.5 1], 0.05);
-                end
-            end
-            % Preview-only zones (not yet committed) — magenta
-            if ~isempty(app.State.previewZones)
-                for k = 1:numel(app.State.previewZones)
-                    drawZoneOverlay(app.PreviewAxes, app.State.previewZones(k), [1 0 1], 0.10);
-                end
             end
             hold(app.PreviewAxes, 'off');
         end
@@ -610,13 +646,13 @@ end
 function buildObjectsPanel(app)
     g = uigridlayout(app.ObjectsPanel, [3 4]);
     g.RowHeight = {28, '1x', 28};
-    g.ColumnWidth = {110, 130, 130, 60};
+    g.ColumnWidth = {'fit', 'fit', 'fit', 'fit'};
     lblObjGeom = uilabel(g, 'Text', 'Geometry:');
     lblObjGeom.Layout.Row = 1; lblObjGeom.Layout.Column = 1;
     app.ObjectGeometryDropDown = uidropdown(g, ...
         'Items', {'Polygon', 'Circle', 'Ellipse'});
     app.ObjectGeometryDropDown.Layout.Row = 1; app.ObjectGeometryDropDown.Layout.Column = 2;
-    bAdd = uibutton(g, 'Text', '+ Add object', ...
+    bAdd = uibutton(g, 'Text', '+ Add', ...
         'ButtonPushedFcn', @(~,~) onAddObject(app));
     bAdd.Layout.Row = 1; bAdd.Layout.Column = 3;
     bInfo = uibutton(g, 'Text', 'INFO', ...
@@ -627,9 +663,12 @@ function buildObjectsPanel(app)
         'ValueChangedFcn', @(~,~) app.refreshPreview());
     app.ObjectsListBox.Layout.Row = 2; app.ObjectsListBox.Layout.Column = [1 4];
 
-    bRemove = uibutton(g, 'Text', 'Remove selected', ...
+    bRemove = uibutton(g, 'Text', 'Remove', ...
         'ButtonPushedFcn', @(~,~) app.removeSelectedObject());
-    bRemove.Layout.Row = 3; bRemove.Layout.Column = [1 2];
+    bRemove.Layout.Row = 3; bRemove.Layout.Column = 1;
+    bReplace = uibutton(g, 'Text', 'Replace', ...
+        'ButtonPushedFcn', @(~,~) app.replaceSelectedObject());
+    bReplace.Layout.Row = 3; bReplace.Layout.Column = 2;
 end
 
 function buildZonesPanel(app)
@@ -744,10 +783,14 @@ function onCalibrateCompute(app)
         app.status('Click "Choose points" first (need 4 points)');
         return;
     end
-    [pxlAvg, kcorr] = sphynx.preset.pixelsPerCm(app.State.frame, ...
+    [pxlAvg, kcorr, pxlY, pxlX, diffPct] = sphynx.preset.pixelsPerCm(app.State.frame, ...
         'Points', app.State.calibPoints, ...
         'DistancesCm', [app.DistanceYField.Value, app.DistanceXField.Value]);
-    app.setPixelsPerCm(pxlAvg, 'Y', pxlAvg, 'X', pxlAvg / kcorr, 'KCorr', kcorr);
+    % Always pass actual Y and X so the labels show the raw measurements
+    % even when kcorr collapses to 1 (within threshold).
+    app.setPixelsPerCm(pxlAvg, 'Y', pxlY, 'X', pxlX, 'KCorr', kcorr);
+    app.status(sprintf('Calibrated: avg=%.2f, Y=%.2f, X=%.2f, X/Y diff=%.2f%%, kcorr=%.3f', ...
+        pxlAvg, pxlY, pxlX, diffPct, kcorr));
 end
 
 function onPickArena(app)
@@ -782,6 +825,20 @@ function onAddObject(app)
         onZoneStrategyChanged(app);
         sphynx.util.log('info', '[App] object added geometry=%s total=%d', geometry, numel(app.State.objects));
         app.refocus();
+        % "Is it correct?" gate
+        choice = uiconfirm(app.Figure, ...
+            sprintf('Is %s correct?', obj.type), 'Confirm object', ...
+            'Options', {'Yes', 'No (redo)', 'No (delete)'}, ...
+            'DefaultOption', 1, 'CancelOption', 2);
+        switch choice
+            case 'No (redo)'
+                app.replaceSelectedObject();
+            case 'No (delete)'
+                app.State.objects(end) = [];
+                app.refreshObjectsList();
+                app.refreshPreview();
+                sphynx.util.log('info', '[App] object discarded');
+        end
     catch ME
         app.status(sprintf('Object failed: %s', ME.message));
     end
@@ -886,14 +943,27 @@ end
 
 function drawZoneOverlay(ax, z, color, alpha)
     if ~isnumeric(z.maskfilled) && ~islogical(z.maskfilled); return; end
-    [r, c] = find(z.maskfilled);
-    if isempty(r); return; end
-    scatter(ax, c, r, 1, color, 'filled', 'MarkerFaceAlpha', alpha);
+    mask = logical(z.maskfilled);
+    if ~any(mask(:)); return; end
+    % Use bwboundaries for a clean outline + filled patch with alpha.
+    B = bwboundaries(mask, 'noholes');
+    for k = 1:numel(B)
+        b = B{k};
+        if size(b, 1) < 3; continue; end
+        patch(ax, b(:, 2), b(:, 1), color, ...
+            'FaceAlpha', alpha, 'EdgeColor', color, 'LineWidth', 1.2);
+    end
 end
 
 function drawState(ax, S, drawZones)
     imshow(S.frame, 'Parent', ax);
     hold(ax, 'on');
+    if drawZones && ~isempty(S.zones)
+        cmap = colorPaletteForZones(numel(S.zones));
+        for k = 1:numel(S.zones)
+            drawZoneOverlay(ax, S.zones(k), cmap(k,:), 0.22);
+        end
+    end
     if ~isempty(S.arena) && ~isempty(S.arena.border_x)
         plot(ax, S.arena.border_x(:), S.arena.border_y(:), 'k-', 'LineWidth', 2);
     end
@@ -901,12 +971,30 @@ function drawState(ax, S, drawZones)
         plot(ax, S.objects(k).border_x(:), S.objects(k).border_y(:), '-', ...
             'Color', [0 0.7 0], 'LineWidth', 1.5);
     end
-    if drawZones
-        for k = 1:numel(S.zones)
-            drawZoneOverlay(ax, S.zones(k), [0 0.5 1], 0.07);
-        end
-    end
     hold(ax, 'off');
+end
+
+function cmap = colorPaletteForZones(n)
+    if n <= 0
+        cmap = zeros(0,3);
+        return;
+    end
+    base = [
+        0.10 0.45 0.95;   % blue
+        0.95 0.30 0.20;   % red
+        0.20 0.70 0.30;   % green
+        0.95 0.65 0.10;   % orange
+        0.55 0.30 0.85;   % purple
+        0.20 0.80 0.80;   % cyan
+        0.85 0.20 0.65;   % magenta
+        0.80 0.80 0.20;   % yellow-olive
+    ];
+    if n <= size(base, 1)
+        cmap = base(1:n, :);
+    else
+        cmap = repmat(base, ceil(n / size(base,1)), 1);
+        cmap = cmap(1:n, :);
+    end
 end
 
 function s = sanitize(name)

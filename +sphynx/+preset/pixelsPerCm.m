@@ -1,4 +1,4 @@
-function [pxlPerCm, x_kcorr] = pixelsPerCm(frame, varargin)
+function [pxlPerCm, x_kcorr, pxlY, pxlX, diffPct] = pixelsPerCm(frame, varargin)
 % PIXELSPERCM  Calibrate pixels-per-cm by clicking 4 reference points.
 %
 %   [pxlPerCm, x_kcorr] = sphynx.preset.pixelsPerCm(frame)
@@ -53,12 +53,16 @@ function [pxlPerCm, x_kcorr] = pixelsPerCm(frame, varargin)
     pxlX = distancePixelsX / distanceCmX;
 
     diffPct = abs(pxlX - pxlY) / pxlX * 100;
+    sphynx.util.log('info', '[pixelsPerCm] Y=%.3f pxl/cm, X=%.3f pxl/cm, diff=%.2f%%', pxlY, pxlX, diffPct);
     if diffPct > p.Results.PercentThreshold
         pxlPerCm = pxlY;
         x_kcorr = pxlY / pxlX;
-        sphynx.util.log('warn', 'X/Y scales differ by %.1f%%; using Y, x_kcorr=%.3f', diffPct, x_kcorr);
+        sphynx.util.log('warn', '[pixelsPerCm] X/Y scales differ by %.1f%% (> %.0f%% threshold); using Y, x_kcorr=%.3f', ...
+            diffPct, p.Results.PercentThreshold, x_kcorr);
     else
         pxlPerCm = (pxlY + pxlX) / 2;
         x_kcorr = 1;
+        sphynx.util.log('info', '[pixelsPerCm] using avg=%.3f pxl/cm (X/Y within %.0f%%)', ...
+            pxlPerCm, p.Results.PercentThreshold);
     end
 end

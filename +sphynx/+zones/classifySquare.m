@@ -94,9 +94,10 @@ function zones = cornersWallsCenter(arenaMask, opts)
     wallsPadded = wallsAndCornersPadded & ~cornersPadded;
 
     zones = struct('name',{},'type',{},'maskfilled',{});
-    zones(1) = mkZone('corners', cornersPadded, pad);
-    zones(2) = mkZone('walls',   wallsPadded,   pad);
-    zones(3) = mkZone('center',  centerPadded,  pad);
+    zones(1) = mkZone('corners',           cornersPadded,         pad);
+    zones(2) = mkZone('walls',             wallsPadded,           pad);
+    zones(3) = mkZone('walls_and_corners', wallsAndCornersPadded, pad);
+    zones(4) = mkZone('center',            centerPadded,          pad);
 end
 
 function zone = mkZone(name, paddedMask, pad)
