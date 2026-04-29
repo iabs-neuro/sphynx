@@ -206,3 +206,89 @@ Expected now: **38/0/1** (37 passed, 0 failed, 1 skipped — same as plan).
 
 If still failing — paste output below this line and I'll iterate again.
 
+runAllTests('tag','fast')
+Running 38 tests (tag=fast)
+Running circleFitTest
+.....
+Done circleFitTest
+__________
+
+Running classifyCircleTest
+.....
+Done classifyCircleTest
+__________
+
+Running classifySquareTest
+.....
+Done classifySquareTest
+__________
+
+Running inMaskSafeTest
+.....
+Done inMaskSafeTest
+__________
+
+Running logTest
+.....
+Done logTest
+__________
+
+Running partitionStripsTest
+.....
+Done partitionStripsTest
+__________
+
+Running polygonFitTest
+...
+Done polygonFitTest
+__________
+
+Running sanityTest
+..
+Done sanityTest
+__________
+
+Running zoneVisitTest
+..
+Done zoneVisitTest
+__________
+
+Running demoPipelineTest
+
+================================================================================
+demoPipelineTest/testNOF_H01_1D_runsWithoutError was filtered.
+    Test Diagnostic: pass-0 placeholder; real test arrives in Pass B
+Details
+================================================================================
+.
+Done demoPipelineTest
+__________
+
+Failure Summary:
+
+     Name                                              Failed  Incomplete  Reason(s)
+    ===============================================================================================
+     demoPipelineTest/testNOF_H01_1D_runsWithoutError              X       Filtered by assumption.
+
+=== Summary ===
+Total:   38
+Passed:  37
+Failed:  0
+Skipped: 1
+Warning: 0 failed, 1 incomplete 
+> In runAllTests (line 71) 
+
+ans = 
+
+  1×38 TestResult array with properties:
+
+    Name
+    Passed
+    Failed
+    Incomplete
+    Duration
+    Details
+
+Totals:
+   37 Passed, 0 Failed, 1 Incomplete.
+   0.13362 seconds testing time.

@@ -93,11 +93,21 @@ function zones = cornersWallsCenter(arenaMask, opts)
 
     wallsPadded = wallsAndCornersPadded & ~cornersPadded;
 
+    % "RealOut" zones: extend arena boundary outward by wallW so tracking
+    % jitter just outside the polygon still counts as "in walls/corners".
+    % Matches legacy semantics (ArenaRealOut, WallsAndCornersRealOut).
+    bwdistOutside = bwdist(paddedMask);
+    outerRing = (bwdistOutside > 0) & (bwdistOutside <= wallW);
+    arenaRealOutPadded = paddedMask | outerRing;
+    wallsAndCornersRealOutPadded = arenaRealOutPadded & ~centerPadded;
+
     zones = struct('name',{},'type',{},'maskfilled',{});
-    zones(1) = mkZone('corners',           cornersPadded,         pad);
-    zones(2) = mkZone('walls',             wallsPadded,           pad);
-    zones(3) = mkZone('walls_and_corners', wallsAndCornersPadded, pad);
-    zones(4) = mkZone('center',            centerPadded,          pad);
+    zones(1) = mkZone('corners',                   cornersPadded,                pad);
+    zones(2) = mkZone('walls',                     wallsPadded,                  pad);
+    zones(3) = mkZone('walls_and_corners',         wallsAndCornersPadded,        pad);
+    zones(4) = mkZone('center',                    centerPadded,                 pad);
+    zones(5) = mkZone('arena_realout',             arenaRealOutPadded,           pad);
+    zones(6) = mkZone('walls_and_corners_realout', wallsAndCornersRealOutPadded, pad);
 end
 
 function zone = mkZone(name, paddedMask, pad)

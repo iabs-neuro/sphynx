@@ -64,8 +64,9 @@ classdef CreatePresetApp < handle
         % Preview
         PreviewAxes
         FrameIndexLabel
-        % Status
-        StatusBar
+        % Move/rotate
+        MoveTargetDropDown
+        MoveStepField
         % State
         State
     end
@@ -142,6 +143,7 @@ classdef CreatePresetApp < handle
                 app.ArenaStatusLabel.Text = sprintf('Arena: %s OK', geometry);
                 app.refreshPreview();
                 onZoneStrategyChanged(app);   % object-zone field may change
+                app.refreshMoveTargets();
                 sphynx.util.log('info', '[App] arena geometry=%s npoints=%d', geometry, size(points,1));
             catch ME
                 app.status(sprintf('Arena failed: %s', ME.message));
@@ -160,6 +162,7 @@ classdef CreatePresetApp < handle
                 app.refreshObjectsList();
                 app.refreshPreview();
                 onZoneStrategyChanged(app);
+                app.refreshMoveTargets();
                 sphynx.util.log('info', '[App] object %d added geometry=%s', numel(app.State.objects), geometry);
             catch ME
                 app.status(sprintf('Object failed: %s', ME.message));
@@ -172,13 +175,13 @@ classdef CreatePresetApp < handle
             if isempty(idx); return; end
             removed = app.State.objects(idx).type;
             app.State.objects(idx) = [];
-            % Renumber remaining objects so their type labels stay sequential
             for k = 1:numel(app.State.objects)
                 app.State.objects(k).type = sprintf('Object%d', k);
             end
             app.refreshObjectsList();
             app.refreshPreview();
             onZoneStrategyChanged(app);
+            app.refreshMoveTargets();
             sphynx.util.log('info', '[App] removed %s; %d remain', removed, numel(app.State.objects));
         end
 
@@ -193,6 +196,7 @@ classdef CreatePresetApp < handle
                 app.State.objects(idx) = obj;
                 app.refreshObjectsList();
                 app.refreshPreview();
+                app.refreshMoveTargets();
                 sphynx.util.log('info', '[App] replaced %s with new %s', obj.type, geometry);
                 app.refocus();
             catch ME
@@ -222,14 +226,46 @@ classdef CreatePresetApp < handle
         function addZones(app)
             Z = computeZonesFromUI(app);
             if isempty(Z); return; end
-            % Also add per-object zones if objects are defined
+            % Object zones — only if not already committed (dedup).
             if ~isempty(app.State.objects)
-                Zobj = sphynx.preset.buildObjectZones(app.State.objects, ...
-                    app.State.height, app.State.width, ...
-                    'PixelsPerCm', app.State.pxlPerCm, ...
-                    'ZoneWidthCm', app.ObjectZoneWidthField.Value);
-                Z = [Z, Zobj];
+                hasObjectZones = false;
+                if ~isempty(app.State.zones)
+                    hasObjectZones = any(startsWith(string({app.State.zones.name}), 'Object'));
+                end
+                if ~hasObjectZones
+                    Zobj = sphynx.preset.buildObjectZones(app.State.objects, ...
+                        app.State.height, app.State.width, ...
+                        'PixelsPerCm', app.State.pxlPerCm, ...
+                        'ZoneWidthCm', app.ObjectZoneWidthField.Value);
+                    Z = [Z, Zobj];
+                else
+                    sphynx.util.log('info', '[App] object zones already committed, not duplicating');
+                end
             end
+            % Arena corner points (only when arena is Polygon)
+            if ~isempty(app.State.arena) && strcmp(app.State.arena.geometry, 'Polygon') ...
+                    && ~isempty(app.State.arena.border_separate_x)
+                hasCorners = false;
+                if ~isempty(app.State.zones)
+                    hasCorners = any(startsWith(string({app.State.zones.name}), 'ArenaCorner'));
+                end
+                if ~hasCorners
+                    Zcorners = arenaCornerZones(app.State.arena);
+                    Z = [Z, Zcorners];
+                end
+            end
+            % Object centers (one per object)
+            if ~isempty(app.State.objects)
+                hasCenters = false;
+                if ~isempty(app.State.zones)
+                    hasCenters = any(endsWith(string({app.State.zones.name}), 'Center'));
+                end
+                if ~hasCenters
+                    Zcenters = objectCenterZones(app.State.objects);
+                    Z = [Z, Zcenters];
+                end
+            end
+
             if isempty(app.State.zones)
                 app.State.zones = Z;
             else
@@ -241,7 +277,8 @@ classdef CreatePresetApp < handle
             sphynx.util.log('info', '[App] added %d zones (%s); total committed = %d', ...
                 numel(Z), app.ZonesStrategyDropDown.Value, numel(app.State.zones));
             for k = 1:numel(Z)
-                sphynx.util.log('info', '       zone[%d] = %s', numel(app.State.zones)-numel(Z)+k, Z(k).name);
+                sphynx.util.log('info', '       zone[%d] = %s', ...
+                    numel(app.State.zones)-numel(Z)+k, Z(k).name);
             end
         end
 
@@ -263,8 +300,12 @@ classdef CreatePresetApp < handle
                 if isempty(Zones); Zones = struct('name',{},'type',{},'maskfilled',{}); end
                 [~, baseName, ~] = fileparts(app.State.videoPath);
                 if isempty(baseName); baseName = 'preset'; end
-                outPath = fullfile(app.State.outDir, sprintf('%s_Preset.mat', baseName));
+                sessionDir = fullfile(app.State.outDir, baseName);
+                if ~isfolder(sessionDir); mkdir(sessionDir); end
+                outPath = fullfile(sessionDir, sprintf('%s_Preset.mat', baseName));
                 save(outPath, 'Options', 'Zones', 'ArenaAndObjects');
+                % Auto-save the combined layout plot next to the preset.
+                autoSaveLayoutPlot(app, sessionDir, baseName);
                 app.status(sprintf('Saved: %s', outPath));
             catch ME
                 app.status(sprintf('Save failed: %s', ME.message));
@@ -278,38 +319,84 @@ classdef CreatePresetApp < handle
             if ~isempty(app.PlotAllCheckbox); plotAll = app.PlotAllCheckbox.Value; end
             [~, baseName, ~] = fileparts(app.State.videoPath);
             if isempty(baseName); baseName = 'preset'; end
+            sessionDir = fullfile(app.State.outDir, baseName);
+            if ~isfolder(sessionDir); mkdir(sessionDir); end
 
-            % Always: one combined plot (arena + objects + all zones)
-            fh = figure('Visible', 'off', 'Position', [100 100 800 600]);
-            cleanup1 = onCleanup(@() closeIfValid(fh));
-            ax = axes(fh);
-            drawState(ax, app.State, true);
-            title(ax, sprintf('%s — combined layout', baseName), 'Interpreter', 'none');
-            outPath = fullfile(app.State.outDir, sprintf('%s_layout.png', baseName));
-            exportgraphics(ax, outPath);
-            sphynx.util.log('info', '[App] saved plot %s', outPath);
-            clear cleanup1;
+            autoSaveLayoutPlot(app, sessionDir, baseName);
 
-            % Optional: one per zone
             if plotAll && ~isempty(app.State.zones)
                 for k = 1:numel(app.State.zones)
+                    z = app.State.zones(k);
+                    if isfield(z, 'type') && strcmp(z.type, 'point'); continue; end
                     fh2 = figure('Visible', 'off', 'Position', [100 100 800 600]);
                     cleanup2 = onCleanup(@() closeIfValid(fh2));
                     ax2 = axes(fh2);
                     drawState(ax2, app.State, false);
-                    z = app.State.zones(k);
                     if (isnumeric(z.maskfilled) || islogical(z.maskfilled))
                         hold(ax2, 'on');
-                        drawZoneFilled(ax2, z, [0 0.5 1], 0.25);
+                        drawZoneFilled(ax2, z, [0 0.5 1], 0.35);
                     end
                     title(ax2, sprintf('%s — zone: %s', baseName, z.name), 'Interpreter', 'none');
-                    outPath2 = fullfile(app.State.outDir, sprintf('%s_zone_%s.png', baseName, sanitize(z.name)));
+                    outPath2 = fullfile(sessionDir, sprintf('%s_zone_%s.png', baseName, sanitize(z.name)));
                     exportgraphics(ax2, outPath2);
                     sphynx.util.log('info', '[App] saved plot %s', outPath2);
                     clear cleanup2;
                 end
             end
-            app.status(sprintf('Plots saved to %s', app.State.outDir));
+            app.status(sprintf('Plots saved to %s', sessionDir));
+        end
+
+        function moveTarget(app, dirVec)
+            % dirVec is [dx dy] in unit step; multiplied by Step field
+            step = app.MoveStepField.Value;
+            tIdx = currentTargetIdx(app);   % 0=arena, k=object k
+            if isnan(tIdx); return; end
+            applyTransformToTarget(app, tIdx, dirVec * step, 0);
+            app.refreshPreview();
+        end
+
+        function rotateTarget(app, sign)
+            % sign: +1 CW, -1 CCW; rotation = sign * Step degrees
+            stepDeg = app.MoveStepField.Value;
+            tIdx = currentTargetIdx(app);
+            if isnan(tIdx); return; end
+            applyTransformToTarget(app, tIdx, [0 0], sign * stepDeg);
+            app.refreshPreview();
+        end
+
+        function refitTargetMask(app)
+            % Recompute the mask from the (possibly translated/rotated)
+            % border, so when the geometry was just nudged the mask
+            % follows. Useful after a sequence of moveTarget/rotateTarget.
+            tIdx = currentTargetIdx(app);
+            if isnan(tIdx); return; end
+            if tIdx == 0
+                app.State.arena.mask = imfill(...
+                    sphynx.preset.maskFromBorder(app.State.height, app.State.width, ...
+                    app.State.arena.border_x, app.State.arena.border_y), 'holes');
+            else
+                obj = app.State.objects(tIdx);
+                obj.mask = imfill(...
+                    sphynx.preset.maskFromBorder(app.State.height, app.State.width, ...
+                    obj.border_x, obj.border_y), 'holes');
+                app.State.objects(tIdx) = obj;
+            end
+            app.refreshPreview();
+            sphynx.util.log('info', '[App] refit mask for target idx=%d', tIdx);
+        end
+
+        function refreshMoveTargets(app)
+            items = {'Arena'};
+            for k = 1:numel(app.State.objects)
+                items{end+1} = app.State.objects(k).type; %#ok<AGROW>
+            end
+            old = app.MoveTargetDropDown.Value;
+            app.MoveTargetDropDown.Items = items;
+            if ismember(old, items)
+                app.MoveTargetDropDown.Value = old;
+            else
+                app.MoveTargetDropDown.Value = items{1};
+            end
         end
 
         function nextFrame(app)
@@ -356,9 +443,7 @@ classdef CreatePresetApp < handle
         end
 
         function status(app, msg)
-            if ~isempty(app.StatusBar) && isvalid(app.StatusBar)
-                app.StatusBar.Text = msg;
-            end
+            % Status panel removed — log only.
             sphynx.util.log('info', '[App] %s', msg);
             app.refocus();
         end
@@ -439,18 +524,33 @@ classdef CreatePresetApp < handle
         end
 
         function Options = assembleOptions(app)
+            % Per-user spec (Q6): keep frame metadata + calibration +
+            % experiment type + arena geometry + good-frame snapshot;
+            % store widths and counts. Drop pipeline-side params
+            % (LikelihoodThreshold, velocity_*, BodyPart) — those live
+            % in sphynx.pipeline.defaultConfig now.
             Options = struct();
             Options.ExperimentType = app.ExpTypeDropDown.Value;
             Options.pxl2sm = app.State.pxlPerCm;
+            Options.pxl2smY = app.State.pxlPerCmY;
+            Options.pxl2smX = app.State.pxlPerCmX;
             Options.x_kcorr = app.State.x_kcorr;
             Options.FrameRate = app.State.frameRate;
             Options.NumFrames = app.State.numFrames;
             Options.Height = app.State.height;
             Options.Width = app.State.width;
-            Options.LikelihoodThreshold = 0.95;
-            Options.velocity_rest = 1;
-            Options.velocity_locomotion = 5;
-            Options.BodyPart.Velocity = 'bodycenter';
+            Options.ArenaGeometry = '';
+            if ~isempty(app.State.arena); Options.ArenaGeometry = app.State.arena.geometry; end
+            Options.GoodVideoFrame = app.State.frame;
+            if size(app.State.frame, 3) >= 1
+                Options.GoodVideoFrameGray = app.State.frame(:, :, 1);
+            end
+            Options.ObjectsNumber = numel(app.State.objects);
+            Options.WallWidthCm     = app.WallWidthField.Value;
+            Options.MiddleWidthCm   = app.MiddleWidthField.Value;
+            Options.NumStrips       = app.NumStripsField.Value;
+            Options.StripDirection  = app.StripDirDropDown.Value;
+            Options.ObjectZoneWidthCm = app.ObjectZoneWidthField.Value;
         end
 
         function ArenaAndObjects = assembleArenaAndObjects(app)
@@ -511,9 +611,9 @@ function buildCreateTab(app)
     app.OuterGrid.ColumnWidth = {'fit', '1x'};   % left: fits content, right: flex
     app.OuterGrid.RowHeight = {'1x'};
 
-    app.LeftGrid = uigridlayout(app.OuterGrid, [7, 1]);
+    app.LeftGrid = uigridlayout(app.OuterGrid, [6, 1]);
     app.LeftGrid.Layout.Column = 1;
-    app.LeftGrid.RowHeight = {180, 200, 90, 170, 240, 70, 30};
+    app.LeftGrid.RowHeight = {180, 200, 90, 170, 240, 70};
     app.LeftGrid.RowSpacing = 5;
     app.LeftGrid.Padding = [5 5 5 5];
 
@@ -523,7 +623,6 @@ function buildCreateTab(app)
     app.ObjectsPanel = uipanel(app.LeftGrid, 'Title', '4. Objects');
     app.ZonesPanel   = uipanel(app.LeftGrid, 'Title', '5. Zones');
     app.SavePanel    = uipanel(app.LeftGrid, 'Title', '6. Save / Plot');
-    statusPanel      = uipanel(app.LeftGrid, 'Title', 'Status');
 
     buildLoadPanel(app);
     buildCalibPanel(app);
@@ -531,25 +630,56 @@ function buildCreateTab(app)
     buildObjectsPanel(app);
     buildZonesPanel(app);
     buildSavePanel(app);
-    buildStatusPanel(app, statusPanel);
 
-    % Right column
-    app.RightGrid = uigridlayout(app.OuterGrid, [2, 1]);
+    % Right column: preview + nav strip + move/rotate strip
+    app.RightGrid = uigridlayout(app.OuterGrid, [3, 1]);
     app.RightGrid.Layout.Column = 2;
-    app.RightGrid.RowHeight = {'1x', 40};
-    previewWrap = uipanel(app.RightGrid, 'Title', 'Preview (committed zones=blue, preview=magenta)');
+    app.RightGrid.RowHeight = {'1x', 40, 40};
+    previewWrap = uipanel(app.RightGrid, 'Title', 'Preview');
     pg = uigridlayout(previewWrap, [1, 1]);
     app.PreviewAxes = uiaxes(pg);
     app.PreviewAxes.XTick = []; app.PreviewAxes.YTick = [];
 
-    ctrlPanel = uipanel(app.RightGrid);
-    cg = uigridlayout(ctrlPanel, [1, 3]);
-    cg.ColumnWidth = {120, 150, '1x'};
+    % Row 2: navigation (frame nav + target/step selectors)
+    navPanel = uipanel(app.RightGrid);
+    cg = uigridlayout(navPanel, [1, 6]);
+    cg.ColumnWidth = repmat({'fit'}, 1, 6);
+    cg.ColumnSpacing = 4;
     bNext = uibutton(cg, 'Text', 'Next frame', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.nextFrame());
     bNext.Layout.Row = 1; bNext.Layout.Column = 1;
     app.FrameIndexLabel = uilabel(cg, 'Text', 'Frame -- / --');
     app.FrameIndexLabel.Layout.Row = 1; app.FrameIndexLabel.Layout.Column = 2;
+    lblTarget = uilabel(cg, 'Text', 'Target:');
+    lblTarget.Layout.Row = 1; lblTarget.Layout.Column = 3;
+    app.MoveTargetDropDown = uidropdown(cg, 'Items', {'Arena'}, ...
+        'Value', 'Arena');
+    app.MoveTargetDropDown.Layout.Row = 1; app.MoveTargetDropDown.Layout.Column = 4;
+    lblStep = uilabel(cg, 'Text', 'Step (px):');
+    lblStep.Layout.Row = 1; lblStep.Layout.Column = 5;
+    app.MoveStepField = uieditfield(cg, 'numeric', 'Value', 5, 'Limits', [0.1, 200]);
+    app.MoveStepField.Layout.Row = 1; app.MoveStepField.Layout.Column = 6;
+
+    % Row 3: arrow + rotate buttons
+    movePanel = uipanel(app.RightGrid);
+    mg = uigridlayout(movePanel, [1, 7]);
+    mg.ColumnWidth = repmat({'fit'}, 1, 7);
+    mg.ColumnSpacing = 4;
+    addMoveBtn(mg, 1, 'Left',  @() app.moveTarget([-1  0]));
+    addMoveBtn(mg, 2, 'Right', @() app.moveTarget([ 1  0]));
+    addMoveBtn(mg, 3, 'Up',    @() app.moveTarget([ 0 -1]));
+    addMoveBtn(mg, 4, 'Down',  @() app.moveTarget([ 0  1]));
+    addMoveBtn(mg, 5, 'Rot CCW', @() app.rotateTarget(-1));
+    addMoveBtn(mg, 6, 'Rot CW',  @() app.rotateTarget( 1));
+    addMoveBtn(mg, 7, 'Refit mask', @() app.refitTargetMask());
+end
+
+function addMoveBtn(parent, col, txt, cb)
+    b = uibutton(parent, 'Text', txt, ...
+        'BackgroundColor', semanticColor('action'), ...
+        'ButtonPushedFcn', @(~,~) cb());
+    b.Layout.Row = 1; b.Layout.Column = col;
 end
 
 function buildAnalyzeTab(app)
@@ -822,10 +952,7 @@ function buildSavePanel(app)
     bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
 end
 
-function buildStatusPanel(app, parent)
-    g = uigridlayout(parent, [1 1]);
-    app.StatusBar = uilabel(g, 'Text', 'Ready');
-end
+% buildStatusPanel removed — status now goes to command-line log only.
 
 % =================== Callbacks ============================================
 
@@ -883,6 +1010,7 @@ function onPickArena(app)
         app.ArenaStatusLabel.Text = sprintf('Arena: %s OK', geometry);
         app.refreshPreview();
         onZoneStrategyChanged(app);
+        app.refreshMoveTargets();
         sphynx.util.log('info', '[App] arena geometry=%s', geometry);
         app.refocus();
     catch ME
@@ -908,6 +1036,7 @@ function onAddObject(app)
             app.refreshObjectsList();
             app.refreshPreview();
             onZoneStrategyChanged(app);
+            app.refreshMoveTargets();
             sphynx.util.log('info', '[App] object %s added geometry=%s', obj.type, geometry);
             app.refocus();
             choice = uiconfirm(app.Figure, ...
@@ -1038,12 +1167,20 @@ function pts = cornerPointsFromArena(arena)
 end
 
 function drawZoneOutline(ax, z, color)
-    % Lightweight: outline only (lines), safe in uiaxes (no patch
-    % which can collide with imshow's CData/XLim handling).
+    if ~isfield(z, 'maskfilled'); return; end
+    if isfield(z, 'type') && strcmp(z.type, 'point')
+        if numel(z.maskfilled) >= 2
+            plot(ax, z.maskfilled(1), z.maskfilled(2), 'o', ...
+                'MarkerEdgeColor', color, 'MarkerFaceColor', color, 'MarkerSize', 8);
+        end
+        return;
+    end
     if ~isnumeric(z.maskfilled) && ~islogical(z.maskfilled); return; end
     mask = logical(z.maskfilled);
     if ~any(mask(:)); return; end
-    B = bwboundaries(mask, 'noholes');
+    % Use without 'noholes' so ring-shaped masks (object Out zones) get
+    % both outer and inner boundaries drawn.
+    B = bwboundaries(mask);
     for k = 1:numel(B)
         b = B{k};
         if size(b, 1) < 3; continue; end
@@ -1052,17 +1189,75 @@ function drawZoneOutline(ax, z, color)
 end
 
 function drawZoneFilled(ax, z, color, alpha)
-    % Heavier: filled patch + outline. For saved plots in figure axes
-    % (not uiaxes), where patch behaves correctly.
+    % Per-pixel alpha overlay using image() + AlphaData, which handles
+    % arbitrary topologies (rings, multi-component) correctly. patch
+    % with bwboundaries fails for ring masks because 'noholes' fills
+    % the hole; this approach sidesteps that.
+    if ~isfield(z, 'maskfilled'); return; end
+    if isfield(z, 'type') && strcmp(z.type, 'point')
+        if numel(z.maskfilled) >= 2
+            plot(ax, z.maskfilled(1), z.maskfilled(2), 'o', ...
+                'MarkerEdgeColor', color, 'MarkerFaceColor', color, 'MarkerSize', 8);
+        end
+        return;
+    end
     if ~isnumeric(z.maskfilled) && ~islogical(z.maskfilled); return; end
     mask = logical(z.maskfilled);
     if ~any(mask(:)); return; end
-    B = bwboundaries(mask, 'noholes');
+    [H, W] = size(mask);
+    rgb = zeros(H, W, 3);
+    rgb(:,:,1) = color(1);
+    rgb(:,:,2) = color(2);
+    rgb(:,:,3) = color(3);
+    image(ax, rgb, 'AlphaData', double(mask) * alpha);
+    % Outline (uses both outer and inner boundaries — correct for rings)
+    B = bwboundaries(mask);
     for k = 1:numel(B)
         b = B{k};
         if size(b, 1) < 3; continue; end
-        patch(ax, b(:, 2), b(:, 1), color, ...
-            'FaceAlpha', alpha, 'EdgeColor', color, 'LineWidth', 1.2);
+        plot(ax, b(:, 2), b(:, 1), '-', 'Color', color, 'LineWidth', 1.0);
+    end
+end
+
+function tIdx = currentTargetIdx(app)
+    val = app.MoveTargetDropDown.Value;
+    if strcmp(val, 'Arena')
+        if isempty(app.State.arena); tIdx = NaN; sphynx.util.log('warn','[App] Arena not defined yet'); return; end
+        tIdx = 0;
+    else
+        tIdx = find(strcmp({app.State.objects.type}, val), 1);
+        if isempty(tIdx); tIdx = NaN; end
+    end
+end
+
+function applyTransformToTarget(app, tIdx, translation, rotationDeg)
+    if tIdx == 0
+        ent = app.State.arena;
+    else
+        ent = app.State.objects(tIdx);
+    end
+    if isempty(ent); return; end
+    cx = mean(ent.border_x(:)); cy = mean(ent.border_y(:));
+    rad = deg2rad(rotationDeg);
+    R = [cos(rad), -sin(rad); sin(rad), cos(rad)];
+    bx = ent.border_x(:) - cx;
+    by = ent.border_y(:) - cy;
+    rot = R * [bx, by]';
+    ent.border_x = reshape(rot(1, :)' + cx + translation(1), size(ent.border_x));
+    ent.border_y = reshape(rot(2, :)' + cy + translation(2), size(ent.border_y));
+    if isfield(ent, 'border_separate_x') && ~isempty(ent.border_separate_x)
+        for s = 1:numel(ent.border_separate_x)
+            sx = ent.border_separate_x{s}(:) - cx;
+            sy = ent.border_separate_y{s}(:) - cy;
+            r2 = R * [sx, sy]';
+            ent.border_separate_x{s} = reshape(r2(1,:)' + cx + translation(1), size(ent.border_separate_x{s}));
+            ent.border_separate_y{s} = reshape(r2(2,:)' + cy + translation(2), size(ent.border_separate_y{s}));
+        end
+    end
+    if tIdx == 0
+        app.State.arena = ent;
+    else
+        app.State.objects(tIdx) = ent;
     end
 end
 
@@ -1122,6 +1317,37 @@ end
 
 function showHelp(title, text)
     msgbox(text, title, 'help', 'modal');
+end
+
+function Z = arenaCornerZones(arena)
+    Z = struct('name', {}, 'type', {}, 'maskfilled', {});
+    for c = 1:numel(arena.border_separate_x)
+        Z(end+1).name = sprintf('ArenaCorner%d', c); %#ok<AGROW>
+        Z(end).type = 'point';
+        Z(end).maskfilled = [arena.border_separate_x{c}(1), arena.border_separate_y{c}(1)];
+    end
+end
+
+function Z = objectCenterZones(objects)
+    Z = struct('name', {}, 'type', {}, 'maskfilled', {});
+    for k = 1:numel(objects)
+        cx = mean(objects(k).border_x(:));
+        cy = mean(objects(k).border_y(:));
+        Z(end+1).name = sprintf('%sCenter', objects(k).type); %#ok<AGROW>
+        Z(end).type = 'point';
+        Z(end).maskfilled = [cx, cy];
+    end
+end
+
+function autoSaveLayoutPlot(app, sessionDir, baseName)
+    fh = figure('Visible', 'off', 'Position', [100 100 1000 750]);
+    cleanup = onCleanup(@() closeIfValid(fh));
+    ax = axes(fh);
+    drawState(ax, app.State, true);
+    title(ax, sprintf('%s — combined layout', baseName), 'Interpreter', 'none');
+    outPath = fullfile(sessionDir, sprintf('%s_layout.png', baseName));
+    exportgraphics(ax, outPath);
+    sphynx.util.log('info', '[App] saved plot %s', outPath);
 end
 
 function c = semanticColor(category)

@@ -456,3 +456,133 @@ ans =
 Totals:
    49 Passed, 1 Failed (rerun), 1 Incomplete.
    0.80372 seconds testing time.
+
+>> runAllTests('tag','fast')
+Running 51 tests (tag=fast)
+Running circleFitTest
+.....
+Done circleFitTest
+__________
+
+Running classifyCircleTest
+.....
+Done classifyCircleTest
+__________
+
+Running classifySquareTest
+.....
+Done classifySquareTest
+__________
+
+Running inMaskSafeTest
+.....
+Done inMaskSafeTest
+__________
+
+Running logTest
+.....
+Done logTest
+__________
+
+Running partitionStripsTest
+.....
+Done partitionStripsTest
+__________
+
+Running polygonFitTest
+...
+Done polygonFitTest
+__________
+
+Running sanityTest
+..
+Done sanityTest
+__________
+
+Running unwrapForSmoothTest
+....
+Done unwrapForSmoothTest
+__________
+
+Running wrapTest
+......
+Done wrapTest
+__________
+
+Running headDirectionContinuityTest
+..
+================================================================================
+Verification failed in headDirectionContinuityTest/testTotalRotationApproximatelyCorrect.
+    ---------------------
+    Framework Diagnostic:
+    ---------------------
+    verifyEqual failed.
+    --> The numeric values are not equal using "isequaln".
+    --> The error was not within absolute tolerance.
+    --> Failure table:
+                 Actual             Expected              Error              RelativeError        AbsoluteTolerance
+            ________________    ________________    __________________    ____________________    _________________
+        
+            12.4616508592395    12.5663706143592    -0.104719755119666    -0.00833333333333381           0.1       
+    
+    Actual Value:
+      12.461650859239507
+    Expected Value:
+      12.566370614359172
+    ------------------
+    Stack Information:
+    ------------------
+    In C:\Users\User\PycharmProjects\sphynx\tests\synthetic\headDirectionContinuityTest.m (testTotalRotationApproximatelyCorrect) at 28
+================================================================================
+.
+Done headDirectionContinuityTest
+__________
+
+Running zoneVisitTest
+..
+Done zoneVisitTest
+__________
+
+Running demoPipelineTest
+
+================================================================================
+demoPipelineTest/testNOF_H01_1D_runsWithoutError was filtered.
+    Test Diagnostic: pass-0 placeholder; real test arrives in Pass B
+Details
+================================================================================
+.
+Done demoPipelineTest
+__________
+
+Failure Summary:
+
+     Name                                                               Failed  Incomplete  Reason(s)
+    ================================================================================================================
+     headDirectionContinuityTest/testTotalRotationApproximatelyCorrect    X                 Failed by verification.
+    ----------------------------------------------------------------------------------------------------------------
+     demoPipelineTest/testNOF_H01_1D_runsWithoutError                               X       Filtered by assumption.
+
+=== Summary ===
+Total:   51
+Passed:  49
+Failed:  1
+Skipped: 1
+Warning: 1 failed, 1 incomplete 
+> In runAllTests (line 71) 
+
+ans = 
+
+  1×51 TestResult array with properties:
+
+    Name
+    Passed
+    Failed
+    Incomplete
+    Duration
+    Details
+
+Totals:
+   49 Passed, 1 Failed (rerun), 1 Incomplete.
+   0.18396 seconds testing time.
+
+>> 
