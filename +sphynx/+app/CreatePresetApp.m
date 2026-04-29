@@ -697,7 +697,10 @@ function buildCreateTab(app)
     leftScroll.Layout.Column = 1;
 
     app.LeftGrid = uigridlayout(leftScroll, [6, 1]);
-    app.LeftGrid.RowHeight = {70, 130, 65, 130, 200, 50};
+    % Per-panel height = sum(rowHeights) + (n-1)*rowSpacing + 8 padding
+    %                    + ~25 panel title bar. Generous values; the
+    %                    Scrollable wrapper handles overflow.
+    app.LeftGrid.RowHeight = {90, 145, 95, 160, 210, 65};
     app.LeftGrid.RowSpacing = 4;
     app.LeftGrid.Padding = [4 4 4 4];
 
