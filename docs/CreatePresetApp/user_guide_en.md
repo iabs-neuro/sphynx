@@ -18,157 +18,153 @@ startup
 sphynx.app.CreatePresetApp()
 ```
 
-A two-tab window appears: **Create Preset** and **Analyze Session**.
-The Analyze Session tab is a placeholder for now; everything below
-is on the first tab.
+The window opens maximized with two tabs: **Create Preset** (used
+below) and **Analyze Session** (a placeholder for the future
+batch-run UI).
 
 ## 2. Block 1 — Load
 
-- Click **Browse** next to **Project root** and pick a folder you'll
-  re-use. The other file dialogs in this session will start there.
-- Click **Browse** next to **Video file** and select your video.
-  The first frame appears in the Preview.
-- Click **Browse** next to **Output dir** and select where presets
-  and plots will be saved. The app will auto-create a subfolder
-  named after your video.
-- Optional: click **Browse** next to **Existing preset** if you want
-  to seed the calibration values from a previous session.
+Each row has a labeled **Browse** button on top and a short text
+field showing the current path below it.
 
-If the preview shows the frame, you're ready to calibrate.
+- **Project root** — default starting directory for the other file
+  dialogs.
+- **Video** — your session video. The first frame appears on the
+  right in the Preview.
+- **Output dir** — where presets and plots will be saved. The app
+  auto-creates a subfolder named after your video.
+- **Preset** (optional) — load an existing preset to seed
+  calibration values.
 
 ## 3. Block 2 — Calibration
 
-You convert pixels to centimeters by clicking 4 reference points and
-telling the app how many cm those distances correspond to.
+Convert pixels to cm using 4 reference points.
 
-1. Type the real-world distance (cm) for the **vertical** reference
-   into **cm Y**.
-2. Type the real-world distance (cm) for the **horizontal** reference
-   into **cm X**.
-3. Click **Calibration. Choose points**. A picture window opens.
+1. Type the real-world Y distance (cm) into **cm Y**.
+2. Type the real-world X distance into **cm X**.
+3. Click **Choose points** (red). A picture window opens.
 4. Click 4 points in this order:
    - point 1 — top of vertical reference
    - point 2 — bottom of vertical reference
    - point 3 — left of horizontal reference
    - point 4 — right of horizontal reference
 
-   The window closes automatically after the 4th click.
-5. Click **Calibration. Calculation**. The app shows pxl/cm for
-   both axes (`Y:`, `X:`), the average (`avg:`), and the X/Y
-   correction factor (`kcorr:`). If `kcorr` is far from 1.000
-   (more than a few percent), check whether you clicked the points
-   in the right order.
+   The window auto-closes after the 4th click.
+5. Click **Compute** (red). The app shows pxl/cm for both axes
+   (`Y:`, `X:`), the average (`avg:`), and the X/Y correction factor
+   (`kcorr:`). If `kcorr` is far from 1 (more than a few percent),
+   re-check the click order.
 
-Choose your **Experiment type** from the dropdown.
-
-If you need to see another frame to better identify reference points,
-click **Next frame** below the Preview.
+Choose your **Exp** (Experiment type) from the dropdown.
 
 ## 4. Block 3 — Arena
 
-1. Click one of the geometry buttons: **Polygon**, **Circle**,
-   **Ellipse**, or **O-maze**. The selected one stays highlighted
-   in yellow.
+1. Click one of the geometry buttons (yellow): **Polygon**, **Circle**,
+   **Ellipse**, **O-maze**. The selected one stays toggled.
 2. Click **Pick arena points** (red).
-3. In the picture window, click points on the arena boundary,
-   then press ENTER.
-   - **Polygon**: click corners. The app fits a closed polygon.
-   - **Circle**: at least 3 points anywhere on the rim.
-   - **Ellipse**: at least 5 points on the rim.
-   - **O-maze**: 3+ points on the OUTER rim, ENTER, then 3+ points
-     on the INNER rim, ENTER.
+3. In the picture window, click points on the arena boundary, then
+   press ENTER. The window auto-closes.
+   - Polygon: click corners.
+   - Circle: at least 3 points anywhere on the rim.
+   - Ellipse: at least 5 points on the rim.
+   - O-maze: 3+ points on the OUTER rim, ENTER, then 3+ points on
+     the INNER rim, ENTER.
 
 The arena outline appears in black on the Preview.
 
 ## 5. Block 4 — Objects
 
-If your session has objects (food bowls, novel objects, etc.):
-
 1. Click a geometry button (Polygon / Circle / Ellipse).
-2. Click **+ Add** (red).
-3. Click points on the object boundary, then ENTER.
-4. A dialog asks: "Is Object1 correct?" with three options:
-   - **Yes**: keep it.
-   - **No (redo)**: discards it and re-opens the picker. The old
-     mask is removed from the preview before you re-pick.
-   - **No (delete)**: deletes it without re-asking.
+2. Click **+ Add** (red). Click points, ENTER.
+3. A dialog asks: "Is Object1 correct?" — three options:
+   - **Yes** — keep.
+   - **No (redo)** — discards this object and re-opens the picker.
+     The old mask is removed from the preview before you re-pick.
+   - **No (delete)** — deletes without re-asking.
 
-The dialog keeps re-asking until you pick **Yes** or **No (delete)**.
+   The dialog keeps re-asking until you pick **Yes** or **No (delete)**.
+4. To remove or change an existing object, select it in the list,
+   then click **Remove**, **Replace**, or **Rename**.
+   - **Remove** — deletes the selected object.
+   - **Replace** — re-opens the picker for that object's mask
+     (preserves its label).
+   - **Rename** — opens an input dialog for a new label.
 
-To remove or replace an existing object, click it in the list, then
-click **Remove** or **Replace**. The selected object is highlighted
-in orange on the preview.
+Selected object is highlighted in orange on the Preview.
 
 ## 6. Block 5 — Zones
 
-You can apply one or more partitioning strategies. They accumulate.
+You can stack multiple partitioning strategies — they accumulate.
 
-1. Pick a strategy from the dropdown:
-   - `corners-walls-center` — for square / polygon arenas. Set
-     **Wall (cm)** to your wall-zone width.
-   - `strips` — divides the arena into N equal horizontal or
-     vertical strips. Set **N strips** and **Strip dir**.
-   - `circle-rings` — for round arenas. Set **Wall (cm)** and
-     **Middle (cm)**; the app builds wall, optional middle1/2/...,
-     and center rings.
+1. Pick a **Strategy**:
+   - `corners-walls-center` — square / polygon arenas.
+     Set **Wall** (cm).
+   - `strips` — N equal horizontal or vertical strips.
+     Set **Strips** (count) and **Dir**.
+   - `circle-rings` — round arenas. Set **Wall** and **Middle**.
    - `none` — no spatial subdivision.
-2. If you have objects, set **Object zone (cm)** — the inflation
-   radius for the interaction zone around each object.
-3. Click **Preview zones** (red) to see the proposed partition on
-   the Preview in magenta.
-4. When happy, click **Add to set** (red) to commit those zones to
-   the final list. The "Committed zones" counter updates.
-5. To start over, click **Clear all** (red).
+2. If objects exist, set **Obj zone** (cm) — the inflation radius for
+   the interaction zone around each object.
+3. Click **Preview** to see the proposed partition (outlines shown in
+   palette colors).
+4. Click **Add to set** to commit them. The "Added: ..." label
+   updates with the strategy tag (e.g. `corners-walls-center +
+   strips_horizontal_3`).
+5. **Clear** removes every committed zone.
 
-You can call **Add to set** multiple times with different strategies
-to combine partitions.
+Zones are auto-cleared (with a warning in the Log) whenever you
+move / rotate / rename / replace / add an object — because committed
+zones built off old geometry would be wrong.
 
-## 7. Block 6 — Save / Plot
+## 7. Block 6 — Save
 
-- **Save preset** (red): writes the `.mat` file to
-  `<output_dir>/<videobase>/<videobase>_Preset.mat` and also
-  saves the combined-layout PNG next to it.
-- **Make plot** (red): saves the combined PNG. If **plot all zones**
-  is checked, it also saves one PNG per individual zone.
+- **Save preset** (red) writes
+  `<output_dir>/<videobase>/<videobase>_Preset.mat` AND saves the
+  combined-layout PNG (`<videobase>_layout.png`) next to it.
+- If **plot all zones** is checked, it also saves one PNG per
+  individual zone (`<videobase>_zone_<name>.png`).
 
 ## 8. Re-using a preset on a new video
 
-If your camera position is approximately stable across days, you
-can re-use a preset:
+If your camera is approximately stable across days:
 
-1. Click **Browse** for **Video file** and pick the new video.
-   The new frame appears in the Preview. Calibration / arena /
-   objects / zones are still loaded from before.
-2. Look at the Preview. If everything aligns with the new video,
-   skip to **Save preset** under the new video's name (the
-   subfolder will be auto-named after the new video).
-3. If something is misaligned, use the **Move / Rotate** strip
-   below the Preview:
-   - **Target** dropdown: pick Arena or a specific object
-   - **Step (px)**: pixel step for translation (or degrees for
-     rotation)
-   - **Left / Right / Up / Down**: translate
-   - **Rot CCW / Rot CW**: rotate around the target's centroid
-4. After nudging, click **Refit mask** to regenerate the binary
-   mask from the new outline.
-5. Click **Save preset**.
+1. Click **Browse** on the **Video** row and pick the new video.
+   Calibration / arena / objects / zones remain in memory.
+2. If the layout aligns with the new frame, **Save preset**
+   (subfolder will be auto-named after the new video).
+3. If something is misaligned, use the strip below the Preview:
+   - **Target** dropdown: `All`, `Arena`, `Object1`, `Object2`, ...
+   - **Step (px)** — pixel step for translation, or degrees for
+     rotation.
+   - **Left / Right / Up / Down** — translate.
+   - **Rot ↺ / Rot ↻** — rotate around the target's centroid
+     (CCW / CW). Note: with target `All`, each child currently
+     rotates around its own centroid (see `TODO.md` #6 — fix
+     pending).
+4. After nudging, click **Preview** or **Add to set** in Zones (the
+   masks are auto-recomputed from the transformed outlines).
+5. **Save preset**.
 
-## 9. Where to find help inside the app
+## 9. Help inside the app
 
-Each panel has an `INFO` button (light blue). Click it to open a
-short help dialog about that panel.
+Every panel has an `INFO` button (blue). Click it for a short
+panel-specific dialog.
 
-## 10. Troubleshooting
+## 10. Log
 
-- **Preview is empty**: load a video first. The picture appears
-  only when a video file is selected.
-- **"Need at least 3 corners"**: you selected too few points for
-  a polygon. Click again with more points.
-- **kcorr far from 1**: you may have clicked the calibration
-  points in the wrong order (Y pair first, X pair second).
-- **Object masks look wrong on saved plot**: ring-shaped object
-  zones (`Object<N>Out`) should look like rings (with a hole),
-  not solid disks. If they look solid, check that
-  `ObjectZoneWidthCm` is greater than zero.
-- **Status messages**: appear in the MATLAB Command Window with
-  `[INFO] [App] ...` prefix.
+Right column, bottom: a scrollable text area mirroring the MATLAB
+Command Window output for the app. The last 500 messages are kept.
+*Auto-scroll to the latest message is on R2021a+; on R2020a you can
+scroll manually (see `TODO.md` #2).*
+
+## 11. Troubleshooting
+
+- **Preview empty** — load a video first.
+- **Need at least 3 corners** — click more points before ENTER.
+- **kcorr far from 1** — calibration clicks were probably out of
+  order (Y pair first, X pair second).
+- **Object Out zones look like solid disks** — should be rings.
+  Make sure `Obj zone (cm)` is greater than 0.
+- **Zones lost after a move/rotate** — that's by design;
+  auto-cleared because old zone masks would no longer match the
+  new geometry. Re-Add to set when ready.
