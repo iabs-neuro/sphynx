@@ -363,6 +363,10 @@ classdef CreatePresetApp < handle
                 save(outPath, 'Options', 'Zones', 'ArenaAndObjects');
                 % Auto-save the combined layout plot next to the preset.
                 autoSaveLayoutPlot(app, sessionDir, baseName);
+                % If "plot all zones" is checked, save one PNG per zone.
+                if ~isempty(app.PlotAllCheckbox) && app.PlotAllCheckbox.Value
+                    savePerZonePlots(app, sessionDir, baseName);
+                end
                 app.status(sprintf('Saved: %s', outPath));
             catch ME
                 app.status(sprintf('Save failed: %s', ME.message));
@@ -542,17 +546,18 @@ classdef CreatePresetApp < handle
             ax.XTick = []; ax.YTick = [];
             ax.Box = 'on';
             hold(ax, 'on');
-            % Zones (filled patches) — drawn first so arena/object outlines stay on top
+            % Zones — outline-only in preview (filled is too slow with
+            % many zones on large frames). Save plot still uses filled.
             if ~isempty(app.State.zones)
                 cmap = colorPaletteForZones(numel(app.State.zones));
                 for k = 1:numel(app.State.zones)
-                    drawZoneFilled(ax, app.State.zones(k), cmap(k,:), 0.18);
+                    drawZoneOutline(ax, app.State.zones(k), cmap(k,:));
                 end
             end
             if ~isempty(app.State.previewZones)
                 cmap = colorPaletteForZones(numel(app.State.previewZones));
                 for k = 1:numel(app.State.previewZones)
-                    drawZoneFilled(ax, app.State.previewZones(k), cmap(k,:), 0.28);
+                    drawZoneOutline(ax, app.State.previewZones(k), cmap(k,:));
                 end
             end
             % Arena outline
@@ -732,7 +737,7 @@ function buildCreateTab(app)
     navPanel = uipanel(app.RightGrid);
     cg = uigridlayout(navPanel, [1, 6]);
     cg.RowHeight = {22};
-    cg.ColumnWidth = {'fit', 'fit', 'fit', 'fit', 'fit', 50};
+    cg.ColumnWidth = {'fit', 110, 'fit', 'fit', 'fit', 60};
     cg.ColumnSpacing = 4;
     bNext = uibutton(cg, 'Text', 'Next frame', ...
         'BackgroundColor', semanticColor('action'), ...
@@ -753,7 +758,7 @@ function buildCreateTab(app)
     movePanel = uipanel(app.RightGrid);
     mg = uigridlayout(movePanel, [1, 6]);
     mg.RowHeight = {26};
-    mg.ColumnWidth = repmat({'fit'}, 1, 6);
+    mg.ColumnWidth = {80, 80, 80, 80, 90, 90};
     mg.ColumnSpacing = 4;
     addMoveBtn(mg, 1, 'Left',    @() app.moveTarget([-1  0]));
     addMoveBtn(mg, 2, 'Right',   @() app.moveTarget([ 1  0]));
@@ -827,23 +832,24 @@ function addLoadCol(g, col, btnText, btnFcn, fieldKey, app)
 end
 
 function buildCalibPanel(app)
-    g = uigridlayout(app.CalibPanel, [4 5]);
+    % 6 columns: label | value | label | value | flex | INFO
+    g = uigridlayout(app.CalibPanel, [4 6]);
     g.RowHeight = {22, 22, 22, 22};
-    g.ColumnWidth = {'fit', 'fit', '1x', 'fit', 50};
+    g.ColumnWidth = {'fit', 50, 'fit', 50, '1x', 50};
     g.ColumnSpacing = 4;
 
     bChoose = uibutton(g, 'Text', 'Choose points', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onCalibrateChoose(app));
-    bChoose.Layout.Row = 1; bChoose.Layout.Column = 1;
+    bChoose.Layout.Row = 1; bChoose.Layout.Column = [1 2];
     bCompute = uibutton(g, 'Text', 'Compute', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onCalibrateCompute(app));
-    bCompute.Layout.Row = 1; bCompute.Layout.Column = 2;
+    bCompute.Layout.Row = 1; bCompute.Layout.Column = [3 4];
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Calibration', helpCalibrationText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = 5;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 6;
 
     lblY = uilabel(g, 'Text', 'cm Y:');
     lblY.Layout.Row = 2; lblY.Layout.Column = 1;
@@ -868,7 +874,7 @@ function buildCalibPanel(app)
     app.ExpTypeDropDown = uidropdown(g, ...
         'Items', {'Novelty OF','BowlsOpenField','NOL','Holes Track','Odor Track', ...
                   'Freezing Track','New Track','Complex Context','OF_Obj','3DM'});
-    app.ExpTypeDropDown.Layout.Row = 4; app.ExpTypeDropDown.Layout.Column = [2 3];
+    app.ExpTypeDropDown.Layout.Row = 4; app.ExpTypeDropDown.Layout.Column = [2 5];
 end
 
 function buildArenaPanel(app)
@@ -979,7 +985,7 @@ end
 function buildZonesPanel(app)
     g = uigridlayout(app.ZonesPanel, [6 5]);
     g.RowHeight = {22, 22, 22, 22, 22, 22};
-    g.ColumnWidth = {'fit', 50, 'fit', 50, 50};
+    g.ColumnWidth = {'fit', 50, 'fit', 90, 50};
     g.ColumnSpacing = 4;
 
     lblStrat = uilabel(g, 'Text', 'Strategy:');
@@ -1082,7 +1088,7 @@ function onCalibrateChoose(app)
     [xPts, yPts] = ginput(4);
     app.State.calibPoints = [xPts(:), yPts(:)];
     clear cleanup;
-    app.status(sprintf('Got %d calibration points; now click "Calibration. Calculation"', size(app.State.calibPoints,1)));
+    app.status(sprintf('Got %d calibration points; now click "Compute"', size(app.State.calibPoints,1)));
     app.refocus();
 end
 
@@ -1459,6 +1465,27 @@ function autoSaveLayoutPlot(app, sessionDir, baseName)
     sphynx.util.log('info', '[App] saved plot %s', outPath);
 end
 
+function savePerZonePlots(app, sessionDir, baseName)
+    if isempty(app.State.zones); return; end
+    for k = 1:numel(app.State.zones)
+        z = app.State.zones(k);
+        if isfield(z, 'type') && strcmp(z.type, 'point'); continue; end
+        fh = figure('Visible', 'off', 'Position', [100 100 1000 750]);
+        cleanup = onCleanup(@() closeIfValid(fh)); %#ok<NASGU>
+        ax = axes(fh);
+        drawState(ax, app.State, false);
+        if (isnumeric(z.maskfilled) || islogical(z.maskfilled))
+            hold(ax, 'on');
+            drawZoneFilled(ax, z, [0 0.5 1], 0.35);
+        end
+        title(ax, sprintf('%s — zone: %s', baseName, z.name), 'Interpreter', 'none');
+        outPath = fullfile(sessionDir, sprintf('%s_zone_%s.png', baseName, sanitize(z.name)));
+        exportgraphics(ax, outPath);
+        sphynx.util.log('info', '[App] saved plot %s', outPath);
+        clear cleanup;
+    end
+end
+
 function c = semanticColor(category)
     % Subdued pastel button-tinting by semantic role (~50% paler than v6).
     switch category
@@ -1473,7 +1500,7 @@ function txt = helpCalibrationText()
     txt = {
         'Calibration: convert pixels to centimeters.';
         '';
-        'Step 1 - "Calibration. Choose points":';
+        'Step 1 - "Choose points":';
         '   Click 4 points on the preview frame in this order:';
         '     point 1 - top of vertical reference';
         '     point 2 - bottom of vertical reference';
@@ -1484,7 +1511,7 @@ function txt = helpCalibrationText()
         'Step 2 - enter the real cm distances into the cm Y / cm X';
         'fields.';
         '';
-        'Step 3 - "Calibration. Calculation": computes pxl/cm for Y,';
+        'Step 3 - "Compute": computes pxl/cm for Y,';
         'X, average, and the X/Y correction factor (kcorr). If kcorr';
         'differs from 1 by more than ~3%, your camera scale is';
         'unequal between axes — keep this in mind.';

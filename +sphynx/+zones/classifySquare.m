@@ -95,11 +95,31 @@ function zones = cornersWallsCenter(arenaMask, opts)
 
     % "RealOut" zones: extend arena boundary outward by wallW so tracking
     % jitter just outside the polygon still counts as "in walls/corners".
-    % Matches legacy semantics (ArenaRealOut, WallsAndCornersRealOut).
     bwdistOutside = bwdist(paddedMask);
     outerRing = (bwdistOutside > 0) & (bwdistOutside <= wallW);
     arenaRealOutPadded = paddedMask | outerRing;
     wallsAndCornersRealOutPadded = arenaRealOutPadded & ~centerPadded;
+
+    % Split the outer ring between corners and walls by proximity to
+    % corner points (so corners_realout grows from the corners and
+    % walls_realout grows from the wall segments).
+    if ~isempty(opts.CornerPoints)
+        cornerSeed = false(size(paddedMask));
+        for i = 1:size(opts.CornerPoints, 1)
+            cx = round(opts.CornerPoints(i,1)) + pad;
+            cy = round(opts.CornerPoints(i,2)) + pad;
+            if cx >= 1 && cx <= size(paddedMask,2) && cy >= 1 && cy <= size(paddedMask,1)
+                cornerSeed(cy, cx) = true;
+            end
+        end
+        distToCorner = bwdist(cornerSeed);
+        outerNearCorners = outerRing & (distToCorner <= cornerW);
+    else
+        outerNearCorners = false(size(paddedMask));
+    end
+    outerNearWalls = outerRing & ~outerNearCorners;
+    cornersRealOutPadded = cornersPadded | outerNearCorners;
+    wallsRealOutPadded   = wallsPadded   | outerNearWalls;
 
     zones = struct('name',{},'type',{},'maskfilled',{});
     zones(1) = mkZone('corners',                   cornersPadded,                pad);
@@ -107,7 +127,9 @@ function zones = cornersWallsCenter(arenaMask, opts)
     zones(3) = mkZone('walls_and_corners',         wallsAndCornersPadded,        pad);
     zones(4) = mkZone('center',                    centerPadded,                 pad);
     zones(5) = mkZone('arena_realout',             arenaRealOutPadded,           pad);
-    zones(6) = mkZone('walls_and_corners_realout', wallsAndCornersRealOutPadded, pad);
+    zones(6) = mkZone('corners_realout',           cornersRealOutPadded,         pad);
+    zones(7) = mkZone('walls_realout',             wallsRealOutPadded,           pad);
+    zones(8) = mkZone('walls_and_corners_realout', wallsAndCornersRealOutPadded, pad);
 end
 
 function zone = mkZone(name, paddedMask, pad)
