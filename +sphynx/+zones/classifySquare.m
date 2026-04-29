@@ -36,6 +36,20 @@ function zones = classifySquare(arenaMask, varargin)
             zones = cornersWallsCenter(arenaMask, p.Results);
         case 'strips'
             zones = sphynx.zones.partitionStrips(arenaMask, p.Results.NumStrips, p.Results.StripDirection);
+            % Also build _realout strips that include the outside-wall
+            % ring (arena inflated outward by wallW). Same N strips, same
+            % direction; user-facing names get a "_realout" suffix.
+            if ~isempty(p.Results.PixelsPerCm)
+                wallW = p.Results.WallWidthCm * p.Results.PixelsPerCm;
+                bwd = bwdist(arenaMask);
+                arenaRealOut = arenaMask | (bwd > 0 & bwd <= wallW);
+                stripsRealOut = sphynx.zones.partitionStrips(arenaRealOut, ...
+                    p.Results.NumStrips, p.Results.StripDirection);
+                for k = 1:numel(stripsRealOut)
+                    stripsRealOut(k).name = sprintf('%s_realout', stripsRealOut(k).name);
+                end
+                zones = [zones, stripsRealOut];
+            end
         case 'none'
             zones = struct('name','arena','type','area','maskfilled',arenaMask);
         otherwise

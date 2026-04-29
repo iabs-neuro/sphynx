@@ -447,7 +447,7 @@ classdef CreatePresetApp < handle
         end
 
         function refreshMoveTargets(app)
-            items = {'Arena'};
+            items = {'All', 'Arena'};
             for k = 1:numel(app.State.objects)
                 items{end+1} = app.State.objects(k).type; %#ok<AGROW>
             end
@@ -703,9 +703,9 @@ function buildCreateTab(app)
 
     app.LeftGrid = uigridlayout(leftScroll, [6, 1]);
     % Per-panel height = sum(rowHeights) + (n-1)*rowSpacing + 8 padding
-    %                    + ~25 panel title bar. Generous values; the
-    %                    Scrollable wrapper handles overflow.
-    app.LeftGrid.RowHeight = {90, 145, 95, 160, 210, 65};
+    %                    + ~25 panel title bar. Row heights are 28 px
+    %                    uniformly; Scrollable wrapper handles overflow.
+    app.LeftGrid.RowHeight = {100, 170, 105, 175, 245, 75};
     app.LeftGrid.RowSpacing = 4;
     app.LeftGrid.Padding = [4 4 4 4];
 
@@ -726,7 +726,7 @@ function buildCreateTab(app)
     % Right column: preview + nav strip + move strip + log textarea
     app.RightGrid = uigridlayout(app.OuterGrid, [4, 1]);
     app.RightGrid.Layout.Column = 2;
-    app.RightGrid.RowHeight = {'1x', 32, 36, 130};
+    app.RightGrid.RowHeight = {'1x', 40, 40, 130};
     app.RightGrid.RowSpacing = 3;
     previewWrap = uipanel(app.RightGrid, 'Title', 'Preview');
     pg = uigridlayout(previewWrap, [1, 1]);
@@ -736,7 +736,7 @@ function buildCreateTab(app)
     % Row 2: nav (Next frame + frame label + target dropdown + step)
     navPanel = uipanel(app.RightGrid);
     cg = uigridlayout(navPanel, [1, 6]);
-    cg.RowHeight = {22};
+    cg.RowHeight = {28};
     cg.ColumnWidth = {'fit', 110, 'fit', 'fit', 'fit', 60};
     cg.ColumnSpacing = 4;
     bNext = uibutton(cg, 'Text', 'Next frame', ...
@@ -757,15 +757,15 @@ function buildCreateTab(app)
     % Row 3: arrow + rotate buttons (10% taller than rest = 26 px)
     movePanel = uipanel(app.RightGrid);
     mg = uigridlayout(movePanel, [1, 6]);
-    mg.RowHeight = {26};
-    mg.ColumnWidth = {80, 80, 80, 80, 90, 90};
+    mg.RowHeight = {28};
+    mg.ColumnWidth = {80, 80, 80, 80, 80, 80};
     mg.ColumnSpacing = 4;
-    addMoveBtn(mg, 1, 'Left',    @() app.moveTarget([-1  0]));
-    addMoveBtn(mg, 2, 'Right',   @() app.moveTarget([ 1  0]));
-    addMoveBtn(mg, 3, 'Up',      @() app.moveTarget([ 0 -1]));
-    addMoveBtn(mg, 4, 'Down',    @() app.moveTarget([ 0  1]));
-    addMoveBtn(mg, 5, 'Rot CCW', @() app.rotateTarget(-1));
-    addMoveBtn(mg, 6, 'Rot CW',  @() app.rotateTarget( 1));
+    addMoveBtn(mg, 1, 'Left',  @() app.moveTarget([-1  0]));
+    addMoveBtn(mg, 2, 'Right', @() app.moveTarget([ 1  0]));
+    addMoveBtn(mg, 3, 'Up',    @() app.moveTarget([ 0 -1]));
+    addMoveBtn(mg, 4, 'Down',  @() app.moveTarget([ 0  1]));
+    addMoveBtn(mg, 5, 'Rot ↺', @() app.rotateTarget(-1));
+    addMoveBtn(mg, 6, 'Rot ↻', @() app.rotateTarget( 1));
 
     % Row 4: log textarea (mirrors command-window output)
     logPanel = uipanel(app.RightGrid, 'Title', 'Log');
@@ -806,7 +806,7 @@ function buildLoadPanel(app)
     % 4 columns × 2 rows: top row Browse buttons, bottom row short
     % path-fields. Saves vertical space.
     g = uigridlayout(app.LoadPanel, [2 4]);
-    g.RowHeight = {22, 22};
+    g.RowHeight = {28, 28};
     g.ColumnWidth = {'1x', '1x', '1x', '1x'};
     g.ColumnSpacing = 4;
 
@@ -834,7 +834,7 @@ end
 function buildCalibPanel(app)
     % 6 columns: label | value | label | value | flex | INFO
     g = uigridlayout(app.CalibPanel, [4 6]);
-    g.RowHeight = {22, 22, 22, 22};
+    g.RowHeight = {28, 28, 28, 28};
     g.ColumnWidth = {'fit', 50, 'fit', 50, '1x', 50};
     g.ColumnSpacing = 4;
 
@@ -882,7 +882,7 @@ function buildArenaPanel(app)
     % Layout: nGeom geometry buttons | flex spacer | action btn | INFO btn
     nCols = nGeom + 3;
     g = uigridlayout(app.ArenaPanel, [2, nCols]);
-    g.RowHeight = {22, 22};
+    g.RowHeight = {28, 25};
     g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {'fit'}, {50}];
     g.ColumnSpacing = 4;
 
@@ -915,8 +915,8 @@ function buildObjectsPanel(app)
     nGeom = 3;       % Polygon / Circle / Ellipse
     nCols = nGeom + 3;
     g = uigridlayout(app.ObjectsPanel, [3, nCols]);
-    g.RowHeight = {22, '1x', 22};
-    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {'fit'}, {50}];
+    g.RowHeight = {28, '1x', 28};
+    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {'fit'}, {60}];
     g.ColumnSpacing = 4;
 
     geometries = {'Polygon', 'Circle', 'Ellipse'};
@@ -983,9 +983,9 @@ function onGeometryToggle(buttons, src, ~)
 end
 
 function buildZonesPanel(app)
-    g = uigridlayout(app.ZonesPanel, [6 5]);
-    g.RowHeight = {22, 22, 22, 22, 22, 22};
-    g.ColumnWidth = {'fit', 50, 'fit', 90, 50};
+    g = uigridlayout(app.ZonesPanel, [6 6]);
+    g.RowHeight = {28, 28, 28, 28, 28, 28};
+    g.ColumnWidth = {'fit', 50, 'fit', 90, '1x', 60};
     g.ColumnSpacing = 4;
 
     lblStrat = uilabel(g, 'Text', 'Strategy:');
@@ -997,7 +997,7 @@ function buildZonesPanel(app)
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Zones', helpZonesText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = 5;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 6;
 
     lblWall = uilabel(g, 'Text', 'Wall:');
     lblWall.Layout.Row = 2; lblWall.Layout.Column = 1;
@@ -1022,28 +1022,36 @@ function buildZonesPanel(app)
     app.ObjectZoneWidthField = uieditfield(g, 'numeric', 'Value', 2.5, 'Limits', [0, Inf]);
     app.ObjectZoneWidthField.Layout.Row = 4; app.ObjectZoneWidthField.Layout.Column = 2;
 
-    bPreview = uibutton(g, 'Text', 'Preview', ...
+    % Buttons in their own sub-grid so each is sized to its text
+    btnPanel = uipanel(g, 'BorderType', 'none');
+    btnPanel.Layout.Row = 5; btnPanel.Layout.Column = [1 6];
+    bg = uigridlayout(btnPanel, [1, 4]);
+    bg.RowHeight = {28};
+    bg.ColumnWidth = {'fit', 'fit', 'fit', '1x'};
+    bg.Padding = [0 0 0 0];
+    bg.ColumnSpacing = 4;
+    bPreview = uibutton(bg, 'Text', 'Preview', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.previewZones());
-    bPreview.Layout.Row = 5; bPreview.Layout.Column = [1 2];
-    bAdd = uibutton(g, 'Text', 'Add to set', ...
+    bPreview.Layout.Row = 1; bPreview.Layout.Column = 1;
+    bAdd = uibutton(bg, 'Text', 'Add to set', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.addZones());
-    bAdd.Layout.Row = 5; bAdd.Layout.Column = 3;
-    bClear = uibutton(g, 'Text', 'Clear', ...
+    bAdd.Layout.Row = 1; bAdd.Layout.Column = 2;
+    bClear = uibutton(bg, 'Text', 'Clear', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.clearZones());
-    bClear.Layout.Row = 5; bClear.Layout.Column = 4;
+    bClear.Layout.Row = 1; bClear.Layout.Column = 3;
 
     app.ZonesCountLabel = uilabel(g, 'Text', 'Added: -');
-    app.ZonesCountLabel.Layout.Row = 6; app.ZonesCountLabel.Layout.Column = [1 5];
+    app.ZonesCountLabel.Layout.Row = 6; app.ZonesCountLabel.Layout.Column = [1 6];
 
     onZoneStrategyChanged(app);
 end
 
 function buildSavePanel(app)
     g = uigridlayout(app.SavePanel, [1 4]);
-    g.RowHeight = {22};
+    g.RowHeight = {28};
     g.ColumnWidth = {'fit', 'fit', '1x', 50};
     g.ColumnSpacing = 4;
     bSave = uibutton(g, 'Text', 'Save preset', ...
@@ -1327,7 +1335,9 @@ end
 
 function tIdx = currentTargetIdx(app)
     val = app.MoveTargetDropDown.Value;
-    if strcmp(val, 'Arena')
+    if strcmp(val, 'All')
+        tIdx = -1;   % sentinel: arena + all objects
+    elseif strcmp(val, 'Arena')
         if isempty(app.State.arena); tIdx = NaN; sphynx.util.log('warn','[App] Arena not defined yet'); return; end
         tIdx = 0;
     else
@@ -1337,6 +1347,16 @@ function tIdx = currentTargetIdx(app)
 end
 
 function applyTransformToTarget(app, tIdx, translation, rotationDeg)
+    if tIdx == -1
+        % Apply same transform to arena and every object.
+        if ~isempty(app.State.arena)
+            applyTransformToTarget(app, 0, translation, rotationDeg);
+        end
+        for k = 1:numel(app.State.objects)
+            applyTransformToTarget(app, k, translation, rotationDeg);
+        end
+        return;
+    end
     if tIdx == 0
         ent = app.State.arena;
     else
