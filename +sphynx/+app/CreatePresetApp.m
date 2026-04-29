@@ -46,10 +46,10 @@ classdef CreatePresetApp < handle
         XKcorrLabel
         ExpTypeDropDown
         % Arena
-        ArenaGeometryDropDown
+        ArenaGeometryButtons      % cell array of state buttons (Polygon/Circle/Ellipse/O-maze)
         ArenaStatusLabel
         % Objects
-        ObjectGeometryDropDown
+        ObjectGeometryButtons     % cell array of state buttons (Polygon/Circle/Ellipse)
         ObjectsListBox
         % Zones
         ZonesStrategyDropDown
@@ -186,7 +186,7 @@ classdef CreatePresetApp < handle
             if isempty(app.State.objects); app.status('No object selected'); return; end
             idx = find(strcmp(app.ObjectsListBox.Items, app.ObjectsListBox.Value), 1);
             if isempty(idx); app.status('No object selected'); return; end
-            geometry = app.ObjectGeometryDropDown.Value;
+            geometry = app.State.objectGeometry;
             try
                 obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry);
                 obj.type = app.State.objects(idx).type;     % preserve label
@@ -300,8 +300,7 @@ classdef CreatePresetApp < handle
                     z = app.State.zones(k);
                     if (isnumeric(z.maskfilled) || islogical(z.maskfilled))
                         hold(ax2, 'on');
-                        [r, c] = find(z.maskfilled);
-                        scatter(ax2, c, r, 1, 'b', 'filled', 'MarkerFaceAlpha', 0.1);
+                        drawZoneFilled(ax2, z, [0 0.5 1], 0.25);
                     end
                     title(ax2, sprintf('%s — zone: %s', baseName, z.name), 'Interpreter', 'none');
                     outPath2 = fullfile(app.State.outDir, sprintf('%s_zone_%s.png', baseName, sanitize(z.name)));
@@ -334,8 +333,14 @@ classdef CreatePresetApp < handle
     methods (Access = private)
         function buildUI(app)
             app.Figure = uifigure('Name', 'sphynx — Preset & Analyze', ...
-                'Position', [80, 80, 1300, 820], 'Visible', 'on');
-            app.TabGroup = uitabgroup(app.Figure, 'Position', [1 1 1300 820]);
+                'Position', [80, 80, 1100, 720], 'Visible', 'on');
+            % Wrap the tabgroup in a uigridlayout so it fills the figure
+            % and resizes correctly when the user drags the window.
+            outerWrap = uigridlayout(app.Figure, [1, 1]);
+            outerWrap.Padding = [0 0 0 0];
+            outerWrap.RowHeight = {'1x'};
+            outerWrap.ColumnWidth = {'1x'};
+            app.TabGroup = uitabgroup(outerWrap);
             app.TabCreate = uitab(app.TabGroup, 'Title', 'Create Preset');
             app.TabAnalyze = uitab(app.TabGroup, 'Title', 'Analyze Session');
 
@@ -363,20 +368,7 @@ classdef CreatePresetApp < handle
             cla(app.PreviewAxes);
             imshow(app.State.frame, 'Parent', app.PreviewAxes);
             hold(app.PreviewAxes, 'on');
-            % Committed zones first (so arena+object outlines stay on top)
-            if ~isempty(app.State.zones)
-                cmap = colorPaletteForZones(numel(app.State.zones));
-                for k = 1:numel(app.State.zones)
-                    drawZoneOverlay(app.PreviewAxes, app.State.zones(k), cmap(k,:), 0.18);
-                end
-            end
-            if ~isempty(app.State.previewZones)
-                cmap = colorPaletteForZones(numel(app.State.previewZones));
-                for k = 1:numel(app.State.previewZones)
-                    drawZoneOverlay(app.PreviewAxes, app.State.previewZones(k), cmap(k,:), 0.25);
-                end
-            end
-            % Arena outline
+            % Arena outline (black)
             if ~isempty(app.State.arena) && ~isempty(app.State.arena.border_x)
                 plot(app.PreviewAxes, app.State.arena.border_x(:), app.State.arena.border_y(:), ...
                     'k-', 'LineWidth', 2);
@@ -394,6 +386,19 @@ classdef CreatePresetApp < handle
                 end
                 plot(app.PreviewAxes, app.State.objects(k).border_x(:), app.State.objects(k).border_y(:), ...
                     '-', 'Color', col, 'LineWidth', lw);
+            end
+            % Zones — outlines only (no patch fill, safer in uiaxes)
+            if ~isempty(app.State.zones)
+                cmap = colorPaletteForZones(numel(app.State.zones));
+                for k = 1:numel(app.State.zones)
+                    drawZoneOutline(app.PreviewAxes, app.State.zones(k), cmap(k,:));
+                end
+            end
+            if ~isempty(app.State.previewZones)
+                cmap = colorPaletteForZones(numel(app.State.previewZones));
+                for k = 1:numel(app.State.previewZones)
+                    drawZoneOutline(app.PreviewAxes, app.State.previewZones(k), cmap(k,:));
+                end
             end
             hold(app.PreviewAxes, 'off');
         end
@@ -479,6 +484,8 @@ classdef CreatePresetApp < handle
             s.pxlPerCmX = NaN;
             s.x_kcorr = 1;
             s.calibPoints = [];
+            s.arenaGeometry = 'Polygon';
+            s.objectGeometry = 'Polygon';
             s.arena = [];
             s.objects = struct('type', {}, 'geometry', {}, 'border_x', {}, 'border_y', {}, ...
                                 'border_separate_x', {}, 'border_separate_y', {}, 'mask', {});
@@ -492,7 +499,7 @@ end
 
 function buildCreateTab(app)
     app.OuterGrid = uigridlayout(app.TabCreate, [1, 2]);
-    app.OuterGrid.ColumnWidth = {520, '1x'};
+    app.OuterGrid.ColumnWidth = {'fit', '1x'};   % left: fits content, right: flex
     app.OuterGrid.RowHeight = {'1x'};
 
     app.LeftGrid = uigridlayout(app.OuterGrid, [7, 1]);
@@ -560,7 +567,7 @@ end
 function buildLoadPanel(app)
     g = uigridlayout(app.LoadPanel, [4 3]);
     g.RowHeight = {25, 25, 25, 25};
-    g.ColumnWidth = {110, '1x', 70};
+    g.ColumnWidth = {'fit', '1x', 'fit'};
 
     addRow(g, 1, 'Project root:', @() pickDirAndApply(app, 'setProjectRoot'), 'projectRoot', app);
     addRow(g, 2, 'Video file:',   @() pickVideoStart(app), 'videoPath', app);
@@ -586,7 +593,7 @@ end
 function buildCalibPanel(app)
     g = uigridlayout(app.CalibPanel, [4 4]);
     g.RowHeight = {28, 28, 28, 28};
-    g.ColumnWidth = {180, 90, 180, 60};
+    g.ColumnWidth = {'fit', 'fit', 'fit', 'fit'};
 
     bChoose = uibutton(g, 'Text', 'Calibration. Choose points', ...
         'ButtonPushedFcn', @(~,~) onCalibrateChoose(app));
@@ -625,43 +632,60 @@ function buildCalibPanel(app)
 end
 
 function buildArenaPanel(app)
-    g = uigridlayout(app.ArenaPanel, [2 4]);
+    nGeom = 4;       % Polygon / Circle / Ellipse / O-maze
+    g = uigridlayout(app.ArenaPanel, [2, nGeom + 2]);
     g.RowHeight = {28, 25};
-    g.ColumnWidth = {110, 130, 160, 60};
-    lblGeom = uilabel(g, 'Text', 'Geometry:');
-    lblGeom.Layout.Row = 1; lblGeom.Layout.Column = 1;
-    app.ArenaGeometryDropDown = uidropdown(g, ...
-        'Items', {'Polygon', 'Circle', 'Ellipse', 'O-maze'});
-    app.ArenaGeometryDropDown.Layout.Row = 1; app.ArenaGeometryDropDown.Layout.Column = 2;
+    g.ColumnWidth = repmat({'fit'}, 1, nGeom + 2);
+    g.ColumnSpacing = 4;
+
+    geometries = {'Polygon', 'Circle', 'Ellipse', 'O-maze'};
+    app.ArenaGeometryButtons = cell(1, numel(geometries));
+    for i = 1:numel(geometries)
+        b = uibutton(g, 'state', 'Text', geometries{i}, ...
+            'ValueChangedFcn', @(src, ~) onArenaGeometryToggle(app, src));
+        b.Layout.Row = 1; b.Layout.Column = i;
+        if i == 1; b.Value = true; end
+        app.ArenaGeometryButtons{i} = b;
+    end
+
     bArena = uibutton(g, 'Text', 'Pick arena points', ...
         'ButtonPushedFcn', @(~,~) onPickArena(app));
-    bArena.Layout.Row = 1; bArena.Layout.Column = 3;
+    bArena.Layout.Row = 1; bArena.Layout.Column = nGeom + 1;
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'ButtonPushedFcn', @(~,~) showHelp('Arena', helpArenaText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 2;
+
     app.ArenaStatusLabel = uilabel(g, 'Text', 'Arena: <none>');
-    app.ArenaStatusLabel.Layout.Row = 2; app.ArenaStatusLabel.Layout.Column = [1 4];
+    app.ArenaStatusLabel.Layout.Row = 2; app.ArenaStatusLabel.Layout.Column = [1 nGeom + 2];
 end
 
 function buildObjectsPanel(app)
-    g = uigridlayout(app.ObjectsPanel, [3 4]);
+    nGeom = 3;       % Polygon / Circle / Ellipse
+    g = uigridlayout(app.ObjectsPanel, [3, nGeom + 2]);
     g.RowHeight = {28, '1x', 28};
-    g.ColumnWidth = {'fit', 'fit', 'fit', 'fit'};
-    lblObjGeom = uilabel(g, 'Text', 'Geometry:');
-    lblObjGeom.Layout.Row = 1; lblObjGeom.Layout.Column = 1;
-    app.ObjectGeometryDropDown = uidropdown(g, ...
-        'Items', {'Polygon', 'Circle', 'Ellipse'});
-    app.ObjectGeometryDropDown.Layout.Row = 1; app.ObjectGeometryDropDown.Layout.Column = 2;
+    g.ColumnWidth = repmat({'fit'}, 1, nGeom + 2);
+    g.ColumnSpacing = 4;
+
+    geometries = {'Polygon', 'Circle', 'Ellipse'};
+    app.ObjectGeometryButtons = cell(1, numel(geometries));
+    for i = 1:numel(geometries)
+        b = uibutton(g, 'state', 'Text', geometries{i}, ...
+            'ValueChangedFcn', @(src, ~) onObjectGeometryToggle(app, src));
+        b.Layout.Row = 1; b.Layout.Column = i;
+        if i == 1; b.Value = true; end
+        app.ObjectGeometryButtons{i} = b;
+    end
+
     bAdd = uibutton(g, 'Text', '+ Add', ...
         'ButtonPushedFcn', @(~,~) onAddObject(app));
-    bAdd.Layout.Row = 1; bAdd.Layout.Column = 3;
+    bAdd.Layout.Row = 1; bAdd.Layout.Column = nGeom + 1;
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'ButtonPushedFcn', @(~,~) showHelp('Objects', helpObjectsText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 2;
 
     app.ObjectsListBox = uilistbox(g, 'Items', {}, ...
         'ValueChangedFcn', @(~,~) app.refreshPreview());
-    app.ObjectsListBox.Layout.Row = 2; app.ObjectsListBox.Layout.Column = [1 4];
+    app.ObjectsListBox.Layout.Row = 2; app.ObjectsListBox.Layout.Column = [1 nGeom + 2];
 
     bRemove = uibutton(g, 'Text', 'Remove', ...
         'ButtonPushedFcn', @(~,~) app.removeSelectedObject());
@@ -671,10 +695,35 @@ function buildObjectsPanel(app)
     bReplace.Layout.Row = 3; bReplace.Layout.Column = 2;
 end
 
+function onArenaGeometryToggle(app, src)
+    onGeometryToggle(app.ArenaGeometryButtons, src, @(g) setfield(app.State, 'arenaGeometry', g));
+    app.State.arenaGeometry = src.Text;   % redundant safety: store directly
+end
+
+function onObjectGeometryToggle(app, src)
+    onGeometryToggle(app.ObjectGeometryButtons, src, @(g) setfield(app.State, 'objectGeometry', g));
+    app.State.objectGeometry = src.Text;
+end
+
+function onGeometryToggle(buttons, src, ~)
+    % Exclusive toggle group: when one is turned on, the others go off.
+    % If user tries to toggle the active one off, snap it back on (must
+    % always have a selection).
+    if ~src.Value
+        src.Value = true;
+        return;
+    end
+    for k = 1:numel(buttons)
+        if buttons{k} ~= src
+            buttons{k}.Value = false;
+        end
+    end
+end
+
 function buildZonesPanel(app)
     g = uigridlayout(app.ZonesPanel, [6 4]);
     g.RowHeight = {28, 28, 28, 28, 28, 28};
-    g.ColumnWidth = {110, 90, 110, 90};
+    g.ColumnWidth = {'fit', 'fit', 'fit', 'fit'};
 
     lblStrat = uilabel(g, 'Text', 'Strategy:');
     lblStrat.Layout.Row = 1; lblStrat.Layout.Column = 1;
@@ -727,7 +776,7 @@ end
 
 function buildSavePanel(app)
     g = uigridlayout(app.SavePanel, [1 4]);
-    g.ColumnWidth = {130, 130, 130, 60};
+    g.ColumnWidth = {'fit', 'fit', 'fit', 'fit'};
     bSave = uibutton(g, 'Text', 'Save preset', ...
         'ButtonPushedFcn', @(~,~) app.savePreset());
     bSave.Layout.Row = 1; bSave.Layout.Column = 1;
@@ -795,7 +844,7 @@ end
 
 function onPickArena(app)
     if isempty(app.State.frame); app.status('Load video first'); return; end
-    geometry = app.ArenaGeometryDropDown.Value;
+    geometry = app.State.arenaGeometry;
     try
         arena = sphynx.preset.readArenaGeometry(app.State.frame, geometry);
         app.State.arena = arena;
@@ -811,7 +860,7 @@ end
 
 function onAddObject(app)
     if isempty(app.State.frame); app.status('Load video first'); return; end
-    geometry = app.ObjectGeometryDropDown.Value;
+    geometry = app.State.objectGeometry;
     try
         obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry);
         obj.type = sprintf('Object%d', numel(app.State.objects) + 1);
@@ -941,11 +990,26 @@ function pts = cornerPointsFromArena(arena)
     end
 end
 
-function drawZoneOverlay(ax, z, color, alpha)
+function drawZoneOutline(ax, z, color)
+    % Lightweight: outline only (lines), safe in uiaxes (no patch
+    % which can collide with imshow's CData/XLim handling).
     if ~isnumeric(z.maskfilled) && ~islogical(z.maskfilled); return; end
     mask = logical(z.maskfilled);
     if ~any(mask(:)); return; end
-    % Use bwboundaries for a clean outline + filled patch with alpha.
+    B = bwboundaries(mask, 'noholes');
+    for k = 1:numel(B)
+        b = B{k};
+        if size(b, 1) < 3; continue; end
+        plot(ax, b(:, 2), b(:, 1), '-', 'Color', color, 'LineWidth', 1.5);
+    end
+end
+
+function drawZoneFilled(ax, z, color, alpha)
+    % Heavier: filled patch + outline. For saved plots in figure axes
+    % (not uiaxes), where patch behaves correctly.
+    if ~isnumeric(z.maskfilled) && ~islogical(z.maskfilled); return; end
+    mask = logical(z.maskfilled);
+    if ~any(mask(:)); return; end
     B = bwboundaries(mask, 'noholes');
     for k = 1:numel(B)
         b = B{k};
@@ -956,12 +1020,14 @@ function drawZoneOverlay(ax, z, color, alpha)
 end
 
 function drawState(ax, S, drawZones)
+    % Used by Make plot; ax is a regular figure axes (not uiaxes), so
+    % patch + FaceAlpha works correctly here.
     imshow(S.frame, 'Parent', ax);
     hold(ax, 'on');
     if drawZones && ~isempty(S.zones)
         cmap = colorPaletteForZones(numel(S.zones));
         for k = 1:numel(S.zones)
-            drawZoneOverlay(ax, S.zones(k), cmap(k,:), 0.22);
+            drawZoneFilled(ax, S.zones(k), cmap(k,:), 0.22);
         end
     end
     if ~isempty(S.arena) && ~isempty(S.arena.border_x)

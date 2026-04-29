@@ -11,7 +11,12 @@ function testConstructAndDestroy(testCase)
     verifyTrue(testCase, isvalid(app.Figure));
     verifyTrue(testCase, isvalid(app.PreviewAxes));
     verifyClass(testCase, app.ExpTypeDropDown.Items, 'cell');
-    verifyTrue(testCase, ismember('Polygon', app.ArenaGeometryDropDown.Items));
+    % Geometry via state-button toggle group (not dropdown anymore)
+    geomNames = cellfun(@(b) b.Text, app.ArenaGeometryButtons, 'UniformOutput', false);
+    verifyTrue(testCase, ismember('Polygon', geomNames));
+    verifyTrue(testCase, ismember('Circle', geomNames));
+    verifyTrue(testCase, ismember('Ellipse', geomNames));
+    verifyTrue(testCase, ismember('O-maze', geomNames));
 end
 
 function testProgrammaticDriveSquareArena(testCase)
