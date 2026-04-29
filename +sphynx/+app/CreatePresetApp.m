@@ -67,6 +67,8 @@ classdef CreatePresetApp < handle
         % Move/rotate
         MoveTargetDropDown
         MoveStepField
+        % Log
+        LogTextArea
         % State
         State
     end
@@ -205,12 +207,11 @@ classdef CreatePresetApp < handle
         end
 
         function previewZones(app)
-            % Build zones with current strategy+params and SHOW them on
-            % preview, but do not commit to State.zones.
+            % Auto-refit all masks first so previewed zones use the
+            % current geometry (after any move/rotate). Then build.
+            app.refitAllMasks();
             Z = computeZonesFromUI(app);
             if isempty(Z); return; end
-            % Include object zones in the preview too, so what user sees
-            % is what will be committed
             if ~isempty(app.State.objects)
                 Zobj = sphynx.preset.buildObjectZones(app.State.objects, ...
                     app.State.height, app.State.width, ...
@@ -223,7 +224,59 @@ classdef CreatePresetApp < handle
             app.status(sprintf('Previewing %d zones (%s)', numel(Z), app.ZonesStrategyDropDown.Value));
         end
 
+        function refitAllMasks(app)
+            if ~isempty(app.State.arena) && ~isempty(app.State.arena.border_x)
+                app.State.arena.mask = imfill(...
+                    sphynx.preset.maskFromBorder(app.State.height, app.State.width, ...
+                    app.State.arena.border_x, app.State.arena.border_y), 'holes');
+            end
+            for k = 1:numel(app.State.objects)
+                obj = app.State.objects(k);
+                obj.mask = imfill(...
+                    sphynx.preset.maskFromBorder(app.State.height, app.State.width, ...
+                    obj.border_x, obj.border_y), 'holes');
+                app.State.objects(k) = obj;
+            end
+        end
+
+        function invalidateZonesOnTransform(app)
+            if ~isempty(app.State.zones)
+                n = numel(app.State.zones);
+                app.State.zones = struct('name',{},'type',{},'maskfilled',{});
+                app.State.zoneStrategies = {};
+                app.refreshZonesLabel();
+                app.applog('warn', 'Cleared %d committed zones (geometry changed); re-Add to set when ready', n);
+            end
+        end
+
+        function refreshZonesLabel(app)
+            if isempty(app.ZonesCountLabel); return; end
+            if isempty(app.State.zoneStrategies)
+                app.ZonesCountLabel.Text = 'Added: -';
+            else
+                app.ZonesCountLabel.Text = ['Added: ' strjoin(app.State.zoneStrategies, ' + ')];
+            end
+        end
+
+        function renameSelectedObject(app)
+            if isempty(app.State.objects); app.status('No object selected'); return; end
+            idx = find(strcmp(app.ObjectsListBox.Items, app.ObjectsListBox.Value), 1);
+            if isempty(idx); app.status('No object selected'); return; end
+            oldName = app.State.objects(idx).type;
+            answer = inputdlg(sprintf('New name for %s:', oldName), 'Rename object', 1, {oldName});
+            if isempty(answer) || isempty(strtrim(answer{1})); return; end
+            app.State.objects(idx).type = strtrim(answer{1});
+            app.refreshObjectsList();
+            app.refreshMoveTargets();
+            app.refreshPreview();
+            app.invalidateZonesOnTransform();
+            app.applog('info', 'Renamed %s -> %s', oldName, app.State.objects(idx).type);
+        end
+
         function addZones(app)
+            % Auto-refit masks first so committed zones reflect the
+            % current (possibly transformed) geometry.
+            app.refitAllMasks();
             Z = computeZonesFromUI(app);
             if isempty(Z); return; end
             % Object zones — only if not already committed (dedup).
@@ -272,12 +325,15 @@ classdef CreatePresetApp < handle
                 app.State.zones(end+1:end+numel(Z)) = Z;
             end
             app.State.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
-            app.refreshZonesCount();
+            % Track strategy tag for the "Added: ..." label.
+            stratTag = composeStrategyTag(app);
+            app.State.zoneStrategies{end+1} = stratTag;
+            app.refreshZonesLabel();
             app.refreshPreview();
-            sphynx.util.log('info', '[App] added %d zones (%s); total committed = %d', ...
-                numel(Z), app.ZonesStrategyDropDown.Value, numel(app.State.zones));
+            app.applog('info', 'Added %d zones (%s); total committed = %d', ...
+                numel(Z), stratTag, numel(app.State.zones));
             for k = 1:numel(Z)
-                sphynx.util.log('info', '       zone[%d] = %s', ...
+                app.applog('info', '       zone[%d] = %s', ...
                     numel(app.State.zones)-numel(Z)+k, Z(k).name);
             end
         end
@@ -285,7 +341,8 @@ classdef CreatePresetApp < handle
         function clearZones(app)
             app.State.zones = struct('name', {}, 'type', {}, 'maskfilled', {});
             app.State.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
-            app.refreshZonesCount();
+            app.State.zoneStrategies = {};
+            app.refreshZonesLabel();
             app.refreshPreview();
             app.status('Cleared all zones');
         end
@@ -347,20 +404,20 @@ classdef CreatePresetApp < handle
         end
 
         function moveTarget(app, dirVec)
-            % dirVec is [dx dy] in unit step; multiplied by Step field
             step = app.MoveStepField.Value;
-            tIdx = currentTargetIdx(app);   % 0=arena, k=object k
+            tIdx = currentTargetIdx(app);
             if isnan(tIdx); return; end
             applyTransformToTarget(app, tIdx, dirVec * step, 0);
+            app.invalidateZonesOnTransform();
             app.refreshPreview();
         end
 
         function rotateTarget(app, sign)
-            % sign: +1 CW, -1 CCW; rotation = sign * Step degrees
             stepDeg = app.MoveStepField.Value;
             tIdx = currentTargetIdx(app);
             if isnan(tIdx); return; end
             applyTransformToTarget(app, tIdx, [0 0], sign * stepDeg);
+            app.invalidateZonesOnTransform();
             app.refreshPreview();
         end
 
@@ -420,7 +477,8 @@ classdef CreatePresetApp < handle
     methods (Access = private)
         function buildUI(app)
             app.Figure = uifigure('Name', 'sphynx — Preset & Analyze', ...
-                'Position', [80, 80, 1100, 720], 'Visible', 'on');
+                'Position', [80, 80, 1100, 720], 'Visible', 'on', ...
+                'WindowState', 'maximized');
             % Wrap the tabgroup in a uigridlayout so it fills the figure
             % and resizes correctly when the user drags the window.
             outerWrap = uigridlayout(app.Figure, [1, 1]);
@@ -443,9 +501,31 @@ classdef CreatePresetApp < handle
         end
 
         function status(app, msg)
-            % Status panel removed — log only.
-            sphynx.util.log('info', '[App] %s', msg);
+            app.applog('info', '%s', msg);
             app.refocus();
+        end
+
+        function applog(app, level, fmt, varargin)
+            % Mirror sphynx.util.log to the in-app textarea so the user
+            % can scroll the history without leaving the GUI.
+            sphynx.util.log(level, ['[App] ' fmt], varargin{:});
+            if isempty(app.LogTextArea); return; end
+            line = sprintf(['[' upper(level) '] ' fmt], varargin{:});
+            current = app.LogTextArea.Value;
+            if isempty(current); current = {}; end
+            if ~iscell(current); current = cellstr(current); end
+            current{end+1} = line;
+            % Cap at last 500 entries to keep the textarea responsive.
+            if numel(current) > 500
+                current = current(end-499:end);
+            end
+            app.LogTextArea.Value = current;
+            % Auto-scroll to bottom (R2021a+; ignored on older releases).
+            try
+                scroll(app.LogTextArea, 'bottom');
+            catch
+                % R2020a: no scroll API for uitextarea; user can scroll manually.
+            end
         end
 
         function refreshPreview(app)
@@ -508,10 +588,9 @@ classdef CreatePresetApp < handle
             app.ObjectsListBox.Items = items;
         end
 
-        function refreshZonesCount(app)
-            if ~isempty(app.ZonesCountLabel)
-                app.ZonesCountLabel.Text = sprintf('Committed zones: %d', numel(app.State.zones));
-            end
+        function refreshZonesCount(app)  %#ok<MANU>
+            % Replaced by refreshZonesLabel; kept as no-op for legacy callers.
+            app.refreshZonesLabel();
         end
 
         function refreshCalibLabels(app)
@@ -600,6 +679,7 @@ classdef CreatePresetApp < handle
                                 'border_separate_x', {}, 'border_separate_y', {}, 'mask', {});
             s.zones = struct('name', {}, 'type', {}, 'maskfilled', {});
             s.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
+            s.zoneStrategies = {};   % short tags appended on each Add to set
         end
     end
 end
@@ -611,18 +691,22 @@ function buildCreateTab(app)
     app.OuterGrid.ColumnWidth = {'fit', '1x'};   % left: fits content, right: flex
     app.OuterGrid.RowHeight = {'1x'};
 
-    app.LeftGrid = uigridlayout(app.OuterGrid, [6, 1]);
-    app.LeftGrid.Layout.Column = 1;
-    app.LeftGrid.RowHeight = {180, 200, 90, 170, 240, 70};
-    app.LeftGrid.RowSpacing = 5;
-    app.LeftGrid.Padding = [5 5 5 5];
+    % Wrap left column in a scrollable panel so panels stay readable
+    % when the user shrinks the window vertically.
+    leftScroll = uipanel(app.OuterGrid, 'BorderType', 'none', 'Scrollable', 'on');
+    leftScroll.Layout.Column = 1;
+
+    app.LeftGrid = uigridlayout(leftScroll, [6, 1]);
+    app.LeftGrid.RowHeight = {70, 130, 65, 130, 200, 50};
+    app.LeftGrid.RowSpacing = 4;
+    app.LeftGrid.Padding = [4 4 4 4];
 
     app.LoadPanel    = uipanel(app.LeftGrid, 'Title', '1. Load');
     app.CalibPanel   = uipanel(app.LeftGrid, 'Title', '2. Calibration');
     app.ArenaPanel   = uipanel(app.LeftGrid, 'Title', '3. Arena');
     app.ObjectsPanel = uipanel(app.LeftGrid, 'Title', '4. Objects');
     app.ZonesPanel   = uipanel(app.LeftGrid, 'Title', '5. Zones');
-    app.SavePanel    = uipanel(app.LeftGrid, 'Title', '6. Save / Plot');
+    app.SavePanel    = uipanel(app.LeftGrid, 'Title', '6. Save');
 
     buildLoadPanel(app);
     buildCalibPanel(app);
@@ -631,19 +715,21 @@ function buildCreateTab(app)
     buildZonesPanel(app);
     buildSavePanel(app);
 
-    % Right column: preview + nav strip + move/rotate strip
-    app.RightGrid = uigridlayout(app.OuterGrid, [3, 1]);
+    % Right column: preview + nav strip + move strip + log textarea
+    app.RightGrid = uigridlayout(app.OuterGrid, [4, 1]);
     app.RightGrid.Layout.Column = 2;
-    app.RightGrid.RowHeight = {'1x', 40, 40};
+    app.RightGrid.RowHeight = {'1x', 32, 36, 130};
+    app.RightGrid.RowSpacing = 3;
     previewWrap = uipanel(app.RightGrid, 'Title', 'Preview');
     pg = uigridlayout(previewWrap, [1, 1]);
     app.PreviewAxes = uiaxes(pg);
     app.PreviewAxes.XTick = []; app.PreviewAxes.YTick = [];
 
-    % Row 2: navigation (frame nav + target/step selectors)
+    % Row 2: nav (Next frame + frame label + target dropdown + step)
     navPanel = uipanel(app.RightGrid);
     cg = uigridlayout(navPanel, [1, 6]);
-    cg.ColumnWidth = repmat({'fit'}, 1, 6);
+    cg.RowHeight = {22};
+    cg.ColumnWidth = {'fit', 'fit', 'fit', 'fit', 'fit', 50};
     cg.ColumnSpacing = 4;
     bNext = uibutton(cg, 'Text', 'Next frame', ...
         'BackgroundColor', semanticColor('action'), ...
@@ -653,26 +739,31 @@ function buildCreateTab(app)
     app.FrameIndexLabel.Layout.Row = 1; app.FrameIndexLabel.Layout.Column = 2;
     lblTarget = uilabel(cg, 'Text', 'Target:');
     lblTarget.Layout.Row = 1; lblTarget.Layout.Column = 3;
-    app.MoveTargetDropDown = uidropdown(cg, 'Items', {'Arena'}, ...
-        'Value', 'Arena');
+    app.MoveTargetDropDown = uidropdown(cg, 'Items', {'Arena'}, 'Value', 'Arena');
     app.MoveTargetDropDown.Layout.Row = 1; app.MoveTargetDropDown.Layout.Column = 4;
-    lblStep = uilabel(cg, 'Text', 'Step (px):');
+    lblStep = uilabel(cg, 'Text', 'Step:');
     lblStep.Layout.Row = 1; lblStep.Layout.Column = 5;
     app.MoveStepField = uieditfield(cg, 'numeric', 'Value', 5, 'Limits', [0.1, 200]);
     app.MoveStepField.Layout.Row = 1; app.MoveStepField.Layout.Column = 6;
 
-    % Row 3: arrow + rotate buttons
+    % Row 3: arrow + rotate buttons (10% taller than rest = 26 px)
     movePanel = uipanel(app.RightGrid);
-    mg = uigridlayout(movePanel, [1, 7]);
-    mg.ColumnWidth = repmat({'fit'}, 1, 7);
+    mg = uigridlayout(movePanel, [1, 6]);
+    mg.RowHeight = {26};
+    mg.ColumnWidth = repmat({'fit'}, 1, 6);
     mg.ColumnSpacing = 4;
-    addMoveBtn(mg, 1, 'Left',  @() app.moveTarget([-1  0]));
-    addMoveBtn(mg, 2, 'Right', @() app.moveTarget([ 1  0]));
-    addMoveBtn(mg, 3, 'Up',    @() app.moveTarget([ 0 -1]));
-    addMoveBtn(mg, 4, 'Down',  @() app.moveTarget([ 0  1]));
+    addMoveBtn(mg, 1, 'Left',    @() app.moveTarget([-1  0]));
+    addMoveBtn(mg, 2, 'Right',   @() app.moveTarget([ 1  0]));
+    addMoveBtn(mg, 3, 'Up',      @() app.moveTarget([ 0 -1]));
+    addMoveBtn(mg, 4, 'Down',    @() app.moveTarget([ 0  1]));
     addMoveBtn(mg, 5, 'Rot CCW', @() app.rotateTarget(-1));
     addMoveBtn(mg, 6, 'Rot CW',  @() app.rotateTarget( 1));
-    addMoveBtn(mg, 7, 'Refit mask', @() app.refitTargetMask());
+
+    % Row 4: log textarea (mirrors command-window output)
+    logPanel = uipanel(app.RightGrid, 'Title', 'Log');
+    lg = uigridlayout(logPanel, [1, 1]);
+    lg.Padding = [2 2 2 2];
+    app.LogTextArea = uitextarea(lg, 'Editable', 'off', 'Value', {''});
 end
 
 function addMoveBtn(parent, col, txt, cb)
@@ -704,23 +795,26 @@ end
 % =================== Panel builders =======================================
 
 function buildLoadPanel(app)
-    g = uigridlayout(app.LoadPanel, [4 3]);
-    g.RowHeight = {25, 25, 25, 25};
-    g.ColumnWidth = {'fit', '1x', 'fit'};
+    % 4 columns × 2 rows: top row Browse buttons, bottom row short
+    % path-fields. Saves vertical space.
+    g = uigridlayout(app.LoadPanel, [2 4]);
+    g.RowHeight = {22, 22};
+    g.ColumnWidth = {'1x', '1x', '1x', '1x'};
+    g.ColumnSpacing = 4;
 
-    addRow(g, 1, 'Project root:', @() pickDirAndApply(app, 'setProjectRoot'), 'projectRoot', app);
-    addRow(g, 2, 'Video file:',   @() pickVideoStart(app), 'videoPath', app);
-    addRow(g, 3, 'Output dir:',   @() pickDirAndApply(app, 'setOutDir'), 'outDir', app);
-    addRow(g, 4, 'Existing preset:', @() pickPresetStart(app), 'presetPath', app);
+    addLoadCol(g, 1, 'Project root', @() pickDirAndApply(app, 'setProjectRoot'),  'projectRoot', app);
+    addLoadCol(g, 2, 'Video',        @() pickVideoStart(app),                       'videoPath',   app);
+    addLoadCol(g, 3, 'Output dir',   @() pickDirAndApply(app, 'setOutDir'),         'outDir',      app);
+    addLoadCol(g, 4, 'Preset',       @() pickPresetStart(app),                      'presetPath',  app);
 end
 
-function addRow(g, row, labelText, btnFcn, fieldKey, app)
-    lbl = uilabel(g, 'Text', labelText);
-    lbl.Layout.Row = row; lbl.Layout.Column = 1;
+function addLoadCol(g, col, btnText, btnFcn, fieldKey, app)
+    btn = uibutton(g, 'Text', btnText, ...
+        'BackgroundColor', semanticColor('action'), ...
+        'ButtonPushedFcn', @(~,~) btnFcn());
+    btn.Layout.Row = 1; btn.Layout.Column = col;
     fld = uieditfield(g, 'text', 'Value', '');
-    fld.Layout.Row = row; fld.Layout.Column = 2;
-    btn = uibutton(g, 'Text', 'Browse', 'ButtonPushedFcn', @(~,~) btnFcn());
-    btn.Layout.Row = row; btn.Layout.Column = 3;
+    fld.Layout.Row = 2; fld.Layout.Column = col;
     switch fieldKey
         case 'projectRoot'; app.ProjectRootField = fld;
         case 'videoPath';   app.VideoPathField = fld;
@@ -730,28 +824,29 @@ function addRow(g, row, labelText, btnFcn, fieldKey, app)
 end
 
 function buildCalibPanel(app)
-    g = uigridlayout(app.CalibPanel, [4 4]);
-    g.RowHeight = {28, 28, 28, 28};
-    g.ColumnWidth = {'fit', 'fit', 'fit', 'fit'};
+    g = uigridlayout(app.CalibPanel, [4 5]);
+    g.RowHeight = {22, 22, 22, 22};
+    g.ColumnWidth = {'fit', 'fit', '1x', 'fit', 50};
+    g.ColumnSpacing = 4;
 
-    bChoose = uibutton(g, 'Text', 'Calibration. Choose points', ...
+    bChoose = uibutton(g, 'Text', 'Choose points', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onCalibrateChoose(app));
-    bChoose.Layout.Row = 1; bChoose.Layout.Column = [1 2];
-    bCompute = uibutton(g, 'Text', 'Calibration. Calculation', ...
+    bChoose.Layout.Row = 1; bChoose.Layout.Column = 1;
+    bCompute = uibutton(g, 'Text', 'Compute', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onCalibrateCompute(app));
-    bCompute.Layout.Row = 1; bCompute.Layout.Column = 3;
+    bCompute.Layout.Row = 1; bCompute.Layout.Column = 2;
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Calibration', helpCalibrationText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 5;
 
-    lblY = uilabel(g, 'Text', 'cm Y (1->2):');
+    lblY = uilabel(g, 'Text', 'cm Y:');
     lblY.Layout.Row = 2; lblY.Layout.Column = 1;
     app.DistanceYField = uieditfield(g, 'numeric', 'Value', 50, 'Limits', [0.1, Inf]);
     app.DistanceYField.Layout.Row = 2; app.DistanceYField.Layout.Column = 2;
-    lblX = uilabel(g, 'Text', 'cm X (3->4):');
+    lblX = uilabel(g, 'Text', 'cm X:');
     lblX.Layout.Row = 2; lblX.Layout.Column = 3;
     app.DistanceXField = uieditfield(g, 'numeric', 'Value', 50, 'Limits', [0.1, Inf]);
     app.DistanceXField.Layout.Row = 2; app.DistanceXField.Layout.Column = 4;
@@ -765,21 +860,21 @@ function buildCalibPanel(app)
     app.XKcorrLabel = uilabel(g, 'Text', 'kcorr: ?');
     app.XKcorrLabel.Layout.Row = 3; app.XKcorrLabel.Layout.Column = 4;
 
-    lblExp = uilabel(g, 'Text', 'Experiment:');
+    lblExp = uilabel(g, 'Text', 'Exp:');
     lblExp.Layout.Row = 4; lblExp.Layout.Column = 1;
     app.ExpTypeDropDown = uidropdown(g, ...
         'Items', {'Novelty OF','BowlsOpenField','NOL','Holes Track','Odor Track', ...
                   'Freezing Track','New Track','Complex Context','OF_Obj','3DM'});
-    app.ExpTypeDropDown.Layout.Row = 4; app.ExpTypeDropDown.Layout.Column = [2 4];
+    app.ExpTypeDropDown.Layout.Row = 4; app.ExpTypeDropDown.Layout.Column = [2 3];
 end
 
 function buildArenaPanel(app)
     nGeom = 4;       % Polygon / Circle / Ellipse / O-maze
-    % Layout: nGeom geometry buttons | spacer | action btn | INFO btn
+    % Layout: nGeom geometry buttons | flex spacer | action btn | INFO btn
     nCols = nGeom + 3;
     g = uigridlayout(app.ArenaPanel, [2, nCols]);
-    g.RowHeight = {28, 25};
-    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {16}, repmat({'fit'}, 1, 2)];
+    g.RowHeight = {22, 22};
+    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {'fit'}, {50}];
     g.ColumnSpacing = 4;
 
     geometries = {'Polygon', 'Circle', 'Ellipse', 'O-maze'};
@@ -811,8 +906,8 @@ function buildObjectsPanel(app)
     nGeom = 3;       % Polygon / Circle / Ellipse
     nCols = nGeom + 3;
     g = uigridlayout(app.ObjectsPanel, [3, nCols]);
-    g.RowHeight = {28, '1x', 28};
-    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {16}, repmat({'fit'}, 1, 2)];
+    g.RowHeight = {22, '1x', 22};
+    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {'fit'}, {50}];
     g.ColumnSpacing = 4;
 
     geometries = {'Polygon', 'Circle', 'Ellipse'};
@@ -826,7 +921,6 @@ function buildObjectsPanel(app)
         app.ObjectGeometryButtons{i} = b;
     end
 
-    % column nGeom+1 is the spacer
     bAdd = uibutton(g, 'Text', '+ Add', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onAddObject(app));
@@ -848,6 +942,10 @@ function buildObjectsPanel(app)
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.replaceSelectedObject());
     bReplace.Layout.Row = 3; bReplace.Layout.Column = 2;
+    bRename = uibutton(g, 'Text', 'Rename', ...
+        'BackgroundColor', semanticColor('action'), ...
+        'ButtonPushedFcn', @(~,~) app.renameSelectedObject());
+    bRename.Layout.Row = 3; bRename.Layout.Column = 3;
 end
 
 function onArenaGeometryToggle(app, src)
@@ -876,79 +974,78 @@ function onGeometryToggle(buttons, src, ~)
 end
 
 function buildZonesPanel(app)
-    g = uigridlayout(app.ZonesPanel, [6 4]);
-    g.RowHeight = {28, 28, 28, 28, 28, 28};
-    g.ColumnWidth = {'fit', 'fit', 'fit', 'fit'};
+    g = uigridlayout(app.ZonesPanel, [6 5]);
+    g.RowHeight = {22, 22, 22, 22, 22, 22};
+    g.ColumnWidth = {'fit', 50, 'fit', 50, 50};
+    g.ColumnSpacing = 4;
 
     lblStrat = uilabel(g, 'Text', 'Strategy:');
     lblStrat.Layout.Row = 1; lblStrat.Layout.Column = 1;
     app.ZonesStrategyDropDown = uidropdown(g, ...
         'Items', {'corners-walls-center', 'strips', 'circle-rings', 'none'}, ...
         'ValueChangedFcn', @(~,~) onZoneStrategyChanged(app));
-    app.ZonesStrategyDropDown.Layout.Row = 1; app.ZonesStrategyDropDown.Layout.Column = [2 3];
+    app.ZonesStrategyDropDown.Layout.Row = 1; app.ZonesStrategyDropDown.Layout.Column = [2 4];
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Zones', helpZonesText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 5;
 
-    lblWall = uilabel(g, 'Text', 'Wall (cm):');
+    lblWall = uilabel(g, 'Text', 'Wall:');
     lblWall.Layout.Row = 2; lblWall.Layout.Column = 1;
     app.WallWidthField = uieditfield(g, 'numeric', 'Value', 3, 'Limits', [0, Inf]);
     app.WallWidthField.Layout.Row = 2; app.WallWidthField.Layout.Column = 2;
-    lblMid = uilabel(g, 'Text', 'Middle (cm):');
+    lblMid = uilabel(g, 'Text', 'Middle:');
     lblMid.Layout.Row = 2; lblMid.Layout.Column = 3;
     app.MiddleWidthField = uieditfield(g, 'numeric', 'Value', 20, 'Limits', [0.1, Inf]);
     app.MiddleWidthField.Layout.Row = 2; app.MiddleWidthField.Layout.Column = 4;
 
-    lblN = uilabel(g, 'Text', 'N strips:');
+    lblN = uilabel(g, 'Text', 'Strips:');
     lblN.Layout.Row = 3; lblN.Layout.Column = 1;
     app.NumStripsField = uieditfield(g, 'numeric', 'Value', 3, 'Limits', [1, 50]);
     app.NumStripsField.Layout.Row = 3; app.NumStripsField.Layout.Column = 2;
-    lblDir = uilabel(g, 'Text', 'Strip dir:');
+    lblDir = uilabel(g, 'Text', 'Dir:');
     lblDir.Layout.Row = 3; lblDir.Layout.Column = 3;
     app.StripDirDropDown = uidropdown(g, 'Items', {'horizontal','vertical'});
     app.StripDirDropDown.Layout.Row = 3; app.StripDirDropDown.Layout.Column = 4;
 
-    lblObjZone = uilabel(g, 'Text', 'Object zone (cm):');
+    lblObjZone = uilabel(g, 'Text', 'Obj zone:');
     lblObjZone.Layout.Row = 4; lblObjZone.Layout.Column = 1;
     app.ObjectZoneWidthField = uieditfield(g, 'numeric', 'Value', 2.5, 'Limits', [0, Inf]);
     app.ObjectZoneWidthField.Layout.Row = 4; app.ObjectZoneWidthField.Layout.Column = 2;
 
-    bPreview = uibutton(g, 'Text', 'Preview zones', ...
+    bPreview = uibutton(g, 'Text', 'Preview', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.previewZones());
-    bPreview.Layout.Row = 5; bPreview.Layout.Column = 1;
+    bPreview.Layout.Row = 5; bPreview.Layout.Column = [1 2];
     bAdd = uibutton(g, 'Text', 'Add to set', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.addZones());
-    bAdd.Layout.Row = 5; bAdd.Layout.Column = 2;
-    bClear = uibutton(g, 'Text', 'Clear all', ...
+    bAdd.Layout.Row = 5; bAdd.Layout.Column = 3;
+    bClear = uibutton(g, 'Text', 'Clear', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.clearZones());
-    bClear.Layout.Row = 5; bClear.Layout.Column = 3;
+    bClear.Layout.Row = 5; bClear.Layout.Column = 4;
 
-    app.ZonesCountLabel = uilabel(g, 'Text', 'Committed zones: 0');
-    app.ZonesCountLabel.Layout.Row = 6; app.ZonesCountLabel.Layout.Column = [1 4];
+    app.ZonesCountLabel = uilabel(g, 'Text', 'Added: -');
+    app.ZonesCountLabel.Layout.Row = 6; app.ZonesCountLabel.Layout.Column = [1 5];
 
     onZoneStrategyChanged(app);
 end
 
 function buildSavePanel(app)
     g = uigridlayout(app.SavePanel, [1 4]);
-    g.ColumnWidth = {'fit', 'fit', 'fit', 'fit'};
+    g.RowHeight = {22};
+    g.ColumnWidth = {'fit', 'fit', '1x', 50};
+    g.ColumnSpacing = 4;
     bSave = uibutton(g, 'Text', 'Save preset', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.savePreset());
     bSave.Layout.Row = 1; bSave.Layout.Column = 1;
-    bPlot = uibutton(g, 'Text', 'Make plot', ...
-        'BackgroundColor', semanticColor('action'), ...
-        'ButtonPushedFcn', @(~,~) app.makePlot());
-    bPlot.Layout.Row = 1; bPlot.Layout.Column = 2;
     app.PlotAllCheckbox = uicheckbox(g, 'Text', 'plot all zones', 'Value', false);
-    app.PlotAllCheckbox.Layout.Row = 1; app.PlotAllCheckbox.Layout.Column = 3;
+    app.PlotAllCheckbox.Layout.Row = 1; app.PlotAllCheckbox.Layout.Column = 2;
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'BackgroundColor', semanticColor('info'), ...
-        'ButtonPushedFcn', @(~,~) showHelp('Save / Plot', helpSaveText()));
+        'ButtonPushedFcn', @(~,~) showHelp('Save', helpSaveText()));
     bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
 end
 
@@ -1339,6 +1436,15 @@ function Z = objectCenterZones(objects)
     end
 end
 
+function tag = composeStrategyTag(app)
+    s = app.ZonesStrategyDropDown.Value;
+    if strcmp(s, 'strips')
+        tag = sprintf('strips_%s_%d', app.StripDirDropDown.Value, app.NumStripsField.Value);
+    else
+        tag = s;
+    end
+end
+
 function autoSaveLayoutPlot(app, sessionDir, baseName)
     fh = figure('Visible', 'off', 'Position', [100 100 1000 750]);
     cleanup = onCleanup(@() closeIfValid(fh));
@@ -1351,12 +1457,12 @@ function autoSaveLayoutPlot(app, sessionDir, baseName)
 end
 
 function c = semanticColor(category)
-    % Pastel button-tinting by semantic role.
+    % Subdued pastel button-tinting by semantic role (~50% paler than v6).
     switch category
-        case 'geometry'; c = [1.00, 0.97, 0.78];   % light yellow — selectors
-        case 'action';   c = [1.00, 0.88, 0.85];   % light red    — do-something
-        case 'info';     c = [0.85, 0.92, 1.00];   % light blue   — INFO/help
-        otherwise;       c = [0.96, 0.96, 0.96];   % default grey
+        case 'geometry'; c = [1.00, 0.99, 0.91];   % faint yellow  — selectors
+        case 'action';   c = [1.00, 0.94, 0.93];   % faint rose    — do-something
+        case 'info';     c = [0.92, 0.97, 0.96];   % faint teal    — INFO/help
+        otherwise;       c = [0.97, 0.97, 0.97];   % default near-white
     end
 end
 
