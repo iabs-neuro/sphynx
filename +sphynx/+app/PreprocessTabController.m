@@ -42,6 +42,7 @@ classdef PreprocessTabController < handle
         NextButton
         FrameLabel
         FrameSlider
+        LogScaleButton          % toggle linear/log Y on likelihood histogram
 
         % Log
         LogTextArea
@@ -162,11 +163,18 @@ classdef PreprocessTabController < handle
             xlabel(obj.AxY, 'frame'); ylabel(obj.AxY, 'Y, px');
             xlim(obj.AxY, [1 n]); grid(obj.AxY, 'on');
 
-            % Likelihood histogram
-            histogram(obj.AxLk, Lk, 50, 'FaceColor', [0.3 0.6 0.3]);
+            % Likelihood histogram — fine bins (0.01 wide) for thresholding
+            histogram(obj.AxLk, Lk, 'BinWidth', 0.01, ...
+                'FaceColor', [0.3 0.6 0.3], 'EdgeColor', 'none');
             title(obj.AxLk, sprintf('%s — likelihood histogram', partName), 'Interpreter', 'none');
             xlabel(obj.AxLk, 'likelihood'); ylabel(obj.AxLk, 'count');
             xlim(obj.AxLk, [0 1]); grid(obj.AxLk, 'on');
+            if ~isempty(obj.LogScaleButton) && obj.LogScaleButton.Value
+                obj.AxLk.YScale = 'log';
+                ylabel(obj.AxLk, 'count (log)');
+            else
+                obj.AxLk.YScale = 'linear';
+            end
 
             % Frame label
             obj.FrameLabel.Text = sprintf('Frame %d / %d', obj.State.currentFrame, n);
@@ -308,11 +316,11 @@ classdef PreprocessTabController < handle
                 ax.Box = 'on';
             end
 
-            % Bodypart switcher row
-            switcher = uigridlayout(obj.RightGrid, [1, 5]);
+            % Bodypart switcher row — compact buttons, dropdown takes the rest
+            switcher = uigridlayout(obj.RightGrid, [1, 6]);
             switcher.Layout.Row = 4;
-            switcher.RowHeight = {30};
-            switcher.ColumnWidth = {40, '1x', 40, 200, 140};
+            switcher.RowHeight = {28};
+            switcher.ColumnWidth = {28, 160, 28, 80, 80, '1x'};
             switcher.Padding = [0 0 0 0];
             switcher.ColumnSpacing = 4;
 
@@ -331,14 +339,19 @@ classdef PreprocessTabController < handle
                 'ButtonPushedFcn', @(~,~) obj.nextBodyPart());
             obj.NextButton.Layout.Column = 3;
 
-            btnLoad = uibutton(switcher, 'Text', 'Load all', ...
+            btnLoad = uibutton(switcher, 'Text', 'Load', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.loadAll());
             btnLoad.Layout.Column = 4;
 
+            obj.LogScaleButton = uibutton(switcher, 'state', 'Text', 'log Y', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.LogScaleButton.Layout.Column = 5;
+
             obj.FrameLabel = uilabel(switcher, 'Text', 'Frame -/-', ...
                 'HorizontalAlignment', 'right');
-            obj.FrameLabel.Layout.Column = 5;
+            obj.FrameLabel.Layout.Column = 6;
 
             % Manual regions placeholder (Slice 5)
             obj.RegionsPanel = uipanel(obj.RightGrid, 'Title', 'Manual exclusion regions');

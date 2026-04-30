@@ -161,6 +161,43 @@ OutputPlots(i)                                  : char (path to .png) — option
 `PreprocessTabController.recomputePart(i)` обновляет TraceInterpolated,
 TraceSmoothed, гистограмму, статус.
 
+## Pipeline order (critical)
+
+Outliers must be detected on the RAW (or near-raw) trace, not after smoothing.
+Smoothing flattens single-frame jumps so they become invisible to a
+post-smooth filter. The fixed order is:
+
+```
+1. likelihoodFilter   (likelihood < threshold → NaN)
+2. boundsFilter       (x<0, y<0, x>W, y>H → NaN)
+3. velocityJumpFilter (|Δposition|·fps/pxlPerCm > maxV → NaN)        [pre-interp]
+4. hampelFilter       (median ± k·MAD on raw position → NaN)         [pre-interp, optional]
+5. manualRegions      (user-drawn polygon → NaN, per attached part)  [pre-interp]
+6. interpolateGaps    (fill NaN with pchip / linear / spline / makima)
+7. one of:
+     a. smoothTrace   (sgolay / movmean / movmedian / gaussian)      [default]
+     b. kalmanFilter2D (constant-velocity, R modulated by likelihood) [optional]
+```
+
+Notes on the choice between 7a and 7b:
+- Default: smoothTrace. Predictable, parameter-light.
+- Kalman acts as a smoother itself, so it REPLACES sgolay rather than
+  stacking on top. UI: enabling Kalman disables the smoothing dropdown
+  for that part (or grays it out).
+- velocity-jump runs PRE-interpolation precisely because if we ran it
+  after smoothing, single-frame outliers would have already been blended
+  with neighbors and the threshold would not trigger.
+- Hampel runs PRE-interpolation for the same reason. Operates on the
+  raw trace where NaNs (from steps 1-3) are already marked.
+
+Edge cases:
+- Trailing/leading NaN runs longer than the smoothing window: smoothTrace
+  returns the trace unchanged (existing behavior).
+- All frames flagged bad: status becomes 'NotFound' before reaching
+  interp. interp/smooth/Kalman skipped.
+- Manual region added after Compute: live-recompute re-runs steps 5+
+  (cheap; raw + bad flags from steps 1-4 cached per part).
+
 ## Algorithms
 
 ### velocityJumpFilter (pre-interp на сырой позиции)
