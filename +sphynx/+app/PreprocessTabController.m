@@ -56,8 +56,10 @@ classdef PreprocessTabController < handle
         ShowVideoButton
         VideoReader_           % VideoReader handle (trailing underscore: avoid name clash)
 
-        % Block 4 placeholder (Slice 7)
+        % Block 4: Save
         SavePanel
+        OutputDirField
+        SavePlotsCheckbox
 
         % Preview
         AxX                     % X(t) trace
@@ -309,6 +311,57 @@ classdef PreprocessTabController < handle
             obj.setCurrentBodyPart(obj.State.currentBodyPart - 1);
         end
 
+        function pickOutputDir(obj)
+            startDir = obj.guessStartDir('root');
+            sel = uigetdir(startDir, 'Select output dir');
+            if isequal(sel, 0); obj.refocus(); return; end
+            obj.OutputDirField.Value = sel;
+            obj.refocus();
+        end
+
+        function pathsOut = savePreprocessed(obj)
+            % SAVEPREPROCESSED  Persist settings + per-session traces (+ plots).
+            pathsOut = struct();
+            if isempty(obj.State.dlc)
+                obj.applog('warn', 'Save: no DLC loaded');
+                return;
+            end
+            outDir = '';
+            if ~isempty(obj.OutputDirField); outDir = obj.OutputDirField.Value; end
+            if isempty(outDir)
+                obj.applog('warn', 'Save: output directory is empty');
+                return;
+            end
+
+            % Stale check: if any 'use' part has no processed entry, recompute
+            staleParts = false;
+            for k = 1:numel(obj.State.perPart)
+                if ~obj.State.perPart(k).use; continue; end
+                if k > numel(obj.State.processed) || isempty(obj.State.processed(k).status)
+                    staleParts = true; break;
+                end
+            end
+            if staleParts
+                obj.applog('info', 'Save: some parts not yet computed — running Compute all');
+                obj.computeAll();
+            end
+
+            opts = struct( ...
+                'outputDir',      outDir, ...
+                'savePlots',      ~isempty(obj.SavePlotsCheckbox) && obj.SavePlotsCheckbox.Value, ...
+                'experimentName', '');
+            try
+                pathsOut = sphynx.preprocess.exportTracks(obj.State, opts);
+                obj.applog('info', 'Saved settings -> %s', pathsOut.settings);
+                obj.applog('info', 'Saved session  -> %s', pathsOut.session);
+                if ~isempty(pathsOut.plotsDir)
+                    obj.applog('info', 'Saved plots    -> %s', pathsOut.plotsDir);
+                end
+            catch ME
+                obj.applog('error', 'Save failed: %s', ME.message);
+            end
+        end
+
         function setCurrentFrame(obj, frameIdx)
             % SETCURRENTFRAME  Move the playhead, refresh video + sync line.
             if isempty(obj.State.dlc); return; end
@@ -472,7 +525,7 @@ classdef PreprocessTabController < handle
             obj.buildLoadingPanel();
             obj.buildPerPartPanel();
             obj.buildOutlierPanel();
-            obj.buildSavePanelPlaceholder();
+            obj.buildSavePanel();
         end
 
         function buildLoadingPanel(obj)
@@ -532,13 +585,13 @@ classdef PreprocessTabController < handle
 
             % uitable with per-part settings
             obj.PerPartTable = uitable(g, ...
-                'ColumnName', {'use', 'name', 'thr', 'win,s', 'interp', 'smooth', 'NF%', '%NaN', '%lowL', 'status'}, ...
+                'ColumnName', {'use', 'name', 'thr', 'win,s', 'interp', 'smooth', 'NF%', '%NaN', '%lowL', '%out', 'status'}, ...
                 'ColumnFormat', {'logical', 'char', 'numeric', 'numeric', ...
                     {'pchip', 'linear', 'spline', 'makima'}, ...
                     {'sgolay', 'movmean', 'movmedian', 'gaussian', 'kalman'}, ...
-                    'numeric', 'char', 'char', 'char'}, ...
-                'ColumnEditable', [true false true true true true true false false false], ...
-                'ColumnWidth', {38, 90, 44, 50, 60, 70, 40, 50, 50, 60}, ...
+                    'numeric', 'char', 'char', 'char', 'char'}, ...
+                'ColumnEditable', [true false true true true true true false false false false], ...
+                'ColumnWidth', {38, 90, 44, 50, 60, 70, 40, 50, 50, 50, 60}, ...
                 'RowName', {}, ...
                 'CellEditCallback', @(~, evt) obj.onPerPartTableEdited(evt), ...
                 'CellSelectionCallback', @(~, evt) obj.onPerPartTableSelected(evt));
@@ -680,14 +733,34 @@ classdef PreprocessTabController < handle
             end
         end
 
-        function buildSavePanelPlaceholder(obj)
+        function buildSavePanel(obj)
             obj.SavePanel = uipanel(obj.LeftPanel, 'Title', '4. Save');
             obj.SavePanel.Layout.Row = 4;
-            g = uigridlayout(obj.SavePanel, [1, 1]);
-            lbl = uilabel(g, 'Text', sprintf(['(Slice 7): write per-experiment\n' ...
-                'PreprocessSettings.mat + per-session Preprocessed.mat + plots.']), ...
-                'HorizontalAlignment', 'center');
-            lbl.Layout.Row = 1; lbl.Layout.Column = 1; %#ok<NASGU>
+            g = uigridlayout(obj.SavePanel, [3, 3]);
+            g.RowHeight = {26, 26, 26};
+            g.ColumnWidth = {70, '1x', 80};
+            g.RowSpacing = 4;
+            g.ColumnSpacing = 4;
+            g.Padding = [4 4 4 4];
+
+            % Row 1: Output dir
+            btnOut = uibutton(g, 'Text', 'Output dir', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.pickOutputDir());
+            btnOut.Layout.Row = 1; btnOut.Layout.Column = 1;
+            obj.OutputDirField = uieditfield(g, 'text', 'Value', '');
+            obj.OutputDirField.Layout.Row = 1; obj.OutputDirField.Layout.Column = [2 3];
+
+            % Row 2: Save plots checkbox
+            obj.SavePlotsCheckbox = uicheckbox(g, 'Text', 'save plots per body part', ...
+                'Value', true);
+            obj.SavePlotsCheckbox.Layout.Row = 2; obj.SavePlotsCheckbox.Layout.Column = [1 3];
+
+            % Row 3: Save button
+            bSave = uibutton(g, 'Text', 'Save preprocessed', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.savePreprocessed());
+            bSave.Layout.Row = 3; bSave.Layout.Column = [1 3];
         end
 
         function buildRight(obj)
@@ -926,7 +999,7 @@ classdef PreprocessTabController < handle
                 obj.PerPartTable.Data = {};
                 return;
             end
-            data = cell(n, 10);
+            data = cell(n, 11);
             for k = 1:n
                 if k <= numel(obj.State.processed) && ~isempty(obj.State.processed(k).status)
                     pct = obj.State.processed(k);
@@ -946,7 +1019,8 @@ classdef PreprocessTabController < handle
                 data{k, 7}  = arr(k).notFoundThresholdPct;
                 data{k, 8}  = pNaN;
                 data{k, 9}  = pLow;
-                data{k, 10} = status;
+                data{k, 10} = pOut;
+                data{k, 11} = status;
             end
             obj.PerPartTable.Data = data;
         end
@@ -968,6 +1042,11 @@ classdef PreprocessTabController < handle
                     return;  % read-only columns
             end
             obj.refreshPerPartTable();
+            % Live recompute the affected row (cheap; ~0.1s on 18k frames).
+            % The 'use' toggle just enables/disables — no recompute needed.
+            if col ~= 1 && obj.State.perPart(row).use
+                obj.computePart(row);
+            end
         end
 
         function onPerPartTableSelected(obj, evt)

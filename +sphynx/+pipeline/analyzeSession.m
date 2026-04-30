@@ -60,51 +60,56 @@ function result = analyzeSession(config)
     minRunFrames = round(frameRate * config.acts.minRunSeconds);
 
     % --- 3. Clean each body-part trace ---------------------------------------
-    BodyPartsTraces = struct('BodyPartName', {}, 'TraceOriginal', {}, ...
-        'TraceInterpolated', {}, 'TraceSmoothed', {}, 'Status', {}, ...
-        'PercentNaN', {}, 'PercentLowLikelihood', {}, ...
-        'Velocity', {}, 'VelocitySmoothed', {}, 'AverageSpeed', {}, ...
-        'AverageDistance', {});
-    keepIdx = false(1, nParts);
+    % Fast-path: if a sibling _Preprocessed.mat exists next to the DLC,
+    % consume its BodyPartsTraces directly and skip clean/interp/smooth.
+    [BodyPartsTraces, keepIdx] = tryLoadPrepared(config.paths.dlc, dlc, log);
+    if isempty(BodyPartsTraces)
+        BodyPartsTraces = struct('BodyPartName', {}, 'TraceOriginal', {}, ...
+            'TraceInterpolated', {}, 'TraceSmoothed', {}, 'Status', {}, ...
+            'PercentNaN', {}, 'PercentLowLikelihood', {}, ...
+            'Velocity', {}, 'VelocitySmoothed', {}, 'AverageSpeed', {}, ...
+            'AverageDistance', {});
+        keepIdx = false(1, nParts);
 
-    for part = 1:nParts
-        rawX = dlc.X(part, :)';
-        rawY = dlc.Y(part, :)';
-        lk = dlc.likelihood(part, :)';
-        cleaned = sphynx.preprocess.cleanBodyPart(rawX, rawY, lk, ...
-            'FrameWidth', Options.Width, ...
-            'FrameHeight', Options.Height, ...
-            'LikelihoodThreshold', config.preprocess.likelihoodThreshold);
+        for part = 1:nParts
+            rawX = dlc.X(part, :)';
+            rawY = dlc.Y(part, :)';
+            lk = dlc.likelihood(part, :)';
+            cleaned = sphynx.preprocess.cleanBodyPart(rawX, rawY, lk, ...
+                'FrameWidth', Options.Width, ...
+                'FrameHeight', Options.Height, ...
+                'LikelihoodThreshold', config.preprocess.likelihoodThreshold);
 
-        BodyPartsTraces(part).BodyPartName = dlc.bodyPartsNames{part};
-        BodyPartsTraces(part).TraceOriginal.X = rawX;
-        BodyPartsTraces(part).TraceOriginal.Y = rawY;
-        BodyPartsTraces(part).TraceLikelihood = lk;
-        BodyPartsTraces(part).PercentNaN = cleaned.PercentNaN;
-        BodyPartsTraces(part).PercentLowLikelihood = cleaned.PercentLowLikelihood;
-        BodyPartsTraces(part).Status = cleaned.Status;
+            BodyPartsTraces(part).BodyPartName = dlc.bodyPartsNames{part};
+            BodyPartsTraces(part).TraceOriginal.X = rawX;
+            BodyPartsTraces(part).TraceOriginal.Y = rawY;
+            BodyPartsTraces(part).TraceLikelihood = lk;
+            BodyPartsTraces(part).PercentNaN = cleaned.PercentNaN;
+            BodyPartsTraces(part).PercentLowLikelihood = cleaned.PercentLowLikelihood;
+            BodyPartsTraces(part).Status = cleaned.Status;
 
-        if strcmp(cleaned.Status, 'NotFound')
-            log('warn', 'BodyPart "%s" status NotFound, skipping', dlc.bodyPartsNames{part});
-            continue;
+            if strcmp(cleaned.Status, 'NotFound')
+                log('warn', 'BodyPart "%s" status NotFound, skipping', dlc.bodyPartsNames{part});
+                continue;
+            end
+            keepIdx(part) = true;
+
+            % Interpolate gaps
+            intX = sphynx.preprocess.interpolateGaps(cleaned.X, 'Method', config.preprocess.interpolationMethod);
+            intY = sphynx.preprocess.interpolateGaps(cleaned.Y, 'Method', config.preprocess.interpolationMethod);
+            % Clamp to frame bounds (legacy behavior)
+            intX = clamp(intX, 1, Options.Width);
+            intY = clamp(intY, 1, Options.Height);
+            BodyPartsTraces(part).TraceInterpolated.X = intX;
+            BodyPartsTraces(part).TraceInterpolated.Y = intY;
+
+            % Smooth (bigger window for body-center / tailbase)
+            win = pickSmoothWindow(dlc.bodyPartsNames{part}, smallWin, bigWin);
+            smX = sphynx.preprocess.smoothTrace(intX, win);
+            smY = sphynx.preprocess.smoothTrace(intY, win);
+            BodyPartsTraces(part).TraceSmoothed.X = smX;
+            BodyPartsTraces(part).TraceSmoothed.Y = smY;
         end
-        keepIdx(part) = true;
-
-        % Interpolate gaps
-        intX = sphynx.preprocess.interpolateGaps(cleaned.X, 'Method', config.preprocess.interpolationMethod);
-        intY = sphynx.preprocess.interpolateGaps(cleaned.Y, 'Method', config.preprocess.interpolationMethod);
-        % Clamp to frame bounds (legacy behavior)
-        intX = clamp(intX, 1, Options.Width);
-        intY = clamp(intY, 1, Options.Height);
-        BodyPartsTraces(part).TraceInterpolated.X = intX;
-        BodyPartsTraces(part).TraceInterpolated.Y = intY;
-
-        % Smooth (bigger window for body-center / tailbase)
-        win = pickSmoothWindow(dlc.bodyPartsNames{part}, smallWin, bigWin);
-        smX = sphynx.preprocess.smoothTrace(intX, win);
-        smY = sphynx.preprocess.smoothTrace(intY, win);
-        BodyPartsTraces(part).TraceSmoothed.X = smX;
-        BodyPartsTraces(part).TraceSmoothed.Y = smY;
     end
 
     % Drop NotFound parts
@@ -259,6 +264,44 @@ function result = analyzeSession(config)
             [~, sessionName, ~] = fileparts(config.paths.dlc);
         end
         sphynx.io.saveSession(result, config.paths.outDir, sessionName);
+    end
+end
+
+function [arr, keepIdx] = tryLoadPrepared(dlcPath, dlc, log)
+    % Look for <dlcBase>_Preprocessed.mat next to the DLC csv. If found
+    % and the bodypart names match, return the BodyPartsTraces array
+    % directly with computed Velocity/AverageSpeed/AverageDistance left
+    % blank (they are filled later in step 5).
+    arr = []; keepIdx = [];
+    [d, base, ~] = fileparts(dlcPath);
+    p = fullfile(d, [base '_Preprocessed.mat']);
+    if ~isfile(p); return; end
+    s = load(p, 'BodyPartsTraces');
+    if ~isfield(s, 'BodyPartsTraces') || isempty(s.BodyPartsTraces); return; end
+    namesA = {s.BodyPartsTraces.BodyPartName};
+    if numel(namesA) ~= numel(dlc.bodyPartsNames) || ~all(strcmp(namesA, dlc.bodyPartsNames))
+        log('warn', 'Found %s but bodyparts schema differs — falling back to recompute', p);
+        return;
+    end
+    log('info', 'Loaded preprocessed traces from %s', p);
+    n = numel(s.BodyPartsTraces);
+    arr = struct('BodyPartName', {}, 'TraceOriginal', {}, ...
+        'TraceInterpolated', {}, 'TraceSmoothed', {}, 'Status', {}, ...
+        'PercentNaN', {}, 'PercentLowLikelihood', {}, ...
+        'Velocity', {}, 'VelocitySmoothed', {}, 'AverageSpeed', {}, ...
+        'AverageDistance', {});
+    keepIdx = false(1, n);
+    for k = 1:n
+        t = s.BodyPartsTraces(k);
+        arr(k).BodyPartName = t.BodyPartName;
+        arr(k).TraceOriginal = t.TraceOriginal;
+        arr(k).TraceLikelihood = t.TraceLikelihood;
+        arr(k).TraceInterpolated = t.TraceInterpolated;
+        arr(k).TraceSmoothed = t.TraceSmoothed;
+        arr(k).Status = t.Status;
+        arr(k).PercentNaN = t.PercentNaN;
+        arr(k).PercentLowLikelihood = t.PercentLowLikelihood;
+        keepIdx(k) = ~strcmp(t.Status, 'NotFound');
     end
 end
 

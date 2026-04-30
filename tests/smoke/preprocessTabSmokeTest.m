@@ -175,6 +175,32 @@ function testVideoToggleAndFrameNav(testCase)
     verifyEqual(testCase, pc.RightGrid.RowHeight{7}, 0);
 end
 
+function testSavePreprocessedRoundTrip(testCase)
+    app = sphynx.app.CreatePresetApp();
+    cleaner = onCleanup(@() delete(app));
+    pc = app.PreprocessController;
+    repo = sphynx.util.repoRoot();
+    dlcPath = fullfile(repo, 'Demo', 'DLC', ...
+        'NOF_H01_1DDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv');
+    assumeTrue(testCase, isfile(dlcPath));
+
+    tmp = tempname();
+    mkdir(tmp);
+    cleaner2 = onCleanup(@() rmdir(tmp, 's'));
+
+    pc.setPaths(struct('dlc', dlcPath));
+    pc.loadAll();
+    pc.OutputDirField.Value = tmp;
+    pc.SavePlotsCheckbox.Value = false;  % keep test fast
+
+    paths = pc.savePreprocessed();
+    verifyTrue(testCase, isfile(paths.settings));
+    verifyTrue(testCase, isfile(paths.session));
+    s = load(paths.session);
+    verifyTrue(testCase, isfield(s, 'BodyPartsTraces'));
+    verifyEqual(testCase, numel(s.BodyPartsTraces), 14);
+end
+
 function testComputeSinglePart(testCase)
     app = sphynx.app.CreatePresetApp();
     cleaner = onCleanup(@() delete(app));
