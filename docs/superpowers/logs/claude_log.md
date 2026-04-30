@@ -252,3 +252,45 @@ Cleanup `Preprocess/processVideos.m`: убрать hardcoded paths (line 16-18),
 
 ### Следующий шаг
 Жду фидбек юзера (он обычно хочет посмотреть глазами в GUI). Параллельно могу стартовать Slice 2 (per-part settings table) — основная работа: `uitable`, дефолты per-part, `Compute this/all`. Или подождать его ОК. Соблюдаю handoff timing rule: сказал «жди» в чате, не стартую Slice 2 без подтверждения.
+
+---
+
+## 2026-04-30 — Slice 1 polish + pipeline order locked (commit 8ed33ba)
+
+### Юзер дал три правки + архитектурный вопрос
+1. Гистограмма крупно → бины меньше + переключатель log-Y.
+2. «Кнопки в блоке графиков широкие» — перевел как «switcher row под графиками». У меня там были `<` 40, dropdown 1x, `>` 40, `Load all` 200, FrameLabel 140 — раздавило dropdown.
+3. Порядок препроцессинга — когда фильтровать outliers vs interp/smooth.
+
+### Что сделал
+- **Гистограмма:** `'BinWidth', 0.01` (= 100 бинов на [0,1]). Было `50` бинов общим параметром (= ширина ~0.02 если likelihood плотный сверху). По существу — теперь видно бимодальность, что нужно для Auto thresholds в Slice 3.
+- **log-Y toggle:** state-button в switcher row, при нажатии `obj.AxLk.YScale = 'log'`. State-button потому что нужно сохранить состояние между обновлениями. `ValueChangedFcn → refreshPreview` чтобы перерисовать с новым scale. Подпись Y label меняется на "count (log)" если ON.
+- **Switcher row:** перебалансировал на `[28, 160, 28, 80, 80, '1x']`. Стрелочки квадратные мелкие, dropdown 160px, `Load` (укоротил с `Load all`) 80px, `log Y` 80px, FrameLabel — оставшееся пространство справа. Layout: 6 колонок вместо 5.
+- **Pipeline order в спеке:** добавил отдельный раздел "Pipeline order (critical)" с 7-шаговой схемой и обоснованием.
+
+### Архитектурное решение по порядку
+Это критичный момент, юзер сам спросил «после интерполяции и сглаживания или вовремя как-то совместить? а то какие-то аутлаеры могут сгладиться и стать незаметными».
+
+Зафиксированный порядок:
+1. likelihoodFilter
+2. boundsFilter
+3. velocityJumpFilter (pre-interp!)
+4. hampelFilter (pre-interp, optional)
+5. manualRegions (pre-interp)
+6. interpolateGaps
+7. ОДНО ИЗ: smoothTrace ИЛИ kalmanFilter2D
+
+**Обоснование выбора smooth XOR Kalman:** Kalman сам по себе smoother (constant-velocity model + measurement noise). Если применить sgolay поверх Kalman — теряется его свойство «вес обратно пропорционален likelihood». Если применить Kalman поверх sgolay — получаем dvojnoye сглаживание, теоретически возможно но непредсказуемо для юзера. Лучше дать выбор в UI: dropdown «Smoothing: sgolay / movmean / movmedian / gaussian / kalman».
+
+**Iterative RANSAC-style** (interp → outlier → re-interp) — рассматривал, отверг: слишком сложно для GUI, не сильно лучше pre-interp velocity-gate + Hampel.
+
+### Решения, которые я принял сам
+- Удалил название `Load all` → просто `Load` (для компактности). Семантически то же — грузит DLC, видео и preset, если пути заполнены.
+- Добавил поле `LogScaleButton` в properties controller'а.
+- Live-recompute на toggle log-Y — перерисовывает гистограмму. Альтернатива: только `set(ax, 'YScale', ...)` без полного refresh. Решил полный refresh: дешево (один histogram() per part), и не разъезжается с другими полями.
+
+### Заметки на будущее
+- Когда дойдём до Auto thresholds (Slice 3), bin-width 0.01 — оптимально для Otsu (`multithresh` хочет histogram-like distribution; слишком крупные бины замывают пик у 1.0, и порог сдвигается влево).
+- log-Y критично для слабо размеченных частей, где >99% likelihood около 1.0 — на linear scale левая часть не видна вообще. На log сразу виден «провал» между двумя модами.
+- После Slice 4 надо будет добавить вертикальную линию на гистограмме на текущем threshold per-part.
+- При Slice 4 вспомнить про disable Smoothing dropdown когда Kalman ON (или показать «(disabled by Kalman)»).
