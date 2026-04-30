@@ -72,8 +72,29 @@ function out = applyPerPartSettings(rawX, rawY, likelihood, settings, ctx)
         return;
     end
 
-    % --- 3-5. Outlier filters + manual regions (no-op until Slice 4-5)
-    % (placeholders; pre-interp NaNing happens here)
+    % --- 3-4. Outlier filters (pre-interp on raw position) ----------
+    outliers = false(size(rawX));
+    if isfield(ctx, 'outlier') && isstruct(ctx.outlier)
+        % velocity-jump
+        if isfield(ctx.outlier, 'velocityJump') && ...
+                ctx.outlier.velocityJump.enabled && ~isempty(ctx.pixelsPerCm)
+            [out.X_clean, out.Y_clean, badV] = ...
+                sphynx.preprocess.velocityJumpFilter(out.X_clean, out.Y_clean, ...
+                    ctx.frameRate, ctx.pixelsPerCm, ...
+                    ctx.outlier.velocityJump.maxVelocityCmS);
+            outliers = outliers | badV;
+        end
+        % Hampel
+        if isfield(ctx.outlier, 'hampel') && ctx.outlier.hampel.enabled
+            [out.X_clean, out.Y_clean, badH] = ...
+                sphynx.preprocess.hampelFilter(out.X_clean, out.Y_clean, ...
+                    ctx.outlier.hampel.windowSize, ctx.outlier.hampel.nSigma);
+            outliers = outliers | badH;
+        end
+    end
+    out.percentOutliers = round(100 * sum(outliers) / numel(outliers), 2);
+
+    % --- 5. Manual regions (Slice 5) -- placeholder ------------------
 
     % --- 6. Interpolate gaps -----------------------------------------
     out.X_interp = sphynx.preprocess.interpolateGaps(out.X_clean, ...
@@ -87,8 +108,18 @@ function out = applyPerPartSettings(rawX, rawY, likelihood, settings, ctx)
 
     % --- 7. Smooth ----------------------------------------------------
     winSamples = makeOdd(round(ctx.frameRate * settings.smoothWindowSec));
-    out.X_smooth = applySmoothing(out.X_interp, winSamples, settings);
-    out.Y_smooth = applySmoothing(out.Y_interp, winSamples, settings);
+    if strcmpi(settings.smoothingMethod, 'kalman')
+        kp = defaultKalmanParams();
+        if isfield(ctx, 'outlier') && isfield(ctx.outlier, 'kalman')
+            kp = mergeStruct(kp, ctx.outlier.kalman);
+        end
+        [out.X_smooth, out.Y_smooth] = sphynx.preprocess.kalmanFilter2D( ...
+            out.X_interp, out.Y_interp, likelihood, ...
+            kp.processNoise, kp.measNoiseScale);
+    else
+        out.X_smooth = applySmoothing(out.X_interp, winSamples, settings);
+        out.Y_smooth = applySmoothing(out.Y_interp, winSamples, settings);
+    end
 
     % Final clamp to frame bounds (smoothing can over/undershoot slightly)
     out.X_smooth = clamp(out.X_smooth, 1, ctx.frameWidth);
@@ -110,13 +141,22 @@ function y = applySmoothing(x, winSamples, settings)
             y = smoothdata(x, 'movmedian', winSamples);
         case 'gaussian'
             y = smoothdata(x, 'gaussian', winSamples);
-        case 'kalman'
-            % Kalman is wired in Slice 4; for Slice 2 fall through to sgolay
-            y = sphynx.preprocess.smoothTrace(x, winSamples, ...
-                'PolyOrder', settings.smoothingPolyOrder);
         otherwise
             error('sphynx:applyPerPartSettings:unknownSmoothing', ...
                 'Unknown smoothing method: %s', method);
+    end
+end
+
+function p = defaultKalmanParams()
+    p.processNoise = 1e-2;
+    p.measNoiseScale = 1.0;
+end
+
+function out = mergeStruct(base, override)
+    out = base;
+    f = fieldnames(override);
+    for k = 1:numel(f)
+        out.(f{k}) = override.(f{k});
     end
 end
 

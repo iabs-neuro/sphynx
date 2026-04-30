@@ -33,8 +33,17 @@ classdef PreprocessTabController < handle
         AutoMethodDropDown
         AutoParamField
 
-        % Block 3-4 placeholders (real content wired in later slices)
+        % Block 3: outlier filters
         OutlierPanel
+        VJEnabledChk
+        VJMaxField
+        HampelEnabledChk
+        HampelWindowField
+        HampelSigmaField
+        KalmanQField
+        KalmanRField
+
+        % Block 4 placeholder (Slice 7)
         RegionsPanel
         SavePanel
 
@@ -251,6 +260,7 @@ classdef PreprocessTabController < handle
                 if isfield(opt, 'FrameRate'); ctx.frameRate   = opt.FrameRate; end
                 if isfield(opt, 'pxl2sm');    ctx.pixelsPerCm = opt.pxl2sm;    end
             end
+            ctx.outlier = obj.State.outlier;
         end
 
         function storeProcessed(obj, idx, out)
@@ -346,6 +356,14 @@ classdef PreprocessTabController < handle
             s.frame = [];
             s.currentBodyPart = 1;
             s.currentFrame = 1;
+            % Outlier filter defaults (global per experiment, not per-part)
+            s.outlier.velocityJump.enabled = true;
+            s.outlier.velocityJump.maxVelocityCmS = 50;
+            s.outlier.hampel.enabled = false;
+            s.outlier.hampel.windowSize = 7;
+            s.outlier.hampel.nSigma = 3;
+            s.outlier.kalman.processNoise = 1e-2;
+            s.outlier.kalman.measNoiseScale = 1.0;
             % Per-part settings (1xK struct, populated on Load)
             s.perPart = sphynx.app.PreprocessTabController.emptyPerPartArray();
             % Per-part processed traces (1xK struct, populated on Compute)
@@ -389,7 +407,7 @@ classdef PreprocessTabController < handle
 
             obj.buildLoadingPanel();
             obj.buildPerPartPanel();
-            obj.buildOutlierPanelPlaceholder();
+            obj.buildOutlierPanel();
             obj.buildSavePanelPlaceholder();
         end
 
@@ -520,14 +538,82 @@ classdef PreprocessTabController < handle
             bA2.Layout.Column = 5;
         end
 
-        function buildOutlierPanelPlaceholder(obj)
+        function buildOutlierPanel(obj)
             obj.OutlierPanel = uipanel(obj.LeftPanel, 'Title', '3. Outlier filter');
             obj.OutlierPanel.Layout.Row = 3;
-            g = uigridlayout(obj.OutlierPanel, [1, 1]);
-            lbl = uilabel(g, 'Text', sprintf(['(Slice 4): velocity-jump (default ON) +\n' ...
-                'Hampel + Kalman (optional). Max velocity field: 50 cm/s.']), ...
-                'HorizontalAlignment', 'center');
-            lbl.Layout.Row = 1; lbl.Layout.Column = 1; %#ok<NASGU>
+            g = uigridlayout(obj.OutlierPanel, [3, 4]);
+            g.RowHeight = {26, 26, 26};
+            g.ColumnWidth = {120, 80, '1x', 80};
+            g.RowSpacing = 4;
+            g.ColumnSpacing = 4;
+            g.Padding = [4 4 4 4];
+
+            % Row 1: velocity-jump
+            obj.VJEnabledChk = uicheckbox(g, 'Text', 'velocity-jump', ...
+                'Value', obj.State.outlier.velocityJump.enabled, ...
+                'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('vj_enabled', s.Value));
+            obj.VJEnabledChk.Layout.Row = 1; obj.VJEnabledChk.Layout.Column = 1;
+
+            lbl1 = uilabel(g, 'Text', 'max cm/s:', 'HorizontalAlignment', 'right');
+            lbl1.Layout.Row = 1; lbl1.Layout.Column = 2;
+
+            obj.VJMaxField = uieditfield(g, 'numeric', ...
+                'Value', obj.State.outlier.velocityJump.maxVelocityCmS, ...
+                'Limits', [1 1000], ...
+                'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('vj_max', s.Value));
+            obj.VJMaxField.Layout.Row = 1; obj.VJMaxField.Layout.Column = 3;
+
+            % Row 2: Hampel
+            obj.HampelEnabledChk = uicheckbox(g, 'Text', 'Hampel', ...
+                'Value', obj.State.outlier.hampel.enabled, ...
+                'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('hp_enabled', s.Value));
+            obj.HampelEnabledChk.Layout.Row = 2; obj.HampelEnabledChk.Layout.Column = 1;
+
+            lbl2 = uilabel(g, 'Text', 'win:', 'HorizontalAlignment', 'right');
+            lbl2.Layout.Row = 2; lbl2.Layout.Column = 2;
+
+            obj.HampelWindowField = uieditfield(g, 'numeric', ...
+                'Value', obj.State.outlier.hampel.windowSize, ...
+                'Limits', [1 1000], 'RoundFractionalValues', 'on', ...
+                'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('hp_win', s.Value));
+            obj.HampelWindowField.Layout.Row = 2; obj.HampelWindowField.Layout.Column = 3;
+
+            obj.HampelSigmaField = uieditfield(g, 'numeric', ...
+                'Value', obj.State.outlier.hampel.nSigma, ...
+                'Limits', [0.1 10], 'Tooltip', 'k (sigma)', ...
+                'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('hp_sig', s.Value));
+            obj.HampelSigmaField.Layout.Row = 2; obj.HampelSigmaField.Layout.Column = 4;
+
+            % Row 3: Kalman params (used when smoothing=kalman per part)
+            lblK = uilabel(g, 'Text', 'Kalman:', 'HorizontalAlignment', 'left');
+            lblK.Layout.Row = 3; lblK.Layout.Column = 1;
+
+            lblK1 = uilabel(g, 'Text', 'Q:', 'HorizontalAlignment', 'right');
+            lblK1.Layout.Row = 3; lblK1.Layout.Column = 2;
+
+            obj.KalmanQField = uieditfield(g, 'numeric', ...
+                'Value', obj.State.outlier.kalman.processNoise, ...
+                'Limits', [1e-6 100], ...
+                'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('kf_q', s.Value));
+            obj.KalmanQField.Layout.Row = 3; obj.KalmanQField.Layout.Column = 3;
+
+            obj.KalmanRField = uieditfield(g, 'numeric', ...
+                'Value', obj.State.outlier.kalman.measNoiseScale, ...
+                'Limits', [1e-6 1000], 'Tooltip', 'measurement noise scale', ...
+                'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('kf_r', s.Value));
+            obj.KalmanRField.Layout.Row = 3; obj.KalmanRField.Layout.Column = 4;
+        end
+
+        function onOutlierFlagChanged(obj, key, val)
+            switch key
+                case 'vj_enabled'; obj.State.outlier.velocityJump.enabled = logical(val);
+                case 'vj_max';     obj.State.outlier.velocityJump.maxVelocityCmS = val;
+                case 'hp_enabled'; obj.State.outlier.hampel.enabled = logical(val);
+                case 'hp_win';     obj.State.outlier.hampel.windowSize = max(1, round(val));
+                case 'hp_sig';     obj.State.outlier.hampel.nSigma = val;
+                case 'kf_q';       obj.State.outlier.kalman.processNoise = val;
+                case 'kf_r';       obj.State.outlier.kalman.measNoiseScale = val;
+            end
         end
 
         function buildSavePanelPlaceholder(obj)
