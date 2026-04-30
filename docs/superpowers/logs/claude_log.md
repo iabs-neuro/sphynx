@@ -219,3 +219,36 @@ Cleanup `Preprocess/processVideos.m`: убрать hardcoded paths (line 16-18),
 
 ### Логи + коммит
 Обновил оба лога этим turn'ом. Сейчас закоммичу и приступлю к Slice 1.
+
+---
+
+## 2026-04-30 — Slice 1 готов (commit 1980bdc)
+
+### Что сделано
+1. Расширил `+sphynx/+app/CreatePresetApp.m`: добавил `TabPreprocess` между `TabCreate` и `TabAnalyze`, добавил поле `PreprocessController`, в `buildUI` инстанциирую контроллер: `app.PreprocessController = sphynx.app.PreprocessTabController(app.TabPreprocess, app);`. Шапка комментария обновлена под три вкладки.
+2. Создал `+sphynx/+app/PreprocessTabController.m` (~430 строк) — `classdef ... < handle`. Layout:
+   - Outer 1×2 grid: левая колонка 380px (scrollable), правая 1x.
+   - Левая: 4 панели (1.Loading рабочая + Slice 2/3/4 placeholders).
+   - Loading: 4 кнопки top row (Root/DLC/Video/Preset) + 4 поля bottom row, переиспользует `semanticColor('action')`.
+   - Правая: 6-row grid — три uiaxes (X/Y/likelihood histogram) занимают `1x` каждый, потом 36px switcher row, 100px Manual regions placeholder, 110px Log textarea.
+   - Switcher: `<` button (40px) + dropdown (1x) + `>` button (40px) + `Load all` (200px) + Frame N/M label (140px).
+3. Программный API контроллера: `setPaths(struct)`, `loadAll()`, `setCurrentBodyPart(idx)`, `nextBodyPart()`, `prevBodyPart()`, `refreshPreview()`. Static `emptyState()`.
+4. Smoke-тест `tests/smoke/preprocessTabSmokeTest.m`: 3 функции — `testTabConstructs`, `testLoadDLCFromDemo`, `testBodyPartSwitch`. Использует `assumeTrue(isfile(dlcPath))` чтобы тест корректно skip-нулся, если Demo CSV отсутствует.
+
+### Ошибки и фиксы
+- **`uilabel` `WordWrap` не существует в R2020a.** Появился позже. Убрал свойство со всех 4 placeholder labels (use `replace_all`). Тесты после фикса прошли.
+- Других проблем не было.
+
+### Решения по ходу
+- **`PreprocessController(parentTab, parentApp)`** — второй аргумент чтобы наследовать `projectRoot` от родительского app. В `inheritRootFromParentApp()` обёрнуто в try/catch на случай, если `ParentApp.State` ещё не заполнен.
+- **Frame slider не реализован в Slice 1** — добавится в Slice 6 вместе с video viewer; сейчас только статичная label «Frame N/M». В плане так и было.
+- **Likelihood histogram, не trace.** Обсудимое: можно показывать likelihood(t) как трейс (тогда видны просадки во времени) или гистограмму распределения (тогда видна бимодальность для Auto). Юзер сказал «гистограмма» в Q6 — оставил гистограмму. Если он позже захочет переключаемое — добавлю кнопку.
+- **DLC опечатки `righforelimb`/`righthindlimb`** — никаких алиасов на этом этапе, просто отображаются как есть в dropdown. Юзер сам разберётся.
+
+### Что проверил
+- `runtests('tests/smoke/preprocessTabSmokeTest.m')` — 3/3 PASS.
+- `runtests('tests/unit/createPresetAppSmokeTest.m')` — 2/2 PASS (существующий тест не сломан).
+- DLC грузится: 18006 кадров, 14 bodyparts из Demo csv 1.
+
+### Следующий шаг
+Жду фидбек юзера (он обычно хочет посмотреть глазами в GUI). Параллельно могу стартовать Slice 2 (per-part settings table) — основная работа: `uitable`, дефолты per-part, `Compute this/all`. Или подождать его ОК. Соблюдаю handoff timing rule: сказал «жди» в чате, не стартую Slice 2 без подтверждения.
