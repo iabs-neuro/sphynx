@@ -94,6 +94,30 @@ function testPerPartDefaultsPopulated(testCase)
     end
 end
 
+function testAutoThresholdSinglePart(testCase)
+    app = sphynx.app.CreatePresetApp();
+    cleaner = onCleanup(@() delete(app));
+    pc = app.PreprocessController;
+    repo = sphynx.util.repoRoot();
+    dlcPath = fullfile(repo, 'Demo', 'DLC', ...
+        'NOF_H01_1DDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv');
+    assumeTrue(testCase, isfile(dlcPath));
+    pc.setPaths(struct('dlc', dlcPath));
+    pc.loadAll();
+
+    idx = find(strcmpi({pc.State.perPart.name}, 'nose'), 1);
+    assumeTrue(testCase, ~isempty(idx));
+    before = pc.State.perPart(idx).likelihoodThreshold;
+
+    pc.AutoMethodDropDown.Value = 'quantile';
+    pc.AutoParamField.Value = '0.05';
+    pc.autoThresholdPart(idx);
+
+    after = pc.State.perPart(idx).likelihoodThreshold;
+    verifyTrue(testCase, after >= 0 && after <= 1);
+    verifyTrue(testCase, after ~= before);  % some change occurred
+end
+
 function testComputeSinglePart(testCase)
     app = sphynx.app.CreatePresetApp();
     cleaner = onCleanup(@() delete(app));

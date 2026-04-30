@@ -30,6 +30,8 @@ classdef PreprocessTabController < handle
         % Block 2: per-part settings
         PerPartPanel
         PerPartTable
+        AutoMethodDropDown
+        AutoParamField
 
         % Block 3-4 placeholders (real content wired in later slices)
         OutlierPanel
@@ -182,6 +184,59 @@ classdef PreprocessTabController < handle
             end
         end
 
+        function autoThresholdPart(obj, idx)
+            if isempty(obj.State.dlc); return; end
+            if idx < 1 || idx > numel(obj.State.perPart); return; end
+            method = obj.AutoMethodDropDown.Value;
+            param = obj.parseAutoParam(method, obj.AutoParamField.Value);
+            Lk = obj.State.dlc.likelihood(idx, :)';
+            try
+                thr = sphynx.preprocess.autoThreshold(Lk, method, param);
+            catch ME
+                obj.applog('error', 'Auto[%s] failed for %s: %s', ...
+                    method, obj.State.perPart(idx).name, ME.message);
+                return;
+            end
+            obj.State.perPart(idx).likelihoodThreshold = thr;
+            obj.refreshPerPartTable();
+            if idx == obj.State.currentBodyPart
+                obj.refreshPreview();
+            end
+            obj.applog('info', 'Auto[%s]: %s -> thr=%.3f', ...
+                method, obj.State.perPart(idx).name, thr);
+        end
+
+        function autoThresholdAll(obj)
+            if isempty(obj.State.dlc); return; end
+            for k = 1:numel(obj.State.perPart)
+                obj.autoThresholdPart(k);
+            end
+        end
+
+        function p = parseAutoParam(~, method, raw)
+            % Decide param based on method; raw is whatever the user typed.
+            raw = strtrim(raw);
+            switch lower(method)
+                case 'quantile'
+                    if isempty(raw); p = 0.05; return; end
+                    val = str2double(raw);
+                    if isnan(val); p = 0.05; else; p = max(0.001, min(0.999, val)); end
+                case 'preset'
+                    if isempty(raw); p = 'moderate'; return; end
+                    p = lower(raw);
+                otherwise
+                    p = [];
+            end
+        end
+
+        function onAutoMethodChanged(obj, method)
+            switch lower(method)
+                case 'quantile'; obj.AutoParamField.Value = '0.05';
+                case 'preset';   obj.AutoParamField.Value = 'moderate';
+                otherwise;       obj.AutoParamField.Value = '';
+            end
+        end
+
         function ctx = computeContext(obj)
             % Frame size + frame rate from preset if loaded, else fall back
             % to plausible defaults that don't crash bounds checks.
@@ -264,6 +319,15 @@ classdef PreprocessTabController < handle
                 ylabel(obj.AxLk, 'count (log)');
             else
                 obj.AxLk.YScale = 'linear';
+            end
+            % Threshold marker (vertical line) for the current part
+            if i <= numel(obj.State.perPart)
+                thr = obj.State.perPart(i).likelihoodThreshold;
+                hold(obj.AxLk, 'on');
+                yLim = obj.AxLk.YLim;
+                plot(obj.AxLk, [thr thr], yLim, '-', ...
+                    'Color', [0.85 0.10 0.10], 'LineWidth', 1.5);
+                hold(obj.AxLk, 'off');
             end
 
             % Frame label
@@ -379,8 +443,8 @@ classdef PreprocessTabController < handle
         function buildPerPartPanel(obj)
             obj.PerPartPanel = uipanel(obj.LeftPanel, 'Title', '2. Per-part settings');
             obj.PerPartPanel.Layout.Row = 2;
-            g = uigridlayout(obj.PerPartPanel, [2, 1]);
-            g.RowHeight = {'1x', 32};
+            g = uigridlayout(obj.PerPartPanel, [3, 1]);
+            g.RowHeight = {'1x', 32, 32};
             g.RowSpacing = 4;
             g.Padding = [4 4 4 4];
 
@@ -398,7 +462,7 @@ classdef PreprocessTabController < handle
                 'CellSelectionCallback', @(~, evt) obj.onPerPartTableSelected(evt));
             obj.PerPartTable.Layout.Row = 1; obj.PerPartTable.Layout.Column = 1;
 
-            % Button row
+            % Default/Compute row
             btnRow = uigridlayout(g, [1, 4]);
             btnRow.Layout.Row = 2; btnRow.Layout.Column = 1;
             btnRow.RowHeight = {28};
@@ -422,6 +486,38 @@ classdef PreprocessTabController < handle
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.computeAll());
             b4.Layout.Column = 4;
+
+            % Auto-threshold row
+            autoRow = uigridlayout(g, [1, 5]);
+            autoRow.Layout.Row = 3; autoRow.Layout.Column = 1;
+            autoRow.RowHeight = {28};
+            autoRow.ColumnWidth = {44, 100, 80, '1x', '1x'};
+            autoRow.Padding = [0 0 0 0];
+            autoRow.ColumnSpacing = 4;
+
+            lblAuto = uilabel(autoRow, 'Text', 'Auto:', ...
+                'HorizontalAlignment', 'right');
+            lblAuto.Layout.Column = 1; %#ok<NASGU>
+
+            obj.AutoMethodDropDown = uidropdown(autoRow, ...
+                'Items', {'otsu', 'knee', 'quantile', 'preset'}, ...
+                'Value', 'otsu', ...
+                'ValueChangedFcn', @(s, ~) obj.onAutoMethodChanged(s.Value));
+            obj.AutoMethodDropDown.Layout.Column = 2;
+
+            obj.AutoParamField = uieditfield(autoRow, 'text', ...
+                'Value', '', ...
+                'Tooltip', 'param: quantile=0.05 / preset=aggressive|moderate|lax');
+            obj.AutoParamField.Layout.Column = 3;
+
+            bA1 = uibutton(autoRow, 'Text', 'Auto this', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ButtonPushedFcn', @(~,~) obj.autoThresholdPart(obj.State.currentBodyPart));
+            bA1.Layout.Column = 4;
+            bA2 = uibutton(autoRow, 'Text', 'Auto all', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ButtonPushedFcn', @(~,~) obj.autoThresholdAll());
+            bA2.Layout.Column = 5;
         end
 
         function buildOutlierPanelPlaceholder(obj)
