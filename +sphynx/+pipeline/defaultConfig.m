@@ -32,6 +32,13 @@ function cfg = defaultConfig()
     cfg.preprocess.maxVelocityCmS = 50;
     cfg.preprocess.interpolationMethod = 'pchip';
 
+    % Per-part defaults used by sphynx.preprocess.perPartDefault
+    cfg.preprocess.perPart.bigParts = {'mass centre', 'mass center', 'bodycenter', ...
+                                       'center', 'tailbase', 'tail base'};
+    cfg.preprocess.perPart.smoothingMethod = 'sgolay';
+    cfg.preprocess.perPart.smoothingPolyOrder = 3;
+    cfg.preprocess.perPart.notFoundThresholdPct = 90;
+
     cfg.acts.restThresholdCmS  = 1;
     cfg.acts.locThresholdCmS   = 5;
     cfg.acts.minRunSeconds     = 0.25;

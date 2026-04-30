@@ -27,8 +27,11 @@ classdef PreprocessTabController < handle
         VideoField
         PresetField
 
-        % Block 2-4 placeholders (real content wired in later slices)
+        % Block 2: per-part settings
         PerPartPanel
+        PerPartTable
+
+        % Block 3-4 placeholders (real content wired in later slices)
         OutlierPanel
         RegionsPanel
         SavePanel
@@ -113,11 +116,98 @@ classdef PreprocessTabController < handle
                 end
             end
 
-            % Populate body-part dropdown
+            % Populate body-part dropdown + default per-part settings
             obj.populateBodyPartDropDown();
+            obj.populateDefaultPerPart();
+            obj.refreshPerPartTable();
             obj.State.currentBodyPart = 1;
             obj.State.currentFrame = 1;
             obj.refreshPreview();
+        end
+
+        % --- Compute API -----------------------------------------------------
+        function computePart(obj, idx)
+            % COMPUTEPART  Run the pipeline for a single body part.
+            if isempty(obj.State.dlc); return; end
+            if idx < 1 || idx > numel(obj.State.dlc.bodyPartsNames); return; end
+            settings = obj.State.perPart(idx);
+            if ~settings.use
+                obj.applog('info', 'Skipped %s (use=false)', settings.name);
+                return;
+            end
+            ctx = obj.computeContext();
+            rawX = obj.State.dlc.X(idx, :)';
+            rawY = obj.State.dlc.Y(idx, :)';
+            lk   = obj.State.dlc.likelihood(idx, :)';
+            try
+                out = sphynx.preprocess.applyPerPartSettings(rawX, rawY, lk, settings, ctx);
+            catch ME
+                obj.applog('error', 'Compute %s failed: %s', settings.name, ME.message);
+                return;
+            end
+            obj.storeProcessed(idx, out);
+            obj.refreshPerPartTable();
+            if idx == obj.State.currentBodyPart
+                obj.refreshPreview();
+            end
+            obj.applog('info', 'Computed %s: status=%s, NaN=%.2f%%, lowLk=%.2f%%', ...
+                settings.name, out.status, out.percentNaN, out.percentLowLikelihood);
+        end
+
+        function computeAll(obj)
+            if isempty(obj.State.dlc); return; end
+            for k = 1:numel(obj.State.perPart)
+                obj.computePart(k);
+            end
+        end
+
+        function defaultPart(obj, idx)
+            if isempty(obj.State.dlc); return; end
+            cfg = sphynx.pipeline.defaultConfig();
+            name = obj.State.dlc.bodyPartsNames{idx};
+            d = sphynx.preprocess.perPartDefault(name, cfg);
+            obj.State.perPart(idx).likelihoodThreshold  = d.likelihoodThreshold;
+            obj.State.perPart(idx).smoothWindowSec      = d.smoothWindowSec;
+            obj.State.perPart(idx).interpolationMethod  = d.interpolationMethod;
+            obj.State.perPart(idx).smoothingMethod      = d.smoothingMethod;
+            obj.State.perPart(idx).smoothingPolyOrder   = d.smoothingPolyOrder;
+            obj.State.perPart(idx).notFoundThresholdPct = d.notFoundThresholdPct;
+            obj.State.perPart(idx).use = true;
+            obj.refreshPerPartTable();
+        end
+
+        function defaultAll(obj)
+            for k = 1:numel(obj.State.perPart)
+                obj.defaultPart(k);
+            end
+        end
+
+        function ctx = computeContext(obj)
+            % Frame size + frame rate from preset if loaded, else fall back
+            % to plausible defaults that don't crash bounds checks.
+            ctx.frameWidth  = 1e9;
+            ctx.frameHeight = 1e9;
+            ctx.frameRate   = 30;
+            ctx.pixelsPerCm = [];
+            if ~isempty(obj.State.presetData) && isfield(obj.State.presetData, 'Options')
+                opt = obj.State.presetData.Options;
+                if isfield(opt, 'Width');     ctx.frameWidth  = opt.Width;     end
+                if isfield(opt, 'Height');    ctx.frameHeight = opt.Height;    end
+                if isfield(opt, 'FrameRate'); ctx.frameRate   = opt.FrameRate; end
+                if isfield(opt, 'pxl2sm');    ctx.pixelsPerCm = opt.pxl2sm;    end
+            end
+        end
+
+        function storeProcessed(obj, idx, out)
+            % Lazily extend the processed array as needed
+            while numel(obj.State.processed) < idx
+                obj.State.processed(end+1) = struct('X_clean', [], 'Y_clean', [], ...
+                    'X_interp', [], 'Y_interp', [], 'X_smooth', [], 'Y_smooth', [], ...
+                    'percentNaN', NaN, 'percentLowLikelihood', NaN, ...
+                    'percentBadCombined', NaN, 'percentOutliers', NaN, ...
+                    'status', '');
+            end
+            obj.State.processed(idx) = out;
         end
 
         function setCurrentBodyPart(obj, idx)
@@ -192,6 +282,22 @@ classdef PreprocessTabController < handle
             s.frame = [];
             s.currentBodyPart = 1;
             s.currentFrame = 1;
+            % Per-part settings (1xK struct, populated on Load)
+            s.perPart = sphynx.app.PreprocessTabController.emptyPerPartArray();
+            % Per-part processed traces (1xK struct, populated on Compute)
+            s.processed = struct('X_clean', {}, 'Y_clean', {}, ...
+                'X_interp', {}, 'Y_interp', {}, ...
+                'X_smooth', {}, 'Y_smooth', {}, ...
+                'percentNaN', {}, 'percentLowLikelihood', {}, ...
+                'percentBadCombined', {}, 'percentOutliers', {}, ...
+                'status', {});
+        end
+
+        function arr = emptyPerPartArray()
+            arr = struct('name', {}, 'use', {}, 'likelihoodThreshold', {}, ...
+                'smoothWindowSec', {}, 'interpolationMethod', {}, ...
+                'smoothingMethod', {}, 'smoothingPolyOrder', {}, ...
+                'notFoundThresholdPct', {});
         end
     end
 
@@ -213,12 +319,12 @@ classdef PreprocessTabController < handle
             obj.LeftPanel = uigridlayout(obj.OuterGrid, [4, 1]);
             obj.LeftPanel.Layout.Column = 1;
             obj.LeftPanel.Scrollable = 'on';
-            obj.LeftPanel.RowHeight = {110, 220, 140, 100};
+            obj.LeftPanel.RowHeight = {110, 360, 140, 100};
             obj.LeftPanel.RowSpacing = 6;
             obj.LeftPanel.Padding = [2 2 2 2];
 
             obj.buildLoadingPanel();
-            obj.buildPerPartPanelPlaceholder();
+            obj.buildPerPartPanel();
             obj.buildOutlierPanelPlaceholder();
             obj.buildSavePanelPlaceholder();
         end
@@ -270,15 +376,52 @@ classdef PreprocessTabController < handle
             obj.inheritRootFromParentApp();
         end
 
-        function buildPerPartPanelPlaceholder(obj)
+        function buildPerPartPanel(obj)
             obj.PerPartPanel = uipanel(obj.LeftPanel, 'Title', '2. Per-part settings');
             obj.PerPartPanel.Layout.Row = 2;
-            g = uigridlayout(obj.PerPartPanel, [1, 1]);
-            lbl = uilabel(g, 'Text', sprintf(['(Slice 2): per-bodypart settings table\n' ...
-                'thr / window / interp / smooth / NotFound%% per row.\n' ...
-                'Default this/all + Compute this/all + Auto thresholds.']), ...
-                'HorizontalAlignment', 'center');
-            lbl.Layout.Row = 1; lbl.Layout.Column = 1; %#ok<NASGU>
+            g = uigridlayout(obj.PerPartPanel, [2, 1]);
+            g.RowHeight = {'1x', 32};
+            g.RowSpacing = 4;
+            g.Padding = [4 4 4 4];
+
+            % uitable with per-part settings
+            obj.PerPartTable = uitable(g, ...
+                'ColumnName', {'use', 'name', 'thr', 'win,s', 'interp', 'smooth', 'NF%', '%NaN', '%lowL', 'status'}, ...
+                'ColumnFormat', {'logical', 'char', 'numeric', 'numeric', ...
+                    {'pchip', 'linear', 'spline', 'makima'}, ...
+                    {'sgolay', 'movmean', 'movmedian', 'gaussian', 'kalman'}, ...
+                    'numeric', 'char', 'char', 'char'}, ...
+                'ColumnEditable', [true false true true true true true false false false], ...
+                'ColumnWidth', {38, 90, 44, 50, 60, 70, 40, 50, 50, 60}, ...
+                'RowName', {}, ...
+                'CellEditCallback', @(~, evt) obj.onPerPartTableEdited(evt), ...
+                'CellSelectionCallback', @(~, evt) obj.onPerPartTableSelected(evt));
+            obj.PerPartTable.Layout.Row = 1; obj.PerPartTable.Layout.Column = 1;
+
+            % Button row
+            btnRow = uigridlayout(g, [1, 4]);
+            btnRow.Layout.Row = 2; btnRow.Layout.Column = 1;
+            btnRow.RowHeight = {28};
+            btnRow.ColumnWidth = {'1x', '1x', '1x', '1x'};
+            btnRow.Padding = [0 0 0 0];
+            btnRow.ColumnSpacing = 4;
+
+            b1 = uibutton(btnRow, 'Text', 'Default this', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.defaultSelected());
+            b1.Layout.Column = 1;
+            b2 = uibutton(btnRow, 'Text', 'Default all', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.defaultAll());
+            b2.Layout.Column = 2;
+            b3 = uibutton(btnRow, 'Text', 'Compute this', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.computeSelected());
+            b3.Layout.Column = 3;
+            b4 = uibutton(btnRow, 'Text', 'Compute all', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.computeAll());
+            b4.Layout.Column = 4;
         end
 
         function buildOutlierPanelPlaceholder(obj)
@@ -431,6 +574,109 @@ classdef PreprocessTabController < handle
             obj.BodyPartDropDown.Value = names{1};
         end
 
+        function populateDefaultPerPart(obj)
+            if isempty(obj.State.dlc); return; end
+            names = obj.State.dlc.bodyPartsNames;
+            cfg = sphynx.pipeline.defaultConfig();
+            arr = sphynx.app.PreprocessTabController.emptyPerPartArray();
+            for k = 1:numel(names)
+                d = sphynx.preprocess.perPartDefault(names{k}, cfg);
+                arr(k).name                  = names{k};
+                arr(k).use                   = true;
+                arr(k).likelihoodThreshold   = d.likelihoodThreshold;
+                arr(k).smoothWindowSec       = d.smoothWindowSec;
+                arr(k).interpolationMethod   = d.interpolationMethod;
+                arr(k).smoothingMethod       = d.smoothingMethod;
+                arr(k).smoothingPolyOrder    = d.smoothingPolyOrder;
+                arr(k).notFoundThresholdPct  = d.notFoundThresholdPct;
+            end
+            obj.State.perPart = arr;
+            % Reset processed cache
+            obj.State.processed = struct('X_clean', {}, 'Y_clean', {}, ...
+                'X_interp', {}, 'Y_interp', {}, ...
+                'X_smooth', {}, 'Y_smooth', {}, ...
+                'percentNaN', {}, 'percentLowLikelihood', {}, ...
+                'percentBadCombined', {}, 'percentOutliers', {}, ...
+                'status', {});
+        end
+
+        function refreshPerPartTable(obj)
+            if isempty(obj.PerPartTable) || ~isvalid(obj.PerPartTable); return; end
+            arr = obj.State.perPart;
+            n = numel(arr);
+            if n == 0
+                obj.PerPartTable.Data = {};
+                return;
+            end
+            data = cell(n, 10);
+            for k = 1:n
+                if k <= numel(obj.State.processed) && ~isempty(obj.State.processed(k).status)
+                    pct = obj.State.processed(k);
+                    pNaN = sprintf('%.1f', pct.percentNaN);
+                    pLow = sprintf('%.1f', pct.percentLowLikelihood);
+                    pOut = sprintf('%.1f', pct.percentOutliers);
+                    status = pct.status;
+                else
+                    pNaN = '-'; pLow = '-'; pOut = '-'; status = '-';
+                end
+                data{k, 1}  = arr(k).use;
+                data{k, 2}  = arr(k).name;
+                data{k, 3}  = arr(k).likelihoodThreshold;
+                data{k, 4}  = arr(k).smoothWindowSec;
+                data{k, 5}  = arr(k).interpolationMethod;
+                data{k, 6}  = arr(k).smoothingMethod;
+                data{k, 7}  = arr(k).notFoundThresholdPct;
+                data{k, 8}  = pNaN;
+                data{k, 9}  = pLow;
+                data{k, 10} = status;
+            end
+            obj.PerPartTable.Data = data;
+        end
+
+        function onPerPartTableEdited(obj, evt)
+            % Update the per-part struct in response to a uitable edit.
+            row = evt.Indices(1);
+            col = evt.Indices(2);
+            if row < 1 || row > numel(obj.State.perPart); return; end
+            newVal = evt.NewData;
+            switch col
+                case 1; obj.State.perPart(row).use                  = logical(newVal);
+                case 3; obj.State.perPart(row).likelihoodThreshold  = clampScalar(newVal, 0, 1);
+                case 4; obj.State.perPart(row).smoothWindowSec      = max(0.01, newVal);
+                case 5; obj.State.perPart(row).interpolationMethod  = newVal;
+                case 6; obj.State.perPart(row).smoothingMethod      = newVal;
+                case 7; obj.State.perPart(row).notFoundThresholdPct = clampScalar(newVal, 0, 100);
+                otherwise
+                    return;  % read-only columns
+            end
+            obj.refreshPerPartTable();
+        end
+
+        function onPerPartTableSelected(obj, evt)
+            % Single-click on a row -> switch the preview to that part.
+            if isempty(evt.Indices); return; end
+            row = evt.Indices(1);
+            if row < 1; return; end
+            obj.setCurrentBodyPart(row);
+        end
+
+        function selectedPartIndex(obj)
+            % Helper: for "Compute this" / "Default this" use the current
+            % preview part. Returns [] if nothing loaded.
+            if isempty(obj.State.dlc); return; end
+            obj.applog('debug', 'Selected part: %d', obj.State.currentBodyPart);
+        end
+
+        function computeSelected(obj)
+            if isempty(obj.State.dlc); return; end
+            obj.computePart(obj.State.currentBodyPart);
+        end
+
+        function defaultSelected(obj)
+            if isempty(obj.State.dlc); return; end
+            obj.defaultPart(obj.State.currentBodyPart);
+        end
+
         function onDropDownChanged(obj, name)
             idx = find(strcmp(obj.BodyPartDropDown.Items, name), 1);
             if isempty(idx); return; end
@@ -473,4 +719,8 @@ function rgb = semanticColor(kind)
         case 'info';     rgb = [0.78 0.95 0.95];   % pale teal
         otherwise;       rgb = [0.94 0.94 0.94];
     end
+end
+
+function v = clampScalar(x, lo, hi)
+    v = max(lo, min(hi, x));
 end

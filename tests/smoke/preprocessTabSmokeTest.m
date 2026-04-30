@@ -63,3 +63,55 @@ function testBodyPartSwitch(testCase)
     pc.prevBodyPart();
     verifyEqual(testCase, pc.State.currentBodyPart, nParts - 1);
 end
+
+function testPerPartDefaultsPopulated(testCase)
+    app = sphynx.app.CreatePresetApp();
+    cleaner = onCleanup(@() delete(app));
+    pc = app.PreprocessController;
+
+    repo = sphynx.util.repoRoot();
+    dlcPath = fullfile(repo, 'Demo', 'DLC', ...
+        'NOF_H01_1DDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv');
+    assumeTrue(testCase, isfile(dlcPath));
+    pc.setPaths(struct('dlc', dlcPath));
+    pc.loadAll();
+
+    nParts = numel(pc.State.dlc.bodyPartsNames);
+    verifyEqual(testCase, numel(pc.State.perPart), nParts);
+    bcIdx = find(strcmpi({pc.State.perPart.name}, 'bodycenter'), 1);
+    noseIdx = find(strcmpi({pc.State.perPart.name}, 'nose'), 1);
+    verifyNotEmpty(testCase, bcIdx);
+    verifyNotEmpty(testCase, noseIdx);
+    % bodycenter should pick the bigger smoothing window
+    verifyGreaterThan(testCase, ...
+        pc.State.perPart(bcIdx).smoothWindowSec, ...
+        pc.State.perPart(noseIdx).smoothWindowSec);
+    % All defaults populated
+    for k = 1:nParts
+        verifyEqual(testCase, pc.State.perPart(k).smoothingMethod, 'sgolay');
+        verifyEqual(testCase, pc.State.perPart(k).interpolationMethod, 'pchip');
+        verifyTrue(testCase, pc.State.perPart(k).use);
+    end
+end
+
+function testComputeSinglePart(testCase)
+    app = sphynx.app.CreatePresetApp();
+    cleaner = onCleanup(@() delete(app));
+    pc = app.PreprocessController;
+
+    repo = sphynx.util.repoRoot();
+    dlcPath = fullfile(repo, 'Demo', 'DLC', ...
+        'NOF_H01_1DDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv');
+    assumeTrue(testCase, isfile(dlcPath));
+    pc.setPaths(struct('dlc', dlcPath));
+    pc.loadAll();
+
+    idx = find(strcmpi({pc.State.perPart.name}, 'bodycenter'), 1);
+    assumeTrue(testCase, ~isempty(idx));
+    pc.computePart(idx);
+
+    verifyGreaterThanOrEqual(testCase, numel(pc.State.processed), idx);
+    p = pc.State.processed(idx);
+    verifyEqual(testCase, numel(p.X_smooth), pc.State.dlc.nFrames);
+    verifyTrue(testCase, ismember(p.status, {'Good', 'NotFound'}));
+end
