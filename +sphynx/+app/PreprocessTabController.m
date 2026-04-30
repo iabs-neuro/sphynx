@@ -48,6 +48,14 @@ classdef PreprocessTabController < handle
         RegionsListBox
         RegionsAppliesDropDown
 
+        % Embedded video viewer
+        VideoPanel
+        VideoAxes
+        VideoSlider
+        VideoLabel
+        ShowVideoButton
+        VideoReader_           % VideoReader handle (trailing underscore: avoid name clash)
+
         % Block 4 placeholder (Slice 7)
         SavePanel
 
@@ -299,6 +307,36 @@ classdef PreprocessTabController < handle
 
         function prevBodyPart(obj)
             obj.setCurrentBodyPart(obj.State.currentBodyPart - 1);
+        end
+
+        function setCurrentFrame(obj, frameIdx)
+            % SETCURRENTFRAME  Move the playhead, refresh video + sync line.
+            if isempty(obj.State.dlc); return; end
+            n = obj.State.dlc.nFrames;
+            frameIdx = max(1, min(n, round(frameIdx)));
+            obj.State.currentFrame = frameIdx;
+            obj.refreshVideoFrame();
+            obj.refreshPlayheadOnPlots();
+            if ~isempty(obj.FrameLabel)
+                obj.FrameLabel.Text = sprintf('Frame %d / %d', frameIdx, n);
+            end
+            if ~isempty(obj.VideoSlider) && isvalid(obj.VideoSlider)
+                obj.VideoSlider.Value = frameIdx;
+            end
+        end
+
+        function toggleVideoPanel(obj, enabled)
+            % TOGGLEVIDEOPANEL  Expand/collapse the embedded video row.
+            if enabled
+                obj.RightGrid.RowHeight{7} = 240;
+                obj.openVideoReader();
+                if ~isempty(obj.State.dlc) && ~isempty(obj.VideoSlider) && isvalid(obj.VideoSlider)
+                    obj.VideoSlider.Limits = [1 obj.State.dlc.nFrames];
+                end
+                obj.setCurrentFrame(obj.State.currentFrame);
+            else
+                obj.RightGrid.RowHeight{7} = 0;
+            end
         end
 
         function setManualRegions(obj, regs)
@@ -653,9 +691,9 @@ classdef PreprocessTabController < handle
         end
 
         function buildRight(obj)
-            obj.RightGrid = uigridlayout(obj.OuterGrid, [6, 1]);
+            obj.RightGrid = uigridlayout(obj.OuterGrid, [7, 1]);
             obj.RightGrid.Layout.Column = 2;
-            obj.RightGrid.RowHeight = {'1x', '1x', '1x', 36, 100, 110};
+            obj.RightGrid.RowHeight = {'1x', '1x', '1x', 36, 100, 110, 0};  % video row hidden by default
             obj.RightGrid.RowSpacing = 4;
             obj.RightGrid.Padding = [2 2 2 2];
 
@@ -668,10 +706,10 @@ classdef PreprocessTabController < handle
             end
 
             % Bodypart switcher row — compact buttons, dropdown takes the rest
-            switcher = uigridlayout(obj.RightGrid, [1, 6]);
+            switcher = uigridlayout(obj.RightGrid, [1, 7]);
             switcher.Layout.Row = 4;
             switcher.RowHeight = {28};
-            switcher.ColumnWidth = {28, 160, 28, 80, 80, '1x'};
+            switcher.ColumnWidth = {28, 160, 28, 70, 70, 70, '1x'};
             switcher.Padding = [0 0 0 0];
             switcher.ColumnSpacing = 4;
 
@@ -700,9 +738,14 @@ classdef PreprocessTabController < handle
                 'ValueChangedFcn', @(~,~) obj.refreshPreview());
             obj.LogScaleButton.Layout.Column = 5;
 
+            obj.ShowVideoButton = uibutton(switcher, 'state', 'Text', 'Video', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ValueChangedFcn', @(s, ~) obj.toggleVideoPanel(s.Value));
+            obj.ShowVideoButton.Layout.Column = 6;
+
             obj.FrameLabel = uilabel(switcher, 'Text', 'Frame -/-', ...
                 'HorizontalAlignment', 'right');
-            obj.FrameLabel.Layout.Column = 6;
+            obj.FrameLabel.Layout.Column = 7;
 
             % Manual regions panel
             obj.RegionsPanel = uipanel(obj.RightGrid, 'Title', 'Manual exclusion regions');
@@ -743,6 +786,46 @@ classdef PreprocessTabController < handle
             obj.LogTextArea = uitextarea(obj.RightGrid, 'Editable', 'off', ...
                 'Value', {''});
             obj.LogTextArea.Layout.Row = 6;
+
+            % Embedded video panel (hidden by default; toggled by Show video)
+            obj.VideoPanel = uipanel(obj.RightGrid, 'Title', 'Video');
+            obj.VideoPanel.Layout.Row = 7;
+            vg = uigridlayout(obj.VideoPanel, [2, 5]);
+            vg.RowHeight = {'1x', 30};
+            vg.ColumnWidth = {30, 30, '1x', 30, 30};
+            vg.Padding = [4 4 4 4];
+            vg.RowSpacing = 4;
+            vg.ColumnSpacing = 4;
+
+            obj.VideoAxes = uiaxes(vg);
+            obj.VideoAxes.Layout.Row = 1;
+            obj.VideoAxes.Layout.Column = [1 5];
+            obj.VideoAxes.XTick = []; obj.VideoAxes.YTick = [];
+            obj.VideoAxes.Box = 'on';
+
+            bL2 = uibutton(vg, 'Text', '<<', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.setCurrentFrame(obj.State.currentFrame - 10));
+            bL2.Layout.Row = 2; bL2.Layout.Column = 1;
+
+            bL1 = uibutton(vg, 'Text', '<', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.setCurrentFrame(obj.State.currentFrame - 1));
+            bL1.Layout.Row = 2; bL1.Layout.Column = 2;
+
+            obj.VideoSlider = uislider(vg, 'Limits', [1 2], 'Value', 1, ...
+                'ValueChangedFcn', @(s, ~) obj.setCurrentFrame(round(s.Value)));
+            obj.VideoSlider.Layout.Row = 2; obj.VideoSlider.Layout.Column = 3;
+
+            bR1 = uibutton(vg, 'Text', '>', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.setCurrentFrame(obj.State.currentFrame + 1));
+            bR1.Layout.Row = 2; bR1.Layout.Column = 4;
+
+            bR2 = uibutton(vg, 'Text', '>>', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.setCurrentFrame(obj.State.currentFrame + 10));
+            bR2.Layout.Row = 2; bR2.Layout.Column = 5;
         end
 
         % ===== Helpers ======================================================
@@ -981,6 +1064,70 @@ classdef PreprocessTabController < handle
                     size(obj.State.manualRegions(k).vertices, 1));
             end
             obj.RegionsListBox.Items = items;
+        end
+
+        function openVideoReader(obj)
+            % Lazy: open VideoReader only when the user toggles Video on.
+            if ~isempty(obj.VideoReader_); return; end  % already open
+            vp = obj.State.paths.video;
+            if isempty(vp) || ~isfile(vp)
+                obj.applog('warn', 'Video path empty or not found — frame display disabled');
+                return;
+            end
+            try
+                obj.VideoReader_ = VideoReader(vp);
+                obj.applog('info', 'Opened video: %s (%d frames @ %.2f fps)', ...
+                    vp, obj.VideoReader_.NumFrames, obj.VideoReader_.FrameRate);
+            catch ME
+                obj.applog('error', 'VideoReader failed: %s', ME.message);
+                obj.VideoReader_ = [];
+            end
+        end
+
+        function refreshVideoFrame(obj)
+            if isempty(obj.VideoAxes) || ~isvalid(obj.VideoAxes); return; end
+            if isempty(obj.ShowVideoButton) || ~obj.ShowVideoButton.Value; return; end
+            if isempty(obj.VideoReader_); return; end
+            f = obj.State.currentFrame;
+            try
+                img = read(obj.VideoReader_, f);
+            catch ME
+                obj.applog('warn', 'Failed to read frame %d: %s', f, ME.message);
+                return;
+            end
+            cla(obj.VideoAxes);
+            imshow(img, 'Parent', obj.VideoAxes);
+            % Overlay the current part's (x, y) — prefer smoothed if computed
+            i = obj.State.currentBodyPart;
+            if i <= numel(obj.State.processed) && ~isempty(obj.State.processed(i).X_smooth)
+                xy = [obj.State.processed(i).X_smooth(f), obj.State.processed(i).Y_smooth(f)];
+            elseif ~isempty(obj.State.dlc)
+                xy = [obj.State.dlc.X(i, f), obj.State.dlc.Y(i, f)];
+            else
+                xy = [];
+            end
+            if ~isempty(xy) && all(isfinite(xy))
+                hold(obj.VideoAxes, 'on');
+                plot(obj.VideoAxes, xy(1), xy(2), 'r+', ...
+                    'MarkerSize', 14, 'LineWidth', 2);
+                hold(obj.VideoAxes, 'off');
+            end
+            title(obj.VideoAxes, sprintf('Frame %d', f));
+        end
+
+        function refreshPlayheadOnPlots(obj)
+            % Draw a vertical playhead line on X(t) and Y(t) at currentFrame.
+            % Re-runs refreshPreview to clear old lines, then redraws.
+            obj.refreshPreview();
+            f = obj.State.currentFrame;
+            if isempty(obj.AxX) || isempty(obj.AxY); return; end
+            for ax = [obj.AxX, obj.AxY]
+                yLim = ax.YLim;
+                hold(ax, 'on');
+                plot(ax, [f f], yLim, '-', 'Color', [0.85 0.10 0.10], ...
+                    'LineWidth', 1);
+                hold(ax, 'off');
+            end
         end
 
         function refreshAppliesDropDown(obj)

@@ -147,6 +147,34 @@ function testManualRegionsListAndDelete(testCase)
     verifyEqual(testCase, numel(pc.State.manualRegions), 0);
 end
 
+function testVideoToggleAndFrameNav(testCase)
+    app = sphynx.app.CreatePresetApp();
+    cleaner = onCleanup(@() delete(app));
+    pc = app.PreprocessController;
+    repo = sphynx.util.repoRoot();
+    dlcPath = fullfile(repo, 'Demo', 'DLC', ...
+        'NOF_H01_1DDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv');
+    videoPath = fullfile(repo, 'Demo', 'Video', 'NOF_H01_1D.mp4');
+    assumeTrue(testCase, isfile(dlcPath));
+    assumeTrue(testCase, isfile(videoPath));
+    pc.setPaths(struct('dlc', dlcPath, 'video', videoPath));
+    pc.loadAll();
+
+    % Toggle video on (programmatic — just call the method)
+    pc.toggleVideoPanel(true);
+    verifyTrue(testCase, ~isempty(pc.VideoReader_));
+
+    % Move playhead
+    pc.setCurrentFrame(100);
+    verifyEqual(testCase, pc.State.currentFrame, 100);
+    pc.setCurrentFrame(99999);  % clamp
+    verifyEqual(testCase, pc.State.currentFrame, pc.State.dlc.nFrames);
+
+    % Toggle off
+    pc.toggleVideoPanel(false);
+    verifyEqual(testCase, pc.RightGrid.RowHeight{7}, 0);
+end
+
 function testComputeSinglePart(testCase)
     app = sphynx.app.CreatePresetApp();
     cleaner = onCleanup(@() delete(app));
