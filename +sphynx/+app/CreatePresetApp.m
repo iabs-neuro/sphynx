@@ -1,9 +1,10 @@
 classdef CreatePresetApp < handle
 % CREATEPRESETAPP  Single-window preset builder for sphynx.
 %
-%   sphynx.app.CreatePresetApp() opens a uifigure-based two-tab editor:
+%   sphynx.app.CreatePresetApp() opens a uifigure-based three-tab editor:
 %     Tab 1: Create Preset (full preset builder)
-%     Tab 2: Analyze Session (placeholder for batch run, Pass E)
+%     Tab 2: Preprocess Tracking (per-bodypart DLC preprocessing)
+%     Tab 3: Analyze Session (placeholder for batch run, Pass E)
 %
 %   Tab 1 layout: left column of step-panels (Load -> Calibration ->
 %   Arena -> Objects -> Zones -> Save+Plot), right column with a
@@ -20,7 +21,9 @@ classdef CreatePresetApp < handle
         Figure
         TabGroup
         TabCreate
+        TabPreprocess
         TabAnalyze
+        PreprocessController    % handle to sphynx.app.PreprocessTabController
         % Layout containers
         OuterGrid
         LeftGrid
@@ -491,9 +494,11 @@ classdef CreatePresetApp < handle
             outerWrap.ColumnWidth = {'1x'};
             app.TabGroup = uitabgroup(outerWrap);
             app.TabCreate = uitab(app.TabGroup, 'Title', 'Create Preset');
+            app.TabPreprocess = uitab(app.TabGroup, 'Title', 'Preprocess Tracking');
             app.TabAnalyze = uitab(app.TabGroup, 'Title', 'Analyze Session');
 
             buildCreateTab(app);
+            app.PreprocessController = sphynx.app.PreprocessTabController(app.TabPreprocess, app);
             buildAnalyzeTab(app);
         end
 
