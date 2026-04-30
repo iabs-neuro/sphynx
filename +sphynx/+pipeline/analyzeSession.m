@@ -27,6 +27,9 @@ function result = analyzeSession(config)
 %
 %   See docs/superpowers/specs/2026-04-27-sphynx-stage-c-design.md.
 
+    prevHeadless = getenv('SPHYNX_HEADLESS');
+    prevLog = getenv('SPHYNX_LOG_LEVEL');
+    envCleaner = onCleanup(@() restoreEnv(prevHeadless, prevLog)); %#ok<NASGU>
     if config.viz.headless
         setenv('SPHYNX_HEADLESS', '1');
     end
@@ -265,6 +268,11 @@ function result = analyzeSession(config)
         end
         sphynx.io.saveSession(result, config.paths.outDir, sessionName);
     end
+end
+
+function restoreEnv(prevHeadless, prevLog)
+    setenv('SPHYNX_HEADLESS', prevHeadless);
+    setenv('SPHYNX_LOG_LEVEL', prevLog);
 end
 
 function [arr, keepIdx] = tryLoadPrepared(dlcPath, dlc, log)

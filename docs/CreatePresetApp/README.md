@@ -18,8 +18,10 @@ startup
 sphynx.app.CreatePresetApp()
 ```
 
-The window opens maximized. Two tabs: **Create Preset** (this doc) and
-**Analyze Session** (placeholder for future batch UI).
+The window opens maximized. Three tabs: **Create Preset** (this doc),
+**Preprocess Tracking** (per-bodypart DLC preprocessing — see
+section "Preprocess Tracking tab" below), and **Analyze Session**
+(placeholder for future batch UI).
 
 ## Window layout
 
@@ -204,6 +206,100 @@ several).
 Each panel has an `INFO` button that opens a short help dialog with
 panel-specific instructions. Long-form how-to is in
 `user_guide_en.md` and `user_guide_ru.md`.
+
+## Preprocess Tracking tab
+
+Second tab. Built around `sphynx.app.PreprocessTabController`.
+
+### Layout
+
+```
++---------------------------------------------------------------------+
+| 1. Loading                       | X(t) trace                       |
+|   Root / DLC / Video / Preset    |                                  |
+|                                  | Y(t) trace                       |
+| 2. Per-part settings             |                                  |
+|   uitable: thr/win/interp/smooth | likelihood histogram (red line   |
+|   + Default this/all             |   = current threshold)           |
+|   + Compute this/all             +----------------------------------+
+|   + Auto: dropdown method/param  | < bodypart > [Load][log Y][Video]|
+|     (otsu/knee/quantile/preset)  |                  Frame N/M       |
+|                                  +----------------------------------+
+| 3. Outlier filter                | Manual exclusion regions:        |
+|   [x] velocity-jump max=50 cm/s  | [Add region] applies-to: [▾]     |
+|   [ ] Hampel  win=7 sigma=3      | • region 1 (all)                 |
+|   Kalman: Q=1e-2  noise=1.0      | • region 2 (nose)                |
+|                                  +----------------------------------+
+| 4. Save                          | Log (last 500 lines)             |
+|   Output dir                     |                                  |
+|   [x] save plots per body part   +----------------------------------+
+|   [Save preprocessed]            | Video panel (toggle)             |
+|                                  | <<  <  --slider--  >  >>         |
++---------------------------------------------------------------------+
+```
+
+### Pipeline order (locked)
+
+```
+1. likelihood < threshold      -> NaN
+2. out-of-frame bounds         -> NaN
+3. velocity-jump filter        -> NaN  (pre-interp; default ON)
+4. Hampel filter               -> NaN  (pre-interp; default OFF)
+5. manual exclusion regions    -> NaN  (pre-interp)
+6. interpolateGaps             -> fill (pchip / linear / spline / makima)
+7. ONE OF:
+   a. smoothTrace              -> sgolay / movmean / movmedian / gaussian
+   b. kalmanFilter2D           -> 2D constant-velocity Kalman (replaces 7a)
+```
+
+Outlier filters are pre-interpolation by design — smoothing flattens
+single-frame jumps so they become invisible to a post-smooth detector.
+
+### Settings storage
+
+- **Per-experiment**: `<root>/<expName>_PreprocessSettings.mat` —
+  per-part likelihood threshold, smoothing window, interpolation/smoothing
+  method, NotFound% threshold, plus global outlier-filter flags. Reused
+  across sessions of the same experiment.
+- **Per-session**: `<outputDir>/<dlcBase>_Preprocessed.mat` — the actual
+  raw/interp/smoothed traces, manual exclusion regions (per-session
+  because they depend on camera angle), source paths.
+- **Per-session plots** (optional): `<outputDir>/<dlcBase>_traces/<part>.png`
+  — three-panel figure (X / Y / likelihood) with raw/interp/smoothed
+  overlays.
+
+### analyzeSession integration
+
+When `<dlcBase>_Preprocessed.mat` sits next to the DLC csv, the next
+call to `sphynx.pipeline.analyzeSession` consumes it and skips the
+clean/interp/smooth stages. Schema mismatch (different bodyparts) falls
+back to the legacy recompute path.
+
+### Auto-threshold methods
+
+`sphynx.preprocess.autoThreshold(likelihood, method, param)`:
+- `'otsu'` — `multithresh` of the likelihood histogram
+- `'knee'` — max-curvature point on the smoothed CDF
+- `'quantile'` — quantile (default 0.05)
+- `'preset'` — `'aggressive'` (0.99), `'moderate'` (0.95), `'lax'` (0.6)
+
+In the GUI: Auto row in Block 2; the suggested threshold appears as a
+red vertical line on the likelihood histogram of the current part.
+
+### Manual exclusion regions
+
+Click `[Add region]` → a frame appears (uses the preset's GoodVideoFrame).
+Click vertices, double-click to commit. The region is attached to the
+body part chosen in the dropdown next to the button (`'all'` or a
+specific part name). Points inside the polygon are flagged as bad
+before interpolation. Stored per-session.
+
+### Embedded video viewer
+
+Toggle `[Video]` in the switcher row → a 240px panel appears at the
+bottom with the current frame and a red `+` at the active body-part's
+(x, y). Slider + four step buttons drive `currentFrame`; a red playhead
+appears on X(t) and Y(t) plots.
 
 ## See also
 

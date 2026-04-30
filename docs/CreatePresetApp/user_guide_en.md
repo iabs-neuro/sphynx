@@ -18,9 +18,10 @@ startup
 sphynx.app.CreatePresetApp()
 ```
 
-The window opens maximized with two tabs: **Create Preset** (used
-below) and **Analyze Session** (a placeholder for the future
-batch-run UI).
+The window opens maximized with three tabs: **Create Preset** (used
+below), **Preprocess Tracking** (per-bodypart DLC preprocessing — see
+the dedicated section at the end of this guide), and **Analyze
+Session** (a placeholder for the future batch-run UI).
 
 ## 2. Block 1 — Load
 
@@ -168,3 +169,72 @@ scroll manually (see `TODO.md` #2).*
 - **Zones lost after a move/rotate** — that's by design;
   auto-cleared because old zone masks would no longer match the
   new geometry. Re-Add to set when ready.
+
+---
+
+# Preprocess Tracking tab — user guide
+
+The second tab applies per-body-part preprocessing to a DeepLabCut
+trace and saves the result so `sphynx.pipeline.analyzeSession` can
+consume it.
+
+## Workflow
+
+1. **Block 1 — Loading.** Click **DLC** and pick the `.csv`. Optionally
+   load a **Video** (needed for the embedded viewer) and a **Preset**
+   (needed for frame size / pxl-per-cm calibration / manual regions).
+   Click **Load** in the switcher row to read the DLC into the table.
+2. **Block 2 — Per-part settings.** A row appears per body part with
+   editable columns: `use`, `thr` (likelihood threshold), `win,s`
+   (smoothing window in seconds), `interp` method, `smooth` method,
+   `NF%` (status threshold). Read-only columns fill on Compute:
+   `%NaN`, `%lowL`, `%out`, `status`. Click a row to switch the
+   preview to that body part. Editing any setting triggers a live
+   recompute for that row.
+3. **Auto thresholds.** The `Auto:` row picks a likelihood threshold
+   from the distribution. Try `otsu` first; for borderline cases switch
+   to `quantile` (param `0.05`) or `preset` (param `moderate`). The
+   suggestion is overlaid as a red vertical line on the histogram.
+4. **Block 3 — Outlier filter.** velocity-jump (default ON, capped at
+   50 cm/s) catches single-frame DLC teleports. Hampel (off by default)
+   adds a robust median ± k·MAD detector. Kalman (off; activated by
+   choosing `kalman` in the smooth column) replaces the regular
+   smoother — its `Q` and noise-scale parameters live here too.
+5. **Manual exclusion regions** (right column). Click `Add region`,
+   draw a polygon on the frame, double-click to commit. Use the
+   `applies-to` dropdown to attach the region to one body part or
+   `all`. Points inside the polygon are flagged as bad before
+   interpolation. Stored per-session.
+6. **Embedded video viewer.** Toggle `[Video]` in the switcher row.
+   The frame appears with a red `+` at the active body-part's (x, y).
+   Slider + step buttons drive the playhead; a red vertical line
+   appears on X(t) and Y(t) at the current frame.
+7. **Block 4 — Save.** Pick an output dir, choose whether to write
+   per-part PNGs, click **Save preprocessed**. Two files appear:
+   - `<root>/<expName>_PreprocessSettings.mat` — the per-experiment
+     settings (reuse this on other sessions of the same experiment).
+   - `<outputDir>/<dlcBase>_Preprocessed.mat` — the actual traces +
+     manual regions for this session.
+
+## Pipeline order
+
+```
+likelihood → bounds → velocity-jump → Hampel → manual regions
+  → interpolate → smooth (sgolay/movmean/movmedian/gaussian) OR Kalman
+```
+
+Outlier detection runs PRE-interpolation. Smoothing flattens
+single-frame jumps; if you ran the detector after smoothing, those
+jumps would no longer trip the threshold.
+
+## Tips
+
+- Limbs (`leftforelimb`, `righforelimb`, etc.) get the small smoothing
+  window by default; `bodycenter` and `tailbase` get the bigger one.
+  For very fast movements lower the body-center window to 0.15s.
+- For poorly-tracked parts (`miniscope*`), set `use = false` and ignore
+  the NotFound status. The orchestrator just skips them.
+- If `Auto[otsu]` returns a sensible threshold but you want it slightly
+  more conservative, switch to `Auto[quantile]` with param `0.10`.
+- Manual regions are useful when DLC consistently confuses one part
+  with a fixed visual feature (e.g., a cable hanging in one corner).

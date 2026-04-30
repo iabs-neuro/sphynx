@@ -16,9 +16,10 @@ startup
 sphynx.app.CreatePresetApp()
 ```
 
-Окно открывается развёрнутым на весь экран. Две вкладки: **Create
-Preset** (про неё ниже) и **Analyze Session** (заглушка для будущего
-batch-run UI).
+Окно открывается развёрнутым на весь экран. Три вкладки: **Create
+Preset** (про неё ниже), **Preprocess Tracking** (per-bodypart
+препроцессинг DLC — отдельный раздел в конце этого гайда) и **Analyze
+Session** (заглушка для будущего batch-run UI).
 
 ## 2. Блок 1 — Load
 
@@ -163,3 +164,71 @@ MATLAB Command Window для приложения. Последние 500 стр
 - **Зоны исчезли после move/rotate** — это by design: автоматически
   очищаются, потому что старые маски зон больше не совпадают с новой
   геометрией. Re-Add to set когда закончишь подгонять.
+
+---
+
+# Вкладка Preprocess Tracking — руководство пользователя
+
+Вторая вкладка применяет per-body-part препроцессинг к трейсу
+DeepLabCut и сохраняет результат, чтобы `sphynx.pipeline.analyzeSession`
+мог его прочитать.
+
+## Workflow
+
+1. **Block 1 — Loading.** Кнопка **DLC** — выбираешь `.csv`. Опционально
+   подгружаешь **Video** (нужно для встроенного просмотрщика) и
+   **Preset** (нужен для размера кадра / pxl-per-cm / manual regions).
+   Кнопка **Load** в switcher row читает DLC в таблицу.
+2. **Block 2 — Per-part settings.** На каждую часть тела по одной
+   строке. Редактируемые колонки: `use`, `thr` (порог likelihood),
+   `win,s` (окно сглаживания в секундах), `interp`, `smooth`, `NF%`
+   (порог NotFound). После Compute заполняются `%NaN`, `%lowL`, `%out`,
+   `status`. Клик по строке переключает превью на эту часть. Любая
+   правка → live recompute этой строки.
+3. **Auto thresholds.** Строка `Auto:` подбирает порог из распределения.
+   Сначала пробуй `otsu`. Если граничный случай — `quantile` (param
+   `0.05`) или `preset` (param `moderate`). Предложение появляется
+   красной вертикальной линией на гистограмме.
+4. **Block 3 — Outlier filter.** velocity-jump (по умолчанию ON, cap
+   50 cm/s) ловит однокадровые телепорты DLC. Hampel (off по умолчанию)
+   — робастный median±k·MAD. Kalman (off; включается выбором `kalman`
+   в колонке smooth) заменяет обычный смуз — его параметры `Q` и
+   noise-scale здесь же.
+5. **Manual exclusion regions** (правая колонка). Кнопка `Add region`
+   → нарисуй полигон на кадре, double-click чтобы commit. Dropdown
+   `applies-to` определяет, к какой части тела привязать (`all` или
+   конкретное имя). Точки внутри полигона помечаются bad ДО
+   интерполяции. Хранится per-session.
+6. **Embedded video viewer.** Кнопка `[Video]` в switcher row
+   разворачивает панель снизу. Кадр + красный `+` на (x, y) выбранной
+   части. Слайдер + step-кнопки двигают playhead; красная линия на
+   X(t) и Y(t) синхронно показывает текущий кадр.
+7. **Block 4 — Save.** Выбери output dir, отметь нужны ли PNG per part,
+   жми **Save preprocessed**. Появятся два файла:
+   - `<root>/<expName>_PreprocessSettings.mat` — настройки per-experiment
+     (можно переиспользовать на других сессиях того же эксперимента).
+   - `<outputDir>/<dlcBase>_Preprocessed.mat` — сами трейсы + manual
+     regions для этой сессии.
+
+## Порядок препроцессинга
+
+```
+likelihood → bounds → velocity-jump → Hampel → manual regions
+  → interpolate → smooth (sgolay/movmean/movmedian/gaussian) ИЛИ Kalman
+```
+
+Outlier-фильтры идут ДО интерполяции. Smoothing размазывает
+single-frame jumps; если запустить детектор после smooth, такие
+выбросы уже не сработают.
+
+## Подсказки
+
+- Лапы (`leftforelimb`, `righforelimb` и т.п.) получают маленькое окно
+  по умолчанию; `bodycenter` и `tailbase` — большое. Для очень быстрых
+  движений уменьши `bodycenter` до 0.15s.
+- Для плохо размеченных частей (`miniscope*`) поставь `use = false`
+  и игнорируй NotFound. Оркестратор просто их пропустит.
+- Если `Auto[otsu]` даёт разумный порог, но хочется консервативнее —
+  переключись на `Auto[quantile]` с param `0.10`.
+- Manual regions полезны, если DLC систематически путает часть тела
+  с какой-то фиксированной деталью кадра (например, кабель в углу).
