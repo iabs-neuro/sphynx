@@ -118,6 +118,35 @@ function testAutoThresholdSinglePart(testCase)
     verifyTrue(testCase, after ~= before);  % some change occurred
 end
 
+function testManualRegionsListAndDelete(testCase)
+    app = sphynx.app.CreatePresetApp();
+    cleaner = onCleanup(@() delete(app));
+    pc = app.PreprocessController;
+    repo = sphynx.util.repoRoot();
+    dlcPath = fullfile(repo, 'Demo', 'DLC', ...
+        'NOF_H01_1DDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv');
+    assumeTrue(testCase, isfile(dlcPath));
+    pc.setPaths(struct('dlc', dlcPath));
+    pc.loadAll();
+
+    % Inject regions programmatically (drawpolygon needs interactive UI).
+    % Build a complete struct array first to avoid empty-struct extension
+    % corner cases under R2020a.
+    regs = struct('vertices', {[10 10; 50 10; 50 50; 10 50], ...
+                              [100 100; 150 100; 150 150; 100 150]}, ...
+                  'appliesTo', {'all', 'nose'});
+    pc.setManualRegions(regs);
+    verifyEqual(testCase, numel(pc.RegionsListBox.Items), 2);
+
+    % Delete second
+    pc.deleteManualRegion(2);
+    verifyEqual(testCase, numel(pc.State.manualRegions), 1);
+
+    % Clear all
+    pc.clearManualRegions();
+    verifyEqual(testCase, numel(pc.State.manualRegions), 0);
+end
+
 function testComputeSinglePart(testCase)
     app = sphynx.app.CreatePresetApp();
     cleaner = onCleanup(@() delete(app));

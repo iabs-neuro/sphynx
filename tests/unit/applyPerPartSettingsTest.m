@@ -74,6 +74,44 @@ function testAllSmoothingMethodsReturnValidTrace(testCase)
     end
 end
 
+function testManualRegionExclusion(testCase)
+    % Trace passes through a polygon (200..300, 200..300). With a region
+    % covering that area attached to 'all', frames inside should be
+    % NaN-flagged before interpolation.
+    n = 500;
+    X = linspace(50, 450, n)';
+    Y = ones(n, 1) * 250;  % constant Y at 250 (passes through region)
+    L = ones(n, 1);
+    settings = sphynx.preprocess.perPartDefault('nose');
+    ctx = struct('frameWidth', 800, 'frameHeight', 600, 'frameRate', 30, ...
+        'partName', 'nose');
+    ctx.manualRegions = struct( ...
+        'vertices', {[200 200; 300 200; 300 300; 200 300]}, ...
+        'appliesTo', {'all'});
+    out = sphynx.preprocess.applyPerPartSettings(X, Y, L, settings, ctx);
+    % Frames whose X is in [200, 300] should have been masked then interped
+    % (interpolation will fill smoothly back); but the cleaned trace
+    % must show the region marked. Check via percentBadCombined > 0.
+    verifyGreaterThan(testCase, out.percentBadCombined, 0);
+    verifyEqual(testCase, out.status, 'Good');
+end
+
+function testManualRegionAppliesToBodyPart(testCase)
+    % Region attached only to 'tailbase' must not affect 'nose'.
+    n = 500;
+    X = linspace(50, 450, n)';
+    Y = ones(n, 1) * 250;
+    L = ones(n, 1);
+    settings = sphynx.preprocess.perPartDefault('nose');
+    ctx = struct('frameWidth', 800, 'frameHeight', 600, 'frameRate', 30, ...
+        'partName', 'nose');
+    ctx.manualRegions = struct( ...
+        'vertices', {[200 200; 300 200; 300 300; 200 300]}, ...
+        'appliesTo', {'tailbase'});
+    out = sphynx.preprocess.applyPerPartSettings(X, Y, L, settings, ctx);
+    verifyEqual(testCase, out.percentBadCombined, 0);  % nothing masked for nose
+end
+
 function testFrameBoundsClamping(testCase)
     n = 100;
     X = ones(n, 1) * 1500;  % far beyond frame width

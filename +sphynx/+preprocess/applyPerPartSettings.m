@@ -94,7 +94,27 @@ function out = applyPerPartSettings(rawX, rawY, likelihood, settings, ctx)
     end
     out.percentOutliers = round(100 * sum(outliers) / numel(outliers), 2);
 
-    % --- 5. Manual regions (Slice 5) -- placeholder ------------------
+    % --- 5. Manual regions ------------------------------------------
+    if isfield(ctx, 'manualRegions') && ~isempty(ctx.manualRegions)
+        partName = '';
+        if isfield(ctx, 'partName'); partName = ctx.partName; end
+        for r = 1:numel(ctx.manualRegions)
+            reg = ctx.manualRegions(r);
+            applies = strcmp(reg.appliesTo, 'all') || ...
+                (~isempty(partName) && strcmpi(reg.appliesTo, partName));
+            if ~applies; continue; end
+            v = reg.vertices;
+            if isempty(v) || size(v, 2) ~= 2; continue; end
+            in = inpolygon(out.X_clean, out.Y_clean, v(:, 1), v(:, 2));
+            in = in(:);
+            out.X_clean(in) = NaN;
+            out.Y_clean(in) = NaN;
+        end
+    end
+
+    % Recompute combined-bad percent after outlier+manual stages
+    nFrames = numel(rawX);
+    out.percentBadCombined = round(100 * sum(isnan(out.X_clean) | isnan(out.Y_clean)) / nFrames, 2);
 
     % --- 6. Interpolate gaps -----------------------------------------
     out.X_interp = sphynx.preprocess.interpolateGaps(out.X_clean, ...

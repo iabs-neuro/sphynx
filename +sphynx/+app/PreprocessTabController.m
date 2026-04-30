@@ -43,8 +43,12 @@ classdef PreprocessTabController < handle
         KalmanQField
         KalmanRField
 
-        % Block 4 placeholder (Slice 7)
+        % Manual exclusion regions (right column)
         RegionsPanel
+        RegionsListBox
+        RegionsAppliesDropDown
+
+        % Block 4 placeholder (Slice 7)
         SavePanel
 
         % Preview
@@ -131,6 +135,7 @@ classdef PreprocessTabController < handle
             obj.populateBodyPartDropDown();
             obj.populateDefaultPerPart();
             obj.refreshPerPartTable();
+            obj.refreshAppliesDropDown();
             obj.State.currentBodyPart = 1;
             obj.State.currentFrame = 1;
             obj.refreshPreview();
@@ -147,6 +152,7 @@ classdef PreprocessTabController < handle
                 return;
             end
             ctx = obj.computeContext();
+            ctx.partName = settings.name;
             rawX = obj.State.dlc.X(idx, :)';
             rawY = obj.State.dlc.Y(idx, :)';
             lk   = obj.State.dlc.likelihood(idx, :)';
@@ -261,6 +267,7 @@ classdef PreprocessTabController < handle
                 if isfield(opt, 'pxl2sm');    ctx.pixelsPerCm = opt.pxl2sm;    end
             end
             ctx.outlier = obj.State.outlier;
+            ctx.manualRegions = obj.State.manualRegions;
         end
 
         function storeProcessed(obj, idx, out)
@@ -292,6 +299,23 @@ classdef PreprocessTabController < handle
 
         function prevBodyPart(obj)
             obj.setCurrentBodyPart(obj.State.currentBodyPart - 1);
+        end
+
+        function setManualRegions(obj, regs)
+            % SETMANUALREGIONS  Replace the whole region list + refresh UI.
+            obj.State.manualRegions = regs;
+            obj.refreshRegionsListBox();
+        end
+
+        function clearManualRegions(obj)
+            obj.clearAllRegions();
+        end
+
+        function deleteManualRegion(obj, idx)
+            n = numel(obj.State.manualRegions);
+            if idx < 1 || idx > n; return; end
+            obj.State.manualRegions(idx) = [];
+            obj.refreshRegionsListBox();
         end
 
         function refreshPreview(obj)
@@ -364,6 +388,8 @@ classdef PreprocessTabController < handle
             s.outlier.hampel.nSigma = 3;
             s.outlier.kalman.processNoise = 1e-2;
             s.outlier.kalman.measNoiseScale = 1.0;
+            % Manual exclusion regions (per-session)
+            s.manualRegions = struct('vertices', {}, 'appliesTo', {});
             % Per-part settings (1xK struct, populated on Load)
             s.perPart = sphynx.app.PreprocessTabController.emptyPerPartArray();
             % Per-part processed traces (1xK struct, populated on Compute)
@@ -678,13 +704,40 @@ classdef PreprocessTabController < handle
                 'HorizontalAlignment', 'right');
             obj.FrameLabel.Layout.Column = 6;
 
-            % Manual regions placeholder (Slice 5)
+            % Manual regions panel
             obj.RegionsPanel = uipanel(obj.RightGrid, 'Title', 'Manual exclusion regions');
             obj.RegionsPanel.Layout.Row = 5;
-            rg = uigridlayout(obj.RegionsPanel, [1, 1]);
-            lbl = uilabel(rg, 'Text', '(Slice 5): Add region on frame, attach to bodypart.', ...
-                'HorizontalAlignment', 'center');
-            lbl.Layout.Row = 1; lbl.Layout.Column = 1; %#ok<NASGU>
+            rg = uigridlayout(obj.RegionsPanel, [2, 5]);
+            rg.RowHeight = {28, '1x'};
+            rg.ColumnWidth = {110, 130, 80, 80, '1x'};
+            rg.Padding = [4 4 4 4];
+            rg.RowSpacing = 4;
+            rg.ColumnSpacing = 4;
+
+            bAdd = uibutton(rg, 'Text', 'Add region', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.addManualRegion());
+            bAdd.Layout.Row = 1; bAdd.Layout.Column = 1;
+
+            obj.RegionsAppliesDropDown = uidropdown(rg, ...
+                'Items', {'all'}, 'Value', 'all', ...
+                'Tooltip', 'apply this new region to which body part');
+            obj.RegionsAppliesDropDown.Layout.Row = 1;
+            obj.RegionsAppliesDropDown.Layout.Column = 2;
+
+            bDel = uibutton(rg, 'Text', 'Delete', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.deleteSelectedRegion());
+            bDel.Layout.Row = 1; bDel.Layout.Column = 3;
+
+            bClear = uibutton(rg, 'Text', 'Clear', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.clearAllRegions());
+            bClear.Layout.Row = 1; bClear.Layout.Column = 4;
+
+            obj.RegionsListBox = uilistbox(rg, 'Items', {});
+            obj.RegionsListBox.Layout.Row = 2;
+            obj.RegionsListBox.Layout.Column = [1 5];
 
             % Log
             obj.LogTextArea = uitextarea(obj.RightGrid, 'Editable', 'off', ...
@@ -859,6 +912,89 @@ classdef PreprocessTabController < handle
             obj.defaultPart(obj.State.currentBodyPart);
         end
 
+        % --- Manual exclusion regions ----------------------------------------
+        function addManualRegion(obj)
+            if isempty(obj.State.frame)
+                obj.applog('warn', 'Add region needs a frame — load a Preset with GoodVideoFrame first');
+                return;
+            end
+            applies = obj.RegionsAppliesDropDown.Value;
+            % Open a temporary figure to draw the polygon. drawpolygon
+            % returns immediately; we then wait for the user to commit
+            % (double-click) via wait().
+            fig = figure('Name', sprintf('Draw exclusion region (applies to: %s)', applies), ...
+                'NumberTitle', 'off');
+            cleaner = onCleanup(@() safeClose(fig));
+            ax = axes(fig); %#ok<LAXES>
+            imshow(obj.State.frame, 'Parent', ax);
+            title(ax, sprintf('Click to add vertices, double-click to finish (applies: %s)', applies), ...
+                'Interpreter', 'none');
+            try
+                h = drawpolygon(ax);
+            catch ME
+                obj.applog('error', 'drawpolygon failed: %s', ME.message);
+                return;
+            end
+            wait(h);  % blocks until the user double-clicks
+            if ~isvalid(h); return; end
+            verts = h.Position;
+            if isempty(verts) || size(verts, 1) < 3
+                obj.applog('warn', 'Region needs >= 3 vertices');
+                return;
+            end
+            reg.vertices = verts;
+            reg.appliesTo = applies;
+            obj.State.manualRegions(end+1) = reg;
+            obj.refreshRegionsListBox();
+            obj.refocus();
+            obj.applog('info', 'Added region #%d (applies: %s, %d vertices)', ...
+                numel(obj.State.manualRegions), applies, size(verts, 1));
+        end
+
+        function deleteSelectedRegion(obj)
+            if isempty(obj.RegionsListBox); return; end
+            idx = find(strcmp(obj.RegionsListBox.Items, obj.RegionsListBox.Value), 1);
+            if isempty(idx); return; end
+            obj.State.manualRegions(idx) = [];
+            obj.refreshRegionsListBox();
+            obj.applog('info', 'Deleted region #%d', idx);
+        end
+
+        function clearAllRegions(obj)
+            if isempty(obj.State.manualRegions); return; end
+            obj.State.manualRegions = struct('vertices', {}, 'appliesTo', {});
+            obj.refreshRegionsListBox();
+            obj.applog('info', 'Cleared all regions');
+        end
+
+        function refreshRegionsListBox(obj)
+            if isempty(obj.RegionsListBox); return; end
+            n = numel(obj.State.manualRegions);
+            if n == 0
+                obj.RegionsListBox.Items = {};
+                return;
+            end
+            items = cell(1, n);
+            for k = 1:n
+                items{k} = sprintf('region %d (applies: %s, %d vertices)', ...
+                    k, obj.State.manualRegions(k).appliesTo, ...
+                    size(obj.State.manualRegions(k).vertices, 1));
+            end
+            obj.RegionsListBox.Items = items;
+        end
+
+        function refreshAppliesDropDown(obj)
+            if isempty(obj.RegionsAppliesDropDown); return; end
+            if isempty(obj.State.dlc)
+                obj.RegionsAppliesDropDown.Items = {'all'};
+                obj.RegionsAppliesDropDown.Value = 'all';
+                return;
+            end
+            obj.RegionsAppliesDropDown.Items = ...
+                [{'all'}, obj.State.dlc.bodyPartsNames];
+            obj.RegionsAppliesDropDown.Value = 'all';
+        end
+
         function onDropDownChanged(obj, name)
             idx = find(strcmp(obj.BodyPartDropDown.Items, name), 1);
             if isempty(idx); return; end
@@ -905,4 +1041,10 @@ end
 
 function v = clampScalar(x, lo, hi)
     v = max(lo, min(hi, x));
+end
+
+function safeClose(h)
+    if ~isempty(h) && isvalid(h)
+        close(h);
+    end
 end
