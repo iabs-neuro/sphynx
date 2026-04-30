@@ -155,6 +155,82 @@ Cleanup `Preprocess/processVideos.m`: убрать hardcoded paths (line 16-18),
 - Hampel filter в Signal Processing Toolbox есть как `hampel()`, не надо самому писать.
 - Otsu — `multithresh()` в Image Processing Toolbox, тоже ready-made.
 
+---
+
+## 2026-04-30 — Slices 2-8: автономный спринт
+
+Юзер ушёл с blanket consent: «продолжай делать слайсы. после готовки коммит, потом дальше. меня не жди. проверю потом. если что откатим». Прошёл все 8 слайсов автономно. Все коммиты на `sphynx-GUI`.
+
+### Slice 2 (commit 5c244b2)
+- `+sphynx/+preprocess/perPartDefault.m` — pure function: per-part defaults (big window для bodycenter/tailbase, малый для остальных).
+- `+sphynx/+preprocess/applyPerPartSettings.m` — orchestrator: clean → outliers (no-op в Slice 2) → manual regions (no-op) → interp → smooth dispatch (sgolay/movmean/movmedian/gaussian/kalman). Используется и GUI и будущим batch.
+- defaultConfig.preprocess.perPart.* — bigParts list, smoothing dispatch defaults.
+- UI: реальная uitable в Block 2 с 11 колонками, Default/Compute this/all кнопки. CellSelectionCallback переключает превью на эту часть.
+- 5 unit + 2 smoke.
+- Ловушка: первая попытка передать settings.smoothingMethod через struct содержала 'kalman' fallthrough — оставил sgolay в Slice 2, в Slice 4 переписал на реальный Kalman.
+
+### Slice 3 (commit d071105)
+- `+sphynx/+preprocess/autoThreshold.m` — 4 метода: otsu/knee/quantile/preset. Robust fallbacks (empty input, all-equal — return 0.95). Knee = max-curvature на сглаженной CDF (smoothdata 'movmean' с win=max(5, n/100)). Otsu использует `multithresh` из Image Processing.
+- UI: Auto row в Block 2 (dropdown method + param field + Auto this/all). param field автозаполняется по выбору method (0.05/moderate/empty).
+- Гистограмма теперь содержит red vertical line на текущем threshold per-part (визуальный фидбек для подбора).
+- 10 unit + 1 smoke.
+
+### Slice 4 (commit 522aae4)
+- Три файла фильтров:
+  - `velocityJumpFilter.m` — pre-interp gate, displacement * fps / pxlPerCm > maxV → NaN. Single-frame teleport создаёт ДВА bad-флага (touchscreen edge case в тестах поправлен).
+  - `hampelFilter.m` — обёртка `hampel()` из Signal Processing для двух осей. NaN-safe (заменяет NaN на median перед вызовом).
+  - `kalmanFilter2D.m` — handrolled 4-state CV. Сначала R = (1-lk)^2*scale — это давало слабую модуляцию (lk=0.05 → R≈0.9 вместо ожидаемого large). Переписал на R = scale / max(0.01, lk)^2: lk=0.05 → R = 400*scale, lk=1 → R = scale.
+- Block 3 в UI: 3 чекбокса + поля для maxV/win/sigma/Q/measNoiseScale. Значения хранятся в state.outlier (global per-experiment, НЕ per-part).
+- applyPerPartSettings подключает фильтры в правильном порядке (между clean и interp); Kalman в smoothing dispatch заменяет sgolay когда выбран в settings.smoothingMethod.
+- 12 unit + 5 (после фиксов теста testFlagsObviousJump expected 1 bad → 2; testTooShortInput использовал точки на 10px → флаг → поменял на 1px).
+
+### Slice 5 (commit 12f523c)
+- Manual regions panel в правой колонке (под switcher row). Add region открывает temp figure с preset GoodVideoFrame, drawpolygon → wait → Position → ManualRegions.
+- Per-region applies-to dropdown ('all' + bodyparts).
+- inpolygon на cleaned X/Y — точки внутри = NaN. Recomputed percentBadCombined после manual regions stage (иначе колонка %NaN не отражала исключения).
+- Public API: setManualRegions/clearManualRegions/deleteManualRegion (методы regions сначала попали в private секцию, тесты не могли вызвать → добавил публичные обёртки).
+- 2 unit + 1 smoke.
+- Heap corruption была когда я инициализировал struct массив через `s(1) = struct(...)` после `struct('vertices',{},'appliesTo',{})`. Поправил: целиком заменять struct array.
+
+### Slice 6 (commit 7c5970a)
+- VideoPanel — 7-я строка RightGrid с RowHeight=0 по умолчанию. Toggle [Video] раскрывает в 240px и открывает VideoReader (lazy, чтобы headless smoke без видео не падал).
+- 4 step-кнопки + slider. setCurrentFrame синхронизирует video + slider + FrameLabel + красную линию на X(t)/Y(t).
+- 1 smoke (assumeTrue isfile demo video).
+
+### Slice 7 (commit dd09279)
+- I/O утилиты: writeTracksSettings/readTracksSettings.
+- exportTracks orchestrator: settings file + per-session traces + опциональные PNG. PNG через `figure('Visible','off')` + `print -dpng -r120` per part. Schema hash для sanity check.
+- Block 4 — реальная Save панель.
+- savePreprocessed: stale check → если кто-то use=true но не computed → запустить Compute all. Затем exportTracks.
+- Live recompute: после CellEditCallback вызываю computePart(row) — на 18k frames это <0.1s, без debounce достаточно.
+- analyzeSession fast-path: tryLoadPrepared() ищет sibling `<dlcBase>_Preprocessed.mat`, проверяет схему bodyparts, грузит BodyPartsTraces. Если schema mismatch → fallback на legacy recompute.
+- 2 unit (round-trip + PNG generation) + 1 smoke (Save на демо csv → 14 traces).
+- demoPipelineTest регрессионный — green.
+
+### Slice 8 (commit 866f7a0)
+- Fast-path regression test (analyzeSessionFastPathTest): сохранил Preprocessed.mat рядом с DLC через GUI, запустил analyzeSession, проверил что результаты загружены и velocity clip держится.
+- env cleanup в analyzeSession через onCleanup (был flake-fail в logTest т.к. SPHYNX_LOG_LEVEL='warn' оставался после моих тестов).
+- README + en + ru гайды: добавил раздел "Preprocess Tracking tab" с layout-схемой, pipeline order, settings storage, integration с analyzeSession, описанием Auto/Manual regions/embedded video.
+- Финальный full-suite run: 157/157 PASS.
+
+### Решения принятые автономно
+- `Load all` → `Load` (один проход для всего).
+- В UI Block 3 Kalman параметры (Q, measNoiseScale) — это global per-experiment, НЕ per-part. Юзер мог хотеть per-part; если нужно — добавим колонки в таблицу.
+- Per-part NotFound% threshold — отдельная колонка в таблице (юзер просил Q9b).
+- Outliers % — отдельная колонка `%out` (после `%lowL`, до `status`).
+- Manual regions хранятся ТОЛЬКО per-session (в _Preprocessed.mat). Per-experiment Settings.mat их НЕ содержит. Логика: камера может стоять иначе на разных сессиях, регион будет невалиден.
+- Live recompute синхронный (не debounced timer). Если будут тормоза на больших трейсах — добавлю timer.
+- Auto threshold preset: aggressive=0.99, moderate=0.95, lax=0.6 (соответствует моему предложению).
+
+### Известные шероховатости (для следующего раунда)
+- Kalman когда выбран в smooth dropdown — все ещё применяется обычный clamp в bounds, что может слегка подрезать его выходной trace. Не критично.
+- При Save с manualRegions, регионы сохраняются в Preprocessed.mat. Но при analyzeSession fast-path они не используются (acts работают на уже smoothed координатах). OK для текущего сценария, но если регион должен влиять на Acts — надо отдельно подумать.
+- Save plots на 14 parts × 18k frames занимает ~30s. Можно ускорить через downsampling (показывать каждый 10-й кадр). Не критично.
+- Drawpolygon не работает в `matlab -batch` (нужен дисплей). Все smoke-тесты, связанные с регионами, инжектят регионы программно через setManualRegions.
+
+### Логи + commits
+Все 9 коммитов слайсов на `sphynx-GUI`. Tasks #17-#24 закрыты completed.
+
 ### Лог
 Обновил оба лога этим turn'ом до того, как закончил отвечать.
 

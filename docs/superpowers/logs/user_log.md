@@ -78,3 +78,20 @@
 **Юзер:** Отлично. (1) Гистограмма крупный бин — поправь, и кнопку log-Y. (2) Кнопки в блоке графиков широкие. (3) Подумай про порядок outlier-фильтров vs interp/smooth — могут ли outliers сглаживаться и теряться. Сделай как считаешь нужным.
 
 **Claude:** Полировка коммитом `<see git>`. (1) Бин гистограммы 0.01 (было 50 бинов на весь диапазон); добавил toggle [log Y] в switcher row. (2) Сжал switcher: `<` и `>` 28px (было 40), `Load all` → `Load` 80px (было 200), `log Y` 80px, FrameLabel 1x. Dropdown теперь не раздавлен. (3) Закрепил порядок в спеке (`docs/superpowers/specs/...-design.md`): outliers (velocity-jump, Hampel, manual regions) ВСЕГДА до интерполяции — иначе single-frame jumps размазываются сглаживанием и порог не срабатывает. Smoothing stage = ИЛИ sgolay (или другой бегущий фильтр) ИЛИ Kalman (Kalman сам smoother — стэкать с sgolay смысла нет, в UI взаимоисключающие). 3/3 теста зелёные. Двигаюсь к Slice 2 (per-part settings table)?
+
+---
+
+**Юзер:** План отличный, поехали. (Позже:) Я уйду надолго, продолжай слайсы, после готовки коммит, потом дальше; меня не жди, проверю потом, если что откатим.
+
+**Claude:** Прошёл все 8 слайсов автономно. Коммиты на ветке `sphynx-GUI`:
+- Slice 1 `1980bdc` — loading + preview canvas
+- Slice 1 polish `8ed33ba` — гистограмма 0.01 / log-Y / узкий switcher / pipeline order в спеке
+- Slice 2 `5c244b2` — per-part settings table + Compute (Default this/all + Compute this/all)
+- Slice 3 `d071105` — auto thresholds (otsu / knee / quantile / preset) с красной линией порога на гистограмме
+- Slice 4 `522aae4` — outlier filters: velocityJump (default ON) + Hampel + 2D Kalman (мои с нуля); поле max cm/s в Block 3
+- Slice 5 `12f523c` — manual exclusion regions с per-region applies-to dropdown, drawpolygon на frame canvas
+- Slice 6 `7c5970a` — встроенное видео с slider'ом и playhead-линией на X(t)/Y(t)
+- Slice 7 `dd09279` — live recompute по edit + outliers колонка + Save (per-experiment Settings.mat + per-session Preprocessed.mat + опционально PNG per part) + analyzeSession fast-path (если рядом с DLC лежит Preprocessed.mat — читает оттуда)
+- Slice 8 `866f7a0` — fast-path regression test + env cleanup в analyzeSession (был flake-fail в logTest) + раздел Preprocess в README/en/ru гайдах
+
+Все 157 тестов зелёные (`runtests('tests', 'IncludeSubfolders', true)`). На Demo csv: 18006 кадров × 14 частей; bodycenter 0.39% lowLk; miniscopeNVista корректно отметился NotFound. Открыть как раньше: `startup; sphynx.app.CreatePresetApp;` → вторая вкладка. Жду твою проверку — если что откатим коммит-по-коммиту через `git revert`.
