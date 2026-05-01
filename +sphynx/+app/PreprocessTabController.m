@@ -71,6 +71,10 @@ classdef PreprocessTabController < handle
         FrameLabel
         FrameSlider
         LogScaleButton          % toggle linear/log Y on likelihood histogram
+        XUnitsDropDown          % 'frame' | 'sec' | 'min'
+        FromFrameField
+        ToFrameField
+        GoToFrameField          % video panel
 
         % Log
         LogTextArea
@@ -389,14 +393,14 @@ classdef PreprocessTabController < handle
         function toggleVideoPanel(obj, enabled)
             % TOGGLEVIDEOPANEL  Expand/collapse the embedded video row.
             if enabled
-                obj.RightGrid.RowHeight{7} = 240;
+                obj.RightGrid.RowHeight{8} = 240;
                 obj.openVideoReader();
                 if ~isempty(obj.State.dlc) && ~isempty(obj.VideoSlider) && isvalid(obj.VideoSlider)
                     obj.VideoSlider.Limits = [1 obj.State.dlc.nFrames];
                 end
                 obj.setCurrentFrame(obj.State.currentFrame);
             else
-                obj.RightGrid.RowHeight{7} = 0;
+                obj.RightGrid.RowHeight{8} = 0;
             end
         end
 
@@ -425,13 +429,41 @@ classdef PreprocessTabController < handle
             Y = obj.State.dlc.Y(i, :);
             Lk = obj.State.dlc.likelihood(i, :);
             partName = obj.State.dlc.bodyPartsNames{i};
-            t = (1:n);
 
-            % Capture current zoom so it survives recompute. Reset zoom only
-            % when body part changed (we track the last drawn part).
-            preserveZoom = ~isempty(obj.State.lastDrawnBodyPart) && ...
-                obj.State.lastDrawnBodyPart == i;
-            if preserveZoom
+            % Compute viewport (from/to frame). 0 = last.
+            fromF = 1; toF = n;
+            if ~isempty(obj.FromFrameField); fromF = max(1, min(n, obj.FromFrameField.Value)); end
+            if ~isempty(obj.ToFrameField)
+                v = obj.ToFrameField.Value;
+                if v == 0; toF = n; else; toF = max(fromF, min(n, v)); end
+            end
+
+            % Pick X-axis units
+            xUnits = 'frame'; xLabel = 'frame'; xScale = 1;
+            if ~isempty(obj.XUnitsDropDown); xUnits = obj.XUnitsDropDown.Value; end
+            fps = pickFrameRate(obj);
+            switch xUnits
+                case 'sec'; xLabel = 'time, s';   xScale = 1/fps;
+                case 'min'; xLabel = 'time, min'; xScale = 1/(fps*60);
+                otherwise;  xLabel = 'frame';     xScale = 1;
+            end
+            t = (1:n) * xScale;
+
+            % Pick Y units (cm if pxlPerCm available, else px)
+            ppc = pickPxlPerCm(obj);
+            if ~isempty(ppc) && ppc > 0
+                yScale = 1/ppc; yUnitX = 'X, cm'; yUnitY = 'Y, cm';
+            else
+                yScale = 1; yUnitX = 'X, px'; yUnitY = 'Y, px';
+            end
+
+            % Capture current zoom so it survives recompute (only on same part
+            % AND same units). Otherwise reset to viewport.
+            sameView = ~isempty(obj.State.lastDrawnBodyPart) && ...
+                obj.State.lastDrawnBodyPart == i && ...
+                strcmp(obj.State.lastDrawnUnits, xUnits) && ...
+                obj.State.lastDrawnYUnit == (yScale ~= 1);
+            if sameView
                 xlimX = obj.AxX.XLim; ylimX = obj.AxX.YLim;
                 xlimY = obj.AxY.XLim; ylimY = obj.AxY.YLim;
             end
@@ -439,28 +471,30 @@ classdef PreprocessTabController < handle
             cla(obj.AxX); cla(obj.AxY); cla(obj.AxLk);
 
             % X(t)
-            plot(obj.AxX, t, X, 'Color', [0.1 0.4 0.8], 'LineWidth', 1);
-            title(obj.AxX, sprintf('%s — X (px)', partName), 'Interpreter', 'none');
-            xlabel(obj.AxX, 'frame'); ylabel(obj.AxX, 'X, px');
-            if preserveZoom
+            plot(obj.AxX, t, X * yScale, 'Color', [0.1 0.4 0.8], 'LineWidth', 1);
+            title(obj.AxX, sprintf('%s — X', partName), 'Interpreter', 'none');
+            xlabel(obj.AxX, xLabel); ylabel(obj.AxX, yUnitX);
+            if sameView
                 obj.AxX.XLim = xlimX; obj.AxX.YLim = ylimX;
             else
-                xlim(obj.AxX, [1 n]);
+                xlim(obj.AxX, [fromF toF] * xScale);
             end
             grid(obj.AxX, 'on');
 
             % Y(t)
-            plot(obj.AxY, t, Y, 'Color', [0.8 0.3 0.1], 'LineWidth', 1);
-            title(obj.AxY, sprintf('%s — Y (px)', partName), 'Interpreter', 'none');
-            xlabel(obj.AxY, 'frame'); ylabel(obj.AxY, 'Y, px');
-            if preserveZoom
+            plot(obj.AxY, t, Y * yScale, 'Color', [0.8 0.3 0.1], 'LineWidth', 1);
+            title(obj.AxY, sprintf('%s — Y', partName), 'Interpreter', 'none');
+            xlabel(obj.AxY, xLabel); ylabel(obj.AxY, yUnitY);
+            if sameView
                 obj.AxY.XLim = xlimY; obj.AxY.YLim = ylimY;
             else
-                xlim(obj.AxY, [1 n]);
+                xlim(obj.AxY, [fromF toF] * xScale);
             end
             grid(obj.AxY, 'on');
 
             obj.State.lastDrawnBodyPart = i;
+            obj.State.lastDrawnUnits = xUnits;
+            obj.State.lastDrawnYUnit = (yScale ~= 1);
 
             % Likelihood histogram — fine bins (0.01 wide) for thresholding
             histogram(obj.AxLk, Lk, 'BinWidth', 0.01, ...
@@ -501,6 +535,8 @@ classdef PreprocessTabController < handle
             s.currentBodyPart = 1;
             s.currentFrame = 1;
             s.lastDrawnBodyPart = [];   % for zoom-preservation across recompute
+            s.lastDrawnUnits = 'sec';
+            s.lastDrawnYUnit = false;   % false=px, true=cm
             % Outlier filter defaults (global per experiment, not per-part)
             s.outlier.velocityJump.enabled = true;
             s.outlier.velocityJump.maxVelocityCmS = 50;
@@ -826,9 +862,10 @@ classdef PreprocessTabController < handle
         end
 
         function buildRight(obj)
-            obj.RightGrid = uigridlayout(obj.OuterGrid, [7, 1]);
+            obj.RightGrid = uigridlayout(obj.OuterGrid, [8, 1]);
             obj.RightGrid.Layout.Column = 2;
-            obj.RightGrid.RowHeight = {'1x', '1x', '1x', 36, 100, 110, 0};  % video row hidden by default
+            % Rows: X(t), Y(t), histogram, viewport, switcher, regions, log, video
+            obj.RightGrid.RowHeight = {'1x', '1x', '1x', 32, 36, 100, 110, 0};
             obj.RightGrid.RowSpacing = 4;
             obj.RightGrid.Padding = [2 2 2 2];
 
@@ -840,9 +877,39 @@ classdef PreprocessTabController < handle
                 ax.Box = 'on';
             end
 
+            % Viewport controls row: from / to / X units dropdown
+            viewport = uigridlayout(obj.RightGrid, [1, 6]);
+            viewport.Layout.Row = 4;
+            viewport.RowHeight = {28};
+            viewport.ColumnWidth = {60, 80, 50, 80, '1x', 90};
+            viewport.Padding = [0 0 0 0];
+            viewport.ColumnSpacing = 4;
+
+            lblFrom = uilabel(viewport, 'Text', 'from frame:', 'HorizontalAlignment', 'right');
+            lblFrom.Layout.Column = 1;
+            obj.FromFrameField = uieditfield(viewport, 'numeric', ...
+                'Value', 1, 'Limits', [1 Inf], 'RoundFractionalValues', 'on', ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.FromFrameField.Layout.Column = 2;
+            lblTo = uilabel(viewport, 'Text', 'to:', 'HorizontalAlignment', 'right');
+            lblTo.Layout.Column = 3;
+            obj.ToFrameField = uieditfield(viewport, 'numeric', ...
+                'Value', 0, 'Limits', [0 Inf], 'RoundFractionalValues', 'on', ...
+                'Tooltip', '0 = last frame', ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.ToFrameField.Layout.Column = 4;
+
+            lblUnits = uilabel(viewport, 'Text', 'X units:', ...
+                'HorizontalAlignment', 'right');
+            lblUnits.Layout.Column = 5;
+            obj.XUnitsDropDown = uidropdown(viewport, ...
+                'Items', {'frame', 'sec', 'min'}, 'Value', 'sec', ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.XUnitsDropDown.Layout.Column = 6;
+
             % Bodypart switcher row — Load moved to Block 1, freeing space here.
             switcher = uigridlayout(obj.RightGrid, [1, 6]);
-            switcher.Layout.Row = 4;
+            switcher.Layout.Row = 5;
             switcher.RowHeight = {28};
             switcher.ColumnWidth = {28, 200, 28, 80, 80, '1x'};
             switcher.Padding = [0 0 0 0];
@@ -879,7 +946,7 @@ classdef PreprocessTabController < handle
 
             % Manual regions panel
             obj.RegionsPanel = uipanel(obj.RightGrid, 'Title', 'Manual exclusion regions');
-            obj.RegionsPanel.Layout.Row = 5;
+            obj.RegionsPanel.Layout.Row = 6;
             rg = uigridlayout(obj.RegionsPanel, [2, 5]);
             rg.RowHeight = {28, '1x'};
             rg.ColumnWidth = {110, 130, 80, 80, '1x'};
@@ -915,21 +982,21 @@ classdef PreprocessTabController < handle
             % Log
             obj.LogTextArea = uitextarea(obj.RightGrid, 'Editable', 'off', ...
                 'Value', {''});
-            obj.LogTextArea.Layout.Row = 6;
+            obj.LogTextArea.Layout.Row = 7;
 
             % Embedded video panel (hidden by default; toggled by Show video)
             obj.VideoPanel = uipanel(obj.RightGrid, 'Title', 'Video');
-            obj.VideoPanel.Layout.Row = 7;
-            vg = uigridlayout(obj.VideoPanel, [2, 5]);
+            obj.VideoPanel.Layout.Row = 8;
+            vg = uigridlayout(obj.VideoPanel, [2, 7]);
             vg.RowHeight = {'1x', 30};
-            vg.ColumnWidth = {30, 30, '1x', 30, 30};
+            vg.ColumnWidth = {30, 30, '1x', 30, 30, 70, 50};
             vg.Padding = [4 4 4 4];
             vg.RowSpacing = 4;
             vg.ColumnSpacing = 4;
 
             obj.VideoAxes = uiaxes(vg);
             obj.VideoAxes.Layout.Row = 1;
-            obj.VideoAxes.Layout.Column = [1 5];
+            obj.VideoAxes.Layout.Column = [1 7];
             obj.VideoAxes.XTick = []; obj.VideoAxes.YTick = [];
             obj.VideoAxes.Box = 'on';
 
@@ -956,6 +1023,15 @@ classdef PreprocessTabController < handle
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.setCurrentFrame(obj.State.currentFrame + 10));
             bR2.Layout.Row = 2; bR2.Layout.Column = 5;
+
+            obj.GoToFrameField = uieditfield(vg, 'numeric', ...
+                'Value', 1, 'Limits', [1 Inf], 'RoundFractionalValues', 'on');
+            obj.GoToFrameField.Layout.Row = 2; obj.GoToFrameField.Layout.Column = 6;
+
+            bGo = uibutton(vg, 'Text', 'Go', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.setCurrentFrame(obj.GoToFrameField.Value));
+            bGo.Layout.Row = 2; bGo.Layout.Column = 7;
         end
 
         % ===== Helpers ======================================================
@@ -1392,6 +1468,22 @@ end
 
 function v = clampScalar(x, lo, hi)
     v = max(lo, min(hi, x));
+end
+
+function fps = pickFrameRate(obj)
+    fps = 30;
+    if ~isempty(obj.State.presetData) && isfield(obj.State.presetData, 'Options') ...
+            && isfield(obj.State.presetData.Options, 'FrameRate')
+        fps = obj.State.presetData.Options.FrameRate;
+    end
+end
+
+function ppc = pickPxlPerCm(obj)
+    ppc = [];
+    if ~isempty(obj.State.presetData) && isfield(obj.State.presetData, 'Options') ...
+            && isfield(obj.State.presetData.Options, 'pxl2sm')
+        ppc = obj.State.presetData.Options.pxl2sm;
+    end
 end
 
 function safeClose(h)

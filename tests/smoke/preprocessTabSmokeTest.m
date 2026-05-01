@@ -172,7 +172,7 @@ function testVideoToggleAndFrameNav(testCase)
 
     % Toggle off
     pc.toggleVideoPanel(false);
-    verifyEqual(testCase, pc.RightGrid.RowHeight{7}, 0);
+    verifyEqual(testCase, pc.RightGrid.RowHeight{8}, 0);
 end
 
 function testSavePreprocessedRoundTrip(testCase)
