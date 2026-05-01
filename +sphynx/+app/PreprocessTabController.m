@@ -47,6 +47,7 @@ classdef PreprocessTabController < handle
         RegionsPanel
         RegionsListBox
         RegionsAppliesDropDown
+        RegionsScopeDropDown    % per-region scope (experiment | session)
 
         % Embedded video viewer
         VideoPanel
@@ -493,8 +494,16 @@ classdef PreprocessTabController < handle
                 Xint = []; Yint = []; Xsm = []; Ysm = [];
             end
 
+            % Highlight frames flagged as bad in cleaned trace (manual or
+            % outlier filters) with a gray translucent band on each X/Y plot.
+            badMask = [];
+            if hasProcessed
+                badMask = isnan(p.X_clean) | isnan(p.Y_clean);
+            end
+
             % X(t)
             hold(obj.AxX, 'on');
+            obj.shadeBadFrames(obj.AxX, badMask, t);
             if showRaw
                 plot(obj.AxX, t, X * yScale, 'Color', [0.10 0.40 0.80], 'LineWidth', 1.0);
             end
@@ -516,6 +525,7 @@ classdef PreprocessTabController < handle
 
             % Y(t)
             hold(obj.AxY, 'on');
+            obj.shadeBadFrames(obj.AxY, badMask, t);
             if showRaw
                 plot(obj.AxY, t, Y * yScale, 'Color', [0.10 0.40 0.80], 'LineWidth', 1.0);
             end
@@ -584,12 +594,15 @@ classdef PreprocessTabController < handle
             s.outlier.velocityJump.enabled = true;
             s.outlier.velocityJump.maxVelocityCmS = 50;
             s.outlier.hampel.enabled = false;
-            s.outlier.hampel.windowSize = 7;
+            s.outlier.hampel.windowSec = 0.25;   % new — preferred unit
+            s.outlier.hampel.windowSize = 7;     % legacy fallback (samples)
             s.outlier.hampel.nSigma = 3;
             s.outlier.kalman.processNoise = 1e-2;
             s.outlier.kalman.measNoiseScale = 1.0;
-            % Manual exclusion regions (per-session)
-            s.manualRegions = struct('vertices', {}, 'appliesTo', {});
+            % Manual exclusion regions (each region has its own scope:
+            % 'experiment' (default) = applies on every session;
+            % 'session' = stays only in this session's _Preprocessed.mat).
+            s.manualRegions = struct('vertices', {}, 'appliesTo', {}, 'scope', {});
             % Per-part settings (1xK struct, populated on Load)
             s.perPart = sphynx.app.PreprocessTabController.emptyPerPartArray();
             % Per-part processed traces (1xK struct, populated on Compute)
@@ -827,13 +840,14 @@ classdef PreprocessTabController < handle
                 'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('hp_enabled', s.Value));
             obj.HampelEnabledChk.Layout.Row = 3; obj.HampelEnabledChk.Layout.Column = 1;
 
-            lbl2 = uilabel(g, 'Text', 'win:', 'HorizontalAlignment', 'right');
+            lbl2 = uilabel(g, 'Text', 'win,s:', 'HorizontalAlignment', 'right');
             lbl2.Layout.Row = 3; lbl2.Layout.Column = 2;
 
             obj.HampelWindowField = uieditfield(g, 'numeric', ...
-                'Value', obj.State.outlier.hampel.windowSize, ...
-                'Limits', [1 1000], 'RoundFractionalValues', 'on', ...
-                'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('hp_win', s.Value));
+                'Value', obj.State.outlier.hampel.windowSec, ...
+                'Limits', [0.01 60], ...
+                'Tooltip', 'window in seconds (converted to samples via frame rate)', ...
+                'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('hp_win_sec', s.Value));
             obj.HampelWindowField.Layout.Row = 3; obj.HampelWindowField.Layout.Column = 3;
 
             obj.HampelSigmaField = uieditfield(g, 'numeric', ...
@@ -868,6 +882,7 @@ classdef PreprocessTabController < handle
                 case 'vj_max';     obj.State.outlier.velocityJump.maxVelocityCmS = val;
                 case 'hp_enabled'; obj.State.outlier.hampel.enabled = logical(val);
                 case 'hp_win';     obj.State.outlier.hampel.windowSize = max(1, round(val));
+                case 'hp_win_sec'; obj.State.outlier.hampel.windowSec = max(0.01, val);
                 case 'hp_sig';     obj.State.outlier.hampel.nSigma = val;
                 case 'kf_q';       obj.State.outlier.kalman.processNoise = val;
                 case 'kf_r';       obj.State.outlier.kalman.measNoiseScale = val;
@@ -1001,9 +1016,9 @@ classdef PreprocessTabController < handle
             % Manual regions panel
             obj.RegionsPanel = uipanel(obj.RightGrid, 'Title', 'Manual exclusion regions');
             obj.RegionsPanel.Layout.Row = 6;
-            rg = uigridlayout(obj.RegionsPanel, [2, 5]);
+            rg = uigridlayout(obj.RegionsPanel, [2, 6]);
             rg.RowHeight = {28, '1x'};
-            rg.ColumnWidth = {110, 130, 80, 80, '1x'};
+            rg.ColumnWidth = {110, 130, 100, 70, 70, '1x'};
             rg.Padding = [4 4 4 4];
             rg.RowSpacing = 4;
             rg.ColumnSpacing = 4;
@@ -1019,19 +1034,25 @@ classdef PreprocessTabController < handle
             obj.RegionsAppliesDropDown.Layout.Row = 1;
             obj.RegionsAppliesDropDown.Layout.Column = 2;
 
+            obj.RegionsScopeDropDown = uidropdown(rg, ...
+                'Items', {'experiment', 'session'}, 'Value', 'experiment', ...
+                'Tooltip', 'experiment = applies on every session of this experiment');
+            obj.RegionsScopeDropDown.Layout.Row = 1;
+            obj.RegionsScopeDropDown.Layout.Column = 3;
+
             bDel = uibutton(rg, 'Text', 'Delete', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.deleteSelectedRegion());
-            bDel.Layout.Row = 1; bDel.Layout.Column = 3;
+            bDel.Layout.Row = 1; bDel.Layout.Column = 4;
 
             bClear = uibutton(rg, 'Text', 'Clear', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.clearAllRegions());
-            bClear.Layout.Row = 1; bClear.Layout.Column = 4;
+            bClear.Layout.Row = 1; bClear.Layout.Column = 5;
 
             obj.RegionsListBox = uilistbox(rg, 'Items', {});
             obj.RegionsListBox.Layout.Row = 2;
-            obj.RegionsListBox.Layout.Column = [1 5];
+            obj.RegionsListBox.Layout.Column = [1 6];
 
             % Log
             obj.LogTextArea = uitextarea(obj.RightGrid, 'Editable', 'off', ...
@@ -1275,16 +1296,21 @@ classdef PreprocessTabController < handle
                 return;
             end
             applies = obj.RegionsAppliesDropDown.Value;
-            % Open a temporary figure to draw the polygon. drawpolygon
-            % returns immediately; we then wait for the user to commit
-            % (double-click) via wait().
-            fig = figure('Name', sprintf('Draw exclusion region (applies to: %s)', applies), ...
+            scope = 'experiment';
+            if ~isempty(obj.RegionsScopeDropDown)
+                scope = obj.RegionsScopeDropDown.Value;
+            end
+            % Open a temporary figure to draw the polygon.
+            fig = figure('Name', sprintf('Draw exclusion region (applies to: %s, scope: %s)', applies, scope), ...
                 'NumberTitle', 'off');
             cleaner = onCleanup(@() safeClose(fig));
             ax = axes(fig); %#ok<LAXES>
             imshow(obj.State.frame, 'Parent', ax);
-            title(ax, sprintf('Click to add vertices, double-click to finish (applies: %s)', applies), ...
+            title(ax, sprintf('Click to add vertices, double-click to finish'), ...
                 'Interpreter', 'none');
+            % Render existing experiment-scope regions semi-transparent so
+            % the user notices alignment problems.
+            obj.drawExistingRegionsOn(ax);
             try
                 h = drawpolygon(ax);
             catch ME
@@ -1298,13 +1324,38 @@ classdef PreprocessTabController < handle
                 obj.applog('warn', 'Region needs >= 3 vertices');
                 return;
             end
-            reg.vertices = verts;
-            reg.appliesTo = applies;
+            % Build the struct with all fields the array expects (avoid
+            % heterogeneousStrucAssignment by matching field order).
+            reg = struct('vertices', verts, 'appliesTo', applies, 'scope', scope);
             obj.State.manualRegions(end+1) = reg;
             obj.refreshRegionsListBox();
             obj.refocus();
-            obj.applog('info', 'Added region #%d (applies: %s, %d vertices)', ...
-                numel(obj.State.manualRegions), applies, size(verts, 1));
+            obj.applog('info', 'Added region #%d (applies: %s, scope: %s, %d vertices)', ...
+                numel(obj.State.manualRegions), applies, scope, size(verts, 1));
+            obj.refreshPreview();   % so the new region's frame highlights show up
+            if ~isempty(obj.Figure) && isvalid(obj.Figure)
+                uialert(obj.Figure, ...
+                    sprintf('Region added (%d vertices, applies: %s, scope: %s).', ...
+                    size(verts, 1), applies, scope), ...
+                    'Region added', 'Icon', 'success');
+            end
+        end
+
+        function drawExistingRegionsOn(obj, ax)
+            % Overlay existing 'experiment'-scope regions semi-transparent
+            % so the user can see if their geometry doesn't line up with
+            % the current camera view.
+            hold(ax, 'on');
+            for k = 1:numel(obj.State.manualRegions)
+                r = obj.State.manualRegions(k);
+                if isfield(r, 'scope') && ~strcmp(r.scope, 'experiment'); continue; end
+                v = r.vertices;
+                if isempty(v); continue; end
+                fill(ax, v(:, 1), v(:, 2), [0.85 0.10 0.10], ...
+                    'FaceAlpha', 0.20, 'EdgeColor', [0.85 0.10 0.10], ...
+                    'EdgeAlpha', 0.7, 'LineWidth', 1);
+            end
+            hold(ax, 'off');
         end
 
         function deleteSelectedRegion(obj)
@@ -1332,9 +1383,10 @@ classdef PreprocessTabController < handle
             end
             items = cell(1, n);
             for k = 1:n
-                items{k} = sprintf('region %d (applies: %s, %d vertices)', ...
-                    k, obj.State.manualRegions(k).appliesTo, ...
-                    size(obj.State.manualRegions(k).vertices, 1));
+                r = obj.State.manualRegions(k);
+                if isfield(r, 'scope'); sc = r.scope; else; sc = 'experiment'; end
+                items{k} = sprintf('region %d (applies: %s, scope: %s, %d vertices)', ...
+                    k, r.appliesTo, sc, size(r.vertices, 1));
             end
             obj.RegionsListBox.Items = items;
         end
@@ -1443,6 +1495,23 @@ classdef PreprocessTabController < handle
             end
         end
 
+        function shadeBadFrames(~, ax, badMask, tVec)
+            % Draw a thin gray semi-transparent band along the X-axis at
+            % every frame whose cleaned trace is NaN (likelihood / bounds /
+            % outlier filter / manual region all converge here).
+            if isempty(badMask) || ~any(badMask); return; end
+            yLim = ax.YLim;
+            % Compress consecutive bad frames into runs to keep the patch count low
+            runs = findRuns(badMask(:)');
+            for k = 1:size(runs, 1)
+                a = runs(k, 1); b = runs(k, 2);
+                if a > numel(tVec) || b > numel(tVec); continue; end
+                xa = tVec(a); xb = tVec(b);
+                patch(ax, [xa xb xb xa], [yLim(1) yLim(1) yLim(2) yLim(2)], ...
+                    [0.6 0.6 0.6], 'FaceAlpha', 0.20, 'EdgeColor', 'none');
+            end
+        end
+
         function showHelpDialog(obj, topic)
             switch lower(topic)
                 case 'perpart'
@@ -1544,4 +1613,14 @@ function safeClose(h)
     if ~isempty(h) && isvalid(h)
         close(h);
     end
+end
+
+function runs = findRuns(mask)
+    % Returns Mx2 [start end] indices of consecutive true runs in mask.
+    if isempty(mask); runs = zeros(0, 2); return; end
+    mask = logical(mask(:)');
+    d = diff([false mask false]);
+    starts = find(d == 1);
+    ends = find(d == -1) - 1;
+    runs = [starts(:), ends(:)];
 end

@@ -89,11 +89,17 @@ function out = applyPerPartSettings(rawX, rawY, likelihood, settings, ctx)
                     ctx.outlier.velocityJump.maxVelocityCmS);
             outliers = outliers | badV;
         end
-        % Hampel
+        % Hampel — window can be specified in seconds (preferred) or samples
         if isfield(ctx.outlier, 'hampel') && ctx.outlier.hampel.enabled
+            hp = ctx.outlier.hampel;
+            if isfield(hp, 'windowSec') && ~isempty(hp.windowSec) && hp.windowSec > 0
+                hpWin = max(1, round(hp.windowSec * ctx.frameRate));
+            else
+                hpWin = hp.windowSize;
+            end
             [out.X_clean, out.Y_clean, badH] = ...
                 sphynx.preprocess.hampelFilter(out.X_clean, out.Y_clean, ...
-                    ctx.outlier.hampel.windowSize, ctx.outlier.hampel.nSigma);
+                    hpWin, hp.nSigma);
             outliers = outliers | badH;
         end
     end
