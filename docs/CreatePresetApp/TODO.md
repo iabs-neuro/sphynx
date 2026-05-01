@@ -81,6 +81,22 @@ polish pass — do not start them without explicit go-ahead.
 - Or expose an Angle parameter in the Zones panel so the user
   can override the strip orientation manually.
 
+### 9. Multi-file mode in Preprocess Tracking tab
+- Load N (DLC csv + preset) pairs at once and treat them as one
+  combined session for likelihood-threshold tuning.
+- Concatenate per-part traces with NaN separators (visible as gaps
+  on X(t)/Y(t) plots).
+- Histograms merged across all sessions per body part.
+- Video panel disabled in multi-mode (or one-session-at-a-time via
+  a "current session" dropdown).
+- Save in multi-mode writes only `_PreprocessSettings.mat`
+  (the per-session traces are batched out separately later).
+- Manual regions: not applicable in multi-mode.
+- Useful for picking a single threshold that works across the
+  whole experiment instead of fiddling per-session.
+- Requested 2026-05-01 by Plusnin. Deferred from initial Slice 7-8
+  scope.
+
 ### 8. Zone-name conventions unified with downstream scripts
 - Current zone names are a mix of legacy (`ArenaCornersAllRealOut`,
   `Object1RealOut`) and new (`walls_and_corners`, `arena_realout`,

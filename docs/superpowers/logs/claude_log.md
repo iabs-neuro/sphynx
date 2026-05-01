@@ -339,6 +339,60 @@ H — drawpolygon в CreatePreset.
 - Multi-file mode потенциально расходится по семантике с per-experiment Settings: одна сессия может иметь свои manual regions, а multi-file — это не «эксперимент», это «несколько сессий выбрано для подбора порогов». Нужно это четко развести.
 - Юзер хочет Manual regions per-experiment по умолчанию — мой исходный аргумент про «ракурс может различаться» правильный, но юзер уверен что в его сетапе ракурс стабильный. Уважаю — добавлю чекбокс scope с дефолтом experiment, как просит.
 
+---
+
+## 2026-05-02 — Round-2 фидбек обработан, план оформлен, TODO обновлён
+
+### Изменение правила dual logs (важно для следующих агентов)
+Юзер уточнил формат логов:
+- **user_log.md** — БЕЗ СОКРАЩЕНИЙ. Реплика юзера целиком + мой полный финальный ответ. Никаких TLDR-резюме.
+- **claude_log.md** — для ДРУГИХ агентов (включая параллельно работающих). Это onboarding-файл. Думай: «другой Claude откроет, должен понять что происходит, какие решения, какие ошибки, чтобы продолжить».
+
+Обновил `feedback_dual_logs.md` в auto memory соответственно.
+
+### Юзер ответил на 8 вопросов и поправил план
+Q1 → отдельная **4-я вкладка** "Synthetic Data" в CreatePresetApp + Load synthetic в Preprocess Block 1 (без preset, default pxlPerCm).
+Q2 → floor 0.4 только для Auto + warning в Log при clamp.
+Q3 → start/end только визуализация.
+Q4 → Multi-file в TODO, не делаем.
+Q5 → Видео отдельным окном; колормапы (plasma, viridis, ...); marker size настраиваемый; sgolay = filled, raw = open circle; toggle all/selected; speed dropdown.
+Q6 → Manual regions листбокс bug — диагностировать и починить.
+Q7 → drawpolygon (вариант a).
+Q8 → Manual regions per-experiment (моё прочтение «как для всех сессий» = «как одни на все»).
+
+Поправки порядка слайсов:
+- Слайс D (синтетика) → последним.
+- Слайс E (видео) → предпоследним.
+- Slice G (multi-file) → удалён, в TODO.
+
+### Финальный порядок: A → B → C → F → H → E → D
+
+Все 7 TaskCreate'нуты (Tasks #25-#31).
+
+### Заметки для ДРУГИХ агентов / себя в новой сессии
+
+**Контекст работы:** ветка `sphynx-GUI`, blanket consent от юзера на коммиты внутри ветки. Push, force, reset --hard, branch -D — НЕЛЬЗЯ без явного разрешения. См. `feedback_standing_permissions.md`.
+
+**Стиль:** sprint mode. Слайс готов → тесты → коммит → следующий слайс. Юзер может уйти на длительное время и сказать «не жди меня». Если так — продолжай автономно.
+
+**MATLAB:** R2020a v9.8. Curve Fitting НЕТ (используй sgolayfilt). Sensor Fusion НЕТ. Полный список тулбоксов: `project_matlab_toolboxes.md`. Запускать тесты через `matlab -batch "addpath(pwd); runtests('tests/...')`. Доступ к MATLAB у Claude есть (`project_matlab_batch_access.md`).
+
+**Перед стартом слайса:**
+1. Прочитай `docs/superpowers/specs/2026-05-02-sphynx-preprocess-round2.md` (или последнюю спеку для текущей итерации).
+2. Прочитай `docs/superpowers/plans/2026-05-02-sphynx-preprocess-round2.md` для своего слайса.
+3. Сделай TaskUpdate на in_progress.
+4. Реализуй → тесты → коммит → TaskUpdate на completed.
+
+**Spec/plan:** `docs/superpowers/specs/2026-05-02-sphynx-preprocess-round2.md` ещё не написана отдельно — план достаточно детален. Если решишь делать спеку отдельно — добавь.
+
+**Уточнения, которые могут всплыть в процессе:**
+- Manual regions per-experiment vs per-session: я решил per-experiment по дефолту. Если юзер скажет «нет, имел в виду per-session» — поменяй scope dropdown default на 'session'.
+- Auto-scroll Log: попробуй `scroll(uitextarea, 'bottom')` сначала (R2020a может поддерживать). Если падает — workaround через программную замену Value (force-redraw).
+- Block 2/3 swap: после swap кнопки Compute должны идти ПОСЛЕ outlier настроек логически.
+
+### Что НЕ начато на этом turn
+Только спека/план/TODO/TaskCreate. Сам код Slice A — следующий ход (или ход после, если юзер захочет ещё уточнить).
+
 ### Лог
 Обновил оба лога этим turn'ом до того, как закончил отвечать.
 
