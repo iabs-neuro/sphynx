@@ -234,7 +234,9 @@ classdef PreprocessTabController < handle
         function autoThresholdAll(obj)
             if isempty(obj.State.dlc); return; end
             for k = 1:numel(obj.State.perPart)
-                obj.autoThresholdPart(k);
+                if obj.State.perPart(k).use
+                    obj.autoThresholdPart(k);
+                end
             end
         end
 
@@ -281,13 +283,19 @@ classdef PreprocessTabController < handle
         end
 
         function storeProcessed(obj, idx, out)
-            % Lazily extend the processed array as needed
+            % Lazily extend the processed array as needed.
+            % Field order MUST match the struct returned by
+            % sphynx.preprocess.applyPerPartSettings (otherwise MATLAB
+            % errors with heterogeneousStrucAssignment).
+            placeholder = struct( ...
+                'X_clean', [], 'Y_clean', [], ...
+                'X_interp', [], 'Y_interp', [], ...
+                'X_smooth', [], 'Y_smooth', [], ...
+                'percentNaN', NaN, 'percentLowLikelihood', NaN, ...
+                'percentBadCombined', NaN, 'percentOutliers', NaN, ...
+                'percentManual', NaN, 'status', '');
             while numel(obj.State.processed) < idx
-                obj.State.processed(end+1) = struct('X_clean', [], 'Y_clean', [], ...
-                    'X_interp', [], 'Y_interp', [], 'X_smooth', [], 'Y_smooth', [], ...
-                    'percentNaN', NaN, 'percentLowLikelihood', NaN, ...
-                    'percentBadCombined', NaN, 'percentOutliers', NaN, ...
-                    'status', '');
+                obj.State.processed(end+1) = placeholder;
             end
             obj.State.processed(idx) = out;
         end
@@ -419,19 +427,40 @@ classdef PreprocessTabController < handle
             partName = obj.State.dlc.bodyPartsNames{i};
             t = (1:n);
 
+            % Capture current zoom so it survives recompute. Reset zoom only
+            % when body part changed (we track the last drawn part).
+            preserveZoom = ~isempty(obj.State.lastDrawnBodyPart) && ...
+                obj.State.lastDrawnBodyPart == i;
+            if preserveZoom
+                xlimX = obj.AxX.XLim; ylimX = obj.AxX.YLim;
+                xlimY = obj.AxY.XLim; ylimY = obj.AxY.YLim;
+            end
+
             cla(obj.AxX); cla(obj.AxY); cla(obj.AxLk);
 
             % X(t)
             plot(obj.AxX, t, X, 'Color', [0.1 0.4 0.8], 'LineWidth', 1);
             title(obj.AxX, sprintf('%s — X (px)', partName), 'Interpreter', 'none');
             xlabel(obj.AxX, 'frame'); ylabel(obj.AxX, 'X, px');
-            xlim(obj.AxX, [1 n]); grid(obj.AxX, 'on');
+            if preserveZoom
+                obj.AxX.XLim = xlimX; obj.AxX.YLim = ylimX;
+            else
+                xlim(obj.AxX, [1 n]);
+            end
+            grid(obj.AxX, 'on');
 
             % Y(t)
             plot(obj.AxY, t, Y, 'Color', [0.8 0.3 0.1], 'LineWidth', 1);
             title(obj.AxY, sprintf('%s — Y (px)', partName), 'Interpreter', 'none');
             xlabel(obj.AxY, 'frame'); ylabel(obj.AxY, 'Y, px');
-            xlim(obj.AxY, [1 n]); grid(obj.AxY, 'on');
+            if preserveZoom
+                obj.AxY.XLim = xlimY; obj.AxY.YLim = ylimY;
+            else
+                xlim(obj.AxY, [1 n]);
+            end
+            grid(obj.AxY, 'on');
+
+            obj.State.lastDrawnBodyPart = i;
 
             % Likelihood histogram — fine bins (0.01 wide) for thresholding
             histogram(obj.AxLk, Lk, 'BinWidth', 0.01, ...
@@ -471,6 +500,7 @@ classdef PreprocessTabController < handle
             s.frame = [];
             s.currentBodyPart = 1;
             s.currentFrame = 1;
+            s.lastDrawnBodyPart = [];   % for zoom-preservation across recompute
             % Outlier filter defaults (global per experiment, not per-part)
             s.outlier.velocityJump.enabled = true;
             s.outlier.velocityJump.maxVelocityCmS = 50;
@@ -489,7 +519,7 @@ classdef PreprocessTabController < handle
                 'X_smooth', {}, 'Y_smooth', {}, ...
                 'percentNaN', {}, 'percentLowLikelihood', {}, ...
                 'percentBadCombined', {}, 'percentOutliers', {}, ...
-                'status', {});
+                'percentManual', {}, 'status', {});
         end
 
         function arr = emptyPerPartArray()
@@ -504,7 +534,7 @@ classdef PreprocessTabController < handle
         % ===== UI ===========================================================
         function buildUI(obj)
             obj.OuterGrid = uigridlayout(obj.Tab, [1, 2]);
-            obj.OuterGrid.ColumnWidth = {380, '1x'};
+            obj.OuterGrid.ColumnWidth = {760, '1x'};   % wider so per-part table fits
             obj.OuterGrid.RowHeight = {'1x'};
             obj.OuterGrid.Padding = [4 4 4 4];
             obj.OuterGrid.ColumnSpacing = 6;
@@ -514,27 +544,31 @@ classdef PreprocessTabController < handle
         end
 
         function buildLeft(obj)
-            % Scrollable container so all panels stay visible on shorter windows
+            % Scrollable container so all panels stay visible on shorter windows.
+            % Order after the user feedback: Loading -> Outlier filter ->
+            % Per-part settings -> Save (so Compute is the LAST action,
+            % after all settings have been chosen).
             obj.LeftPanel = uigridlayout(obj.OuterGrid, [4, 1]);
             obj.LeftPanel.Layout.Column = 1;
             obj.LeftPanel.Scrollable = 'on';
-            obj.LeftPanel.RowHeight = {110, 360, 140, 100};
+            obj.LeftPanel.RowHeight = {150, 150, 360, 150};
             obj.LeftPanel.RowSpacing = 6;
             obj.LeftPanel.Padding = [2 2 2 2];
 
-            obj.buildLoadingPanel();
-            obj.buildPerPartPanel();
-            obj.buildOutlierPanel();
-            obj.buildSavePanel();
+            obj.buildLoadingPanel();   % row 1
+            obj.buildOutlierPanel();   % row 2 (was 3)
+            obj.buildPerPartPanel();   % row 3 (was 2)
+            obj.buildSavePanel();      % row 4
         end
 
         function buildLoadingPanel(obj)
             p = uipanel(obj.LeftPanel, 'Title', '1. Loading');
             p.Layout.Row = 1;
-            g = uigridlayout(p, [2, 4]);
-            g.RowHeight = {26, 26};
+            g = uigridlayout(p, [3, 4]);
+            g.RowHeight = {26, 26, 32};
             g.ColumnWidth = {'1x', '1x', '1x', '1x'};
             g.ColumnSpacing = 4;
+            g.RowSpacing = 4;
             g.Padding = [4 4 4 4];
 
             % Top row buttons
@@ -554,7 +588,7 @@ classdef PreprocessTabController < handle
                 'ButtonPushedFcn', @(~,~) obj.pickPath('preset', 'file', '*.mat'));
             btnPreset.Layout.Row = 1; btnPreset.Layout.Column = 4;
 
-            % Bottom row text fields
+            % Middle row text fields
             obj.RootField   = uieditfield(g, 'text', 'Value', '', ...
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
             obj.RootField.Layout.Row = 2;   obj.RootField.Layout.Column = 1;
@@ -571,35 +605,54 @@ classdef PreprocessTabController < handle
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
             obj.PresetField.Layout.Row = 2; obj.PresetField.Layout.Column = 4;
 
+            % Bottom row: full-width Load button
+            btnLoad = uibutton(g, 'Text', 'Load', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.loadAll());
+            btnLoad.Layout.Row = 3; btnLoad.Layout.Column = [1 4];
+
             % Try to inherit project root from sibling Preset tab
             obj.inheritRootFromParentApp();
         end
 
         function buildPerPartPanel(obj)
-            obj.PerPartPanel = uipanel(obj.LeftPanel, 'Title', '2. Per-part settings');
-            obj.PerPartPanel.Layout.Row = 2;
-            g = uigridlayout(obj.PerPartPanel, [3, 1]);
-            g.RowHeight = {'1x', 32, 32};
+            obj.PerPartPanel = uipanel(obj.LeftPanel, 'Title', '3. Per-part settings');
+            obj.PerPartPanel.Layout.Row = 3;
+            g = uigridlayout(obj.PerPartPanel, [4, 1]);
+            g.RowHeight = {24, '1x', 32, 32};
             g.RowSpacing = 4;
             g.Padding = [4 4 4 4];
 
+            % INFO row
+            infoRow = uigridlayout(g, [1, 2]);
+            infoRow.Layout.Row = 1;
+            infoRow.RowHeight = {22};
+            infoRow.ColumnWidth = {'1x', 60};
+            infoRow.Padding = [0 0 0 0];
+            infoRow.ColumnSpacing = 0;
+            uilabel(infoRow, 'Text', '');
+            bInfo = uibutton(infoRow, 'Text', 'INFO', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ButtonPushedFcn', @(~,~) obj.showHelpDialog('perpart'));
+            bInfo.Layout.Column = 2;
+
             % uitable with per-part settings
             obj.PerPartTable = uitable(g, ...
-                'ColumnName', {'use', 'name', 'thr', 'win,s', 'interp', 'smooth', 'NF%', '%NaN', '%lowL', '%out', 'status'}, ...
+                'ColumnName', {'use', 'name', 'thr', 'win,s', 'interp', 'smooth', 'NF%', '%NaN', '%lowL', '%out', '%manual', 'status'}, ...
                 'ColumnFormat', {'logical', 'char', 'numeric', 'numeric', ...
                     {'pchip', 'linear', 'spline', 'makima'}, ...
                     {'sgolay', 'movmean', 'movmedian', 'gaussian', 'kalman'}, ...
-                    'numeric', 'char', 'char', 'char', 'char'}, ...
-                'ColumnEditable', [true false true true true true true false false false false], ...
-                'ColumnWidth', {38, 90, 44, 50, 60, 70, 40, 50, 50, 50, 60}, ...
+                    'numeric', 'char', 'char', 'char', 'char', 'char'}, ...
+                'ColumnEditable', [true false true true true true true false false false false false], ...
+                'ColumnWidth', {38, 90, 44, 50, 60, 70, 40, 50, 50, 50, 55, 60}, ...
                 'RowName', {}, ...
                 'CellEditCallback', @(~, evt) obj.onPerPartTableEdited(evt), ...
                 'CellSelectionCallback', @(~, evt) obj.onPerPartTableSelected(evt));
-            obj.PerPartTable.Layout.Row = 1; obj.PerPartTable.Layout.Column = 1;
+            obj.PerPartTable.Layout.Row = 2; obj.PerPartTable.Layout.Column = 1;
 
             % Default/Compute row
             btnRow = uigridlayout(g, [1, 4]);
-            btnRow.Layout.Row = 2; btnRow.Layout.Column = 1;
+            btnRow.Layout.Row = 3; btnRow.Layout.Column = 1;
             btnRow.RowHeight = {28};
             btnRow.ColumnWidth = {'1x', '1x', '1x', '1x'};
             btnRow.Padding = [0 0 0 0];
@@ -624,7 +677,7 @@ classdef PreprocessTabController < handle
 
             % Auto-threshold row
             autoRow = uigridlayout(g, [1, 5]);
-            autoRow.Layout.Row = 3; autoRow.Layout.Column = 1;
+            autoRow.Layout.Row = 4; autoRow.Layout.Column = 1;
             autoRow.RowHeight = {28};
             autoRow.ColumnWidth = {44, 100, 80, '1x', '1x'};
             autoRow.Padding = [0 0 0 0];
@@ -656,69 +709,78 @@ classdef PreprocessTabController < handle
         end
 
         function buildOutlierPanel(obj)
-            obj.OutlierPanel = uipanel(obj.LeftPanel, 'Title', '3. Outlier filter');
-            obj.OutlierPanel.Layout.Row = 3;
-            g = uigridlayout(obj.OutlierPanel, [3, 4]);
-            g.RowHeight = {26, 26, 26};
+            obj.OutlierPanel = uipanel(obj.LeftPanel, 'Title', '2. Outlier filter');
+            obj.OutlierPanel.Layout.Row = 2;
+            g = uigridlayout(obj.OutlierPanel, [4, 4]);
+            g.RowHeight = {24, 26, 26, 26};
             g.ColumnWidth = {120, 80, '1x', 80};
             g.RowSpacing = 4;
             g.ColumnSpacing = 4;
             g.Padding = [4 4 4 4];
 
-            % Row 1: velocity-jump
+            % Row 1: INFO button (right-aligned)
+            uilabel(g, 'Text', '');
+            uilabel(g, 'Text', '');
+            uilabel(g, 'Text', '');
+            bInfo = uibutton(g, 'Text', 'INFO', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ButtonPushedFcn', @(~,~) obj.showHelpDialog('outlier'));
+            bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
+
+            % Row 2: velocity-jump
             obj.VJEnabledChk = uicheckbox(g, 'Text', 'velocity-jump', ...
                 'Value', obj.State.outlier.velocityJump.enabled, ...
                 'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('vj_enabled', s.Value));
-            obj.VJEnabledChk.Layout.Row = 1; obj.VJEnabledChk.Layout.Column = 1;
+            obj.VJEnabledChk.Layout.Row = 2; obj.VJEnabledChk.Layout.Column = 1;
 
             lbl1 = uilabel(g, 'Text', 'max cm/s:', 'HorizontalAlignment', 'right');
-            lbl1.Layout.Row = 1; lbl1.Layout.Column = 2;
+            lbl1.Layout.Row = 2; lbl1.Layout.Column = 2;
 
             obj.VJMaxField = uieditfield(g, 'numeric', ...
                 'Value', obj.State.outlier.velocityJump.maxVelocityCmS, ...
                 'Limits', [1 1000], ...
                 'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('vj_max', s.Value));
-            obj.VJMaxField.Layout.Row = 1; obj.VJMaxField.Layout.Column = 3;
+            obj.VJMaxField.Layout.Row = 2; obj.VJMaxField.Layout.Column = 3;
 
-            % Row 2: Hampel
+            % Row 3: Hampel
             obj.HampelEnabledChk = uicheckbox(g, 'Text', 'Hampel', ...
                 'Value', obj.State.outlier.hampel.enabled, ...
                 'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('hp_enabled', s.Value));
-            obj.HampelEnabledChk.Layout.Row = 2; obj.HampelEnabledChk.Layout.Column = 1;
+            obj.HampelEnabledChk.Layout.Row = 3; obj.HampelEnabledChk.Layout.Column = 1;
 
             lbl2 = uilabel(g, 'Text', 'win:', 'HorizontalAlignment', 'right');
-            lbl2.Layout.Row = 2; lbl2.Layout.Column = 2;
+            lbl2.Layout.Row = 3; lbl2.Layout.Column = 2;
 
             obj.HampelWindowField = uieditfield(g, 'numeric', ...
                 'Value', obj.State.outlier.hampel.windowSize, ...
                 'Limits', [1 1000], 'RoundFractionalValues', 'on', ...
                 'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('hp_win', s.Value));
-            obj.HampelWindowField.Layout.Row = 2; obj.HampelWindowField.Layout.Column = 3;
+            obj.HampelWindowField.Layout.Row = 3; obj.HampelWindowField.Layout.Column = 3;
 
             obj.HampelSigmaField = uieditfield(g, 'numeric', ...
                 'Value', obj.State.outlier.hampel.nSigma, ...
                 'Limits', [0.1 10], 'Tooltip', 'k (sigma)', ...
                 'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('hp_sig', s.Value));
-            obj.HampelSigmaField.Layout.Row = 2; obj.HampelSigmaField.Layout.Column = 4;
+            obj.HampelSigmaField.Layout.Row = 3; obj.HampelSigmaField.Layout.Column = 4;
 
-            % Row 3: Kalman params (used when smoothing=kalman per part)
+            % Row 4: Kalman params (used when smoothing=kalman per part)
             lblK = uilabel(g, 'Text', 'Kalman:', 'HorizontalAlignment', 'left');
-            lblK.Layout.Row = 3; lblK.Layout.Column = 1;
+            lblK.Layout.Row = 4; lblK.Layout.Column = 1;
 
             lblK1 = uilabel(g, 'Text', 'Q:', 'HorizontalAlignment', 'right');
-            lblK1.Layout.Row = 3; lblK1.Layout.Column = 2;
+            lblK1.Layout.Row = 4; lblK1.Layout.Column = 2;
 
             obj.KalmanQField = uieditfield(g, 'numeric', ...
                 'Value', obj.State.outlier.kalman.processNoise, ...
                 'Limits', [1e-6 100], ...
                 'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('kf_q', s.Value));
-            obj.KalmanQField.Layout.Row = 3; obj.KalmanQField.Layout.Column = 3;
+            obj.KalmanQField.Layout.Row = 4; obj.KalmanQField.Layout.Column = 3;
 
             obj.KalmanRField = uieditfield(g, 'numeric', ...
                 'Value', obj.State.outlier.kalman.measNoiseScale, ...
                 'Limits', [1e-6 1000], 'Tooltip', 'measurement noise scale', ...
                 'ValueChangedFcn', @(s, ~) obj.onOutlierFlagChanged('kf_r', s.Value));
-            obj.KalmanRField.Layout.Row = 3; obj.KalmanRField.Layout.Column = 4;
+            obj.KalmanRField.Layout.Row = 4; obj.KalmanRField.Layout.Column = 4;
         end
 
         function onOutlierFlagChanged(obj, key, val)
@@ -737,11 +799,11 @@ classdef PreprocessTabController < handle
             obj.SavePanel = uipanel(obj.LeftPanel, 'Title', '4. Save');
             obj.SavePanel.Layout.Row = 4;
             g = uigridlayout(obj.SavePanel, [3, 3]);
-            g.RowHeight = {26, 26, 26};
-            g.ColumnWidth = {70, '1x', 80};
-            g.RowSpacing = 4;
+            g.RowHeight = {28, 28, 36};   % Save button row taller so it fits
+            g.ColumnWidth = {80, '1x', 80};
+            g.RowSpacing = 6;
             g.ColumnSpacing = 4;
-            g.Padding = [4 4 4 4];
+            g.Padding = [6 6 6 6];
 
             % Row 1: Output dir
             btnOut = uibutton(g, 'Text', 'Output dir', ...
@@ -756,7 +818,7 @@ classdef PreprocessTabController < handle
                 'Value', true);
             obj.SavePlotsCheckbox.Layout.Row = 2; obj.SavePlotsCheckbox.Layout.Column = [1 3];
 
-            % Row 3: Save button
+            % Row 3: Save button (full width, taller)
             bSave = uibutton(g, 'Text', 'Save preprocessed', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.savePreprocessed());
@@ -778,11 +840,11 @@ classdef PreprocessTabController < handle
                 ax.Box = 'on';
             end
 
-            % Bodypart switcher row — compact buttons, dropdown takes the rest
-            switcher = uigridlayout(obj.RightGrid, [1, 7]);
+            % Bodypart switcher row — Load moved to Block 1, freeing space here.
+            switcher = uigridlayout(obj.RightGrid, [1, 6]);
             switcher.Layout.Row = 4;
             switcher.RowHeight = {28};
-            switcher.ColumnWidth = {28, 160, 28, 70, 70, 70, '1x'};
+            switcher.ColumnWidth = {28, 200, 28, 80, 80, '1x'};
             switcher.Padding = [0 0 0 0];
             switcher.ColumnSpacing = 4;
 
@@ -801,24 +863,19 @@ classdef PreprocessTabController < handle
                 'ButtonPushedFcn', @(~,~) obj.nextBodyPart());
             obj.NextButton.Layout.Column = 3;
 
-            btnLoad = uibutton(switcher, 'Text', 'Load', ...
-                'BackgroundColor', semanticColor('action'), ...
-                'ButtonPushedFcn', @(~,~) obj.loadAll());
-            btnLoad.Layout.Column = 4;
-
             obj.LogScaleButton = uibutton(switcher, 'state', 'Text', 'log Y', ...
                 'BackgroundColor', semanticColor('info'), ...
                 'ValueChangedFcn', @(~,~) obj.refreshPreview());
-            obj.LogScaleButton.Layout.Column = 5;
+            obj.LogScaleButton.Layout.Column = 4;
 
             obj.ShowVideoButton = uibutton(switcher, 'state', 'Text', 'Video', ...
                 'BackgroundColor', semanticColor('info'), ...
                 'ValueChangedFcn', @(s, ~) obj.toggleVideoPanel(s.Value));
-            obj.ShowVideoButton.Layout.Column = 6;
+            obj.ShowVideoButton.Layout.Column = 5;
 
             obj.FrameLabel = uilabel(switcher, 'Text', 'Frame -/-', ...
                 'HorizontalAlignment', 'right');
-            obj.FrameLabel.Layout.Column = 7;
+            obj.FrameLabel.Layout.Column = 6;
 
             % Manual regions panel
             obj.RegionsPanel = uipanel(obj.RightGrid, 'Title', 'Manual exclusion regions');
@@ -982,13 +1039,14 @@ classdef PreprocessTabController < handle
                 arr(k).notFoundThresholdPct  = d.notFoundThresholdPct;
             end
             obj.State.perPart = arr;
-            % Reset processed cache
+            % Reset processed cache (field order must match emptyState +
+            % storeProcessed placeholder + applyPerPartSettings out)
             obj.State.processed = struct('X_clean', {}, 'Y_clean', {}, ...
                 'X_interp', {}, 'Y_interp', {}, ...
                 'X_smooth', {}, 'Y_smooth', {}, ...
                 'percentNaN', {}, 'percentLowLikelihood', {}, ...
                 'percentBadCombined', {}, 'percentOutliers', {}, ...
-                'status', {});
+                'percentManual', {}, 'status', {});
         end
 
         function refreshPerPartTable(obj)
@@ -999,16 +1057,21 @@ classdef PreprocessTabController < handle
                 obj.PerPartTable.Data = {};
                 return;
             end
-            data = cell(n, 11);
+            data = cell(n, 12);
             for k = 1:n
                 if k <= numel(obj.State.processed) && ~isempty(obj.State.processed(k).status)
                     pct = obj.State.processed(k);
                     pNaN = sprintf('%.1f', pct.percentNaN);
                     pLow = sprintf('%.1f', pct.percentLowLikelihood);
                     pOut = sprintf('%.1f', pct.percentOutliers);
+                    if isfield(pct, 'percentManual')
+                        pMan = sprintf('%.1f', pct.percentManual);
+                    else
+                        pMan = '0.0';
+                    end
                     status = pct.status;
                 else
-                    pNaN = '-'; pLow = '-'; pOut = '-'; status = '-';
+                    pNaN = '-'; pLow = '-'; pOut = '-'; pMan = '-'; status = '-';
                 end
                 data{k, 1}  = arr(k).use;
                 data{k, 2}  = arr(k).name;
@@ -1020,7 +1083,8 @@ classdef PreprocessTabController < handle
                 data{k, 8}  = pNaN;
                 data{k, 9}  = pLow;
                 data{k, 10} = pOut;
-                data{k, 11} = status;
+                data{k, 11} = pMan;
+                data{k, 12} = status;
             end
             obj.PerPartTable.Data = data;
         end
@@ -1234,21 +1298,82 @@ classdef PreprocessTabController < handle
             current = obj.LogTextArea.Value;
             if isempty(current); current = {}; end
             if ~iscell(current); current = cellstr(current); end
-            current{end+1} = line;
+            % Newest line at the TOP so the latest message is always visible
+            % without scrolling. Workaround for R2020a uitextarea (no scroll API).
+            current = [{line}; current(:)];
             if numel(current) > 500
-                current = current(end-499:end);
+                current = current(1:500);
             end
             obj.LogTextArea.Value = current;
-            try
-                scroll(obj.LogTextArea, 'bottom');
-            catch
-                % R2020a: no scroll API
-            end
         end
 
         function refocus(obj)
             if ~isempty(obj.Figure) && isvalid(obj.Figure)
                 figure(obj.Figure);
+            end
+        end
+
+        function showHelpDialog(obj, topic)
+            switch lower(topic)
+                case 'perpart'
+                    msg = sprintf([ ...
+                        'Per-part settings table (Block 3):\n' ...
+                        '\n' ...
+                        'Each row = one DLC body part. Editable columns:\n' ...
+                        '  use   - include this part in Compute and Save\n' ...
+                        '  thr   - likelihood threshold; frames below = bad\n' ...
+                        '  win,s - smoothing window in seconds (sgolay/movmean/...)\n' ...
+                        '  interp - gap-filling method (pchip / linear / spline / makima)\n' ...
+                        '  smooth - sgolay / movmean / movmedian / gaussian / kalman\n' ...
+                        '  NF%%  - if more than NF%% of frames are bad, status = NotFound\n' ...
+                        '\n' ...
+                        'Read-only after Compute:\n' ...
+                        '  %%NaN  - share of frames that came back NaN from DLC\n' ...
+                        '  %%lowL - share of frames where likelihood < thr\n' ...
+                        '  %%out  - share of frames flagged by outlier filters (Block 2)\n' ...
+                        '  status - Good or NotFound\n' ...
+                        '\n' ...
+                        'Buttons:\n' ...
+                        '  Default this/all - reset to defaults from defaultConfig\n' ...
+                        '  Compute this/all - run the pipeline\n' ...
+                        '  Auto this/all    - pick a likelihood threshold from the\n' ...
+                        '                     distribution (otsu/knee/quantile/preset)\n' ...
+                        '\n' ...
+                        'Click a row to switch the preview to that body part.\n' ...
+                        'Editing any setting (other than use) triggers live recompute.']);
+                case 'outlier'
+                    msg = sprintf([ ...
+                        'Outlier filter (Block 2):\n' ...
+                        '\n' ...
+                        'These run INSIDE Compute, between bounds-check and\n' ...
+                        'interpolation. They add to %%out for each part.\n' ...
+                        '\n' ...
+                        'velocity-jump (default ON):\n' ...
+                        '  flags frames where between-frame displacement > max cm/s.\n' ...
+                        '  Catches single-frame DLC teleports. Requires preset for pxlPerCm.\n' ...
+                        '\n' ...
+                        'Hampel (default OFF):\n' ...
+                        '  median +- k*MAD outlier detector in a sliding window.\n' ...
+                        '  Good for short (1-5 frame) spikes that velocity-jump misses.\n' ...
+                        '  Does NOT work for long (>20 frame) excursions - those need\n' ...
+                        '  Manual exclusion regions instead.\n' ...
+                        '\n' ...
+                        'Kalman params:\n' ...
+                        '  Used only when a body part picks "kalman" in its smooth\n' ...
+                        '  column. Hand-rolled 2D constant-velocity smoother;\n' ...
+                        '  measurement noise scales as 1/likelihood^2 so low-confidence\n' ...
+                        '  frames are heavily discounted.\n' ...
+                        '\n' ...
+                        'Pipeline order:\n' ...
+                        '  likelihood -> bounds -> velocity-jump -> Hampel -> regions\n' ...
+                        '  -> interpolate -> smooth (sgolay/.../kalman)']);
+                otherwise
+                    msg = sprintf('No help for topic: %s', topic);
+            end
+            if ~isempty(obj.Figure) && isvalid(obj.Figure)
+                uialert(obj.Figure, msg, 'Help', 'Icon', 'info');
+            else
+                disp(msg);
             end
         end
     end

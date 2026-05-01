@@ -523,18 +523,13 @@ classdef CreatePresetApp < handle
             current = app.LogTextArea.Value;
             if isempty(current); current = {}; end
             if ~iscell(current); current = cellstr(current); end
-            current{end+1} = line;
-            % Cap at last 500 entries to keep the textarea responsive.
+            % Newest line at the TOP so the latest message is always visible
+            % without scrolling (workaround for R2020a uitextarea).
+            current = [{line}; current(:)];
             if numel(current) > 500
-                current = current(end-499:end);
+                current = current(1:500);
             end
             app.LogTextArea.Value = current;
-            % Auto-scroll to bottom (R2021a+; ignored on older releases).
-            try
-                scroll(app.LogTextArea, 'bottom');
-            catch
-                % R2020a: no scroll API for uitextarea; user can scroll manually.
-            end
         end
 
         function refreshPreview(app)
@@ -707,6 +702,7 @@ function buildCreateTab(app)
     leftScroll.Layout.Column = 1;
 
     app.LeftGrid = uigridlayout(leftScroll, [6, 1]);
+    app.LeftGrid.Scrollable = 'on';   % belt-and-braces: also on the grid itself
     % Per-panel height = sum(rowHeights) + (n-1)*rowSpacing + 8 padding
     %                    + ~25 panel title bar. Row heights are 28 px
     %                    uniformly; Scrollable wrapper handles overflow.

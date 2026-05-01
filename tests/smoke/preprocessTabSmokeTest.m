@@ -198,7 +198,11 @@ function testSavePreprocessedRoundTrip(testCase)
     verifyTrue(testCase, isfile(paths.session));
     s = load(paths.session);
     verifyTrue(testCase, isfield(s, 'BodyPartsTraces'));
-    verifyEqual(testCase, numel(s.BodyPartsTraces), 14);
+    % NotFound parts (miniscopeNVista on the demo csv) are filtered out
+    % at Save time; expect 13 = 14 - 1.
+    verifyEqual(testCase, numel(s.BodyPartsTraces), 13);
+    statuses = {s.BodyPartsTraces.Status};
+    verifyEqual(testCase, sum(strcmp(statuses, 'NotFound')), 0);
 end
 
 function testComputeSinglePart(testCase)

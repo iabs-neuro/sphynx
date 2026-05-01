@@ -45,7 +45,9 @@ function out = cleanBodyPart(rawX, rawY, likelihood, varargin)
 
     isNaNRaw = isnan(rawX) | isnan(rawY);
     lowLikelihood = likelihood < p.Results.LikelihoodThreshold;
-    outOfBounds = rawX < 0 | rawY < 0 | ...
+    % DLC pixel coordinates are real >= 1 (column/row indices). Anything
+    % below 1 is invalid (off the top/left edge).
+    outOfBounds = rawX < 1 | rawY < 1 | ...
                   rawX > p.Results.FrameWidth | rawY > p.Results.FrameHeight;
 
     bad = isNaNRaw | lowLikelihood | outOfBounds;

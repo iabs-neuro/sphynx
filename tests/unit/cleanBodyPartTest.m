@@ -4,8 +4,8 @@ end
 
 function testCleanInputUnchanged(testCase)
     n = 100;
-    x = rand(n,1) * 100;
-    y = rand(n,1) * 100;
+    x = 1 + rand(n,1) * 100;   % keep all >= 1 to pass the bounds filter
+    y = 1 + rand(n,1) * 100;
     lk = ones(n,1);
     out = sphynx.preprocess.cleanBodyPart(x, y, lk);
     verifyEqual(testCase, out.X, x);

@@ -48,6 +48,15 @@ function thr = autoThreshold(likelihood, method, param)
 
     % Clamp into [0, 1] to be safe
     thr = max(0, min(1, thr));
+
+    % Floor at 0.4 — anything below is dangerous for production tracking.
+    % Manual override via the table is still allowed.
+    floorThr = 0.4;
+    if thr < floorThr
+        sphynx.util.log('warn', 'autoThreshold[%s] suggested %.3f, clamped to floor %.2f', ...
+            method, thr, floorThr);
+        thr = floorThr;
+    end
 end
 
 function thr = otsuThreshold(L)

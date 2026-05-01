@@ -71,6 +71,12 @@ function arr = buildTraces(state)
         'PercentNaN', {}, 'PercentLowLikelihood', {}, 'PercentOutliersDetected', {}, ...
         'AppliedSettings', {});
     for i = 1:n
+        % Skip parts the user marked use=false — they shouldn't appear
+        % downstream at all (analyzeSession already skips them by name,
+        % but cleaner to omit from the file entirely).
+        if ~state.perPart(i).use
+            continue;
+        end
         name = state.perPart(i).name;
         rawX = state.dlc.X(i, :)';
         rawY = state.dlc.Y(i, :)';
@@ -80,19 +86,25 @@ function arr = buildTraces(state)
         else
             p = emptyProcessedRow(numel(rawX));
         end
-        arr(i).BodyPartName = name;
-        arr(i).TraceOriginal.X = rawX;
-        arr(i).TraceOriginal.Y = rawY;
-        arr(i).TraceLikelihood = lk;
-        arr(i).TraceInterpolated.X = p.X_interp;
-        arr(i).TraceInterpolated.Y = p.Y_interp;
-        arr(i).TraceSmoothed.X = p.X_smooth;
-        arr(i).TraceSmoothed.Y = p.Y_smooth;
-        arr(i).Status = p.status;
-        arr(i).PercentNaN = p.percentNaN;
-        arr(i).PercentLowLikelihood = p.percentLowLikelihood;
-        arr(i).PercentOutliersDetected = p.percentOutliers;
-        arr(i).AppliedSettings = state.perPart(i);
+        % Also skip NotFound — these were computed but came back without
+        % a usable trace; downstream pipelines should treat them as absent.
+        if strcmp(p.status, 'NotFound')
+            continue;
+        end
+        k = numel(arr) + 1;
+        arr(k).BodyPartName = name;
+        arr(k).TraceOriginal.X = rawX;
+        arr(k).TraceOriginal.Y = rawY;
+        arr(k).TraceLikelihood = lk;
+        arr(k).TraceInterpolated.X = p.X_interp;
+        arr(k).TraceInterpolated.Y = p.Y_interp;
+        arr(k).TraceSmoothed.X = p.X_smooth;
+        arr(k).TraceSmoothed.Y = p.Y_smooth;
+        arr(k).Status = p.status;
+        arr(k).PercentNaN = p.percentNaN;
+        arr(k).PercentLowLikelihood = p.percentLowLikelihood;
+        arr(k).PercentOutliersDetected = p.percentOutliers;
+        arr(k).AppliedSettings = state.perPart(i);
     end
 end
 

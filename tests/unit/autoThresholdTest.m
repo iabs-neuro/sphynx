@@ -23,23 +23,32 @@ function testKneeOnBimodal(testCase)
 end
 
 function testQuantile(testCase)
+    % Auto threshold has a 0.4 floor for production safety; quantile of
+    % 0.05 on linspace(0,1) would be 0.05, but floor clamps to 0.4.
     L = linspace(0, 1, 1000)';
     thr = sphynx.preprocess.autoThreshold(L, 'quantile', 0.05);
-    verifyEqual(testCase, thr, 0.05, 'AbsTol', 1e-2);
+    verifyEqual(testCase, thr, 0.4, 'AbsTol', 1e-2);   % floor activates
     thr2 = sphynx.preprocess.autoThreshold(L, 'quantile', 0.5);
-    verifyEqual(testCase, thr2, 0.5, 'AbsTol', 1e-2);
+    verifyEqual(testCase, thr2, 0.5, 'AbsTol', 1e-2);  % above floor, intact
 end
 
 function testQuantileDefaults(testCase)
     L = linspace(0, 1, 1000)';
     thr = sphynx.preprocess.autoThreshold(L, 'quantile');
-    verifyEqual(testCase, thr, 0.05, 'AbsTol', 1e-2);
+    verifyEqual(testCase, thr, 0.4, 'AbsTol', 1e-2);   % default 0.05 floored
+end
+
+function testQuantileAboveFloor(testCase)
+    L = linspace(0, 1, 1000)';
+    thr = sphynx.preprocess.autoThreshold(L, 'quantile', 0.6);
+    verifyEqual(testCase, thr, 0.6, 'AbsTol', 1e-2);
 end
 
 function testPresetKeywords(testCase)
     L = rand(100, 1);
     verifyEqual(testCase, sphynx.preprocess.autoThreshold(L, 'preset', 'aggressive'), 0.99);
     verifyEqual(testCase, sphynx.preprocess.autoThreshold(L, 'preset', 'moderate'), 0.95);
+    % lax = 0.60 is above the 0.4 floor, so passes intact
     verifyEqual(testCase, sphynx.preprocess.autoThreshold(L, 'preset', 'lax'), 0.60);
 end
 

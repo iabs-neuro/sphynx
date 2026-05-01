@@ -56,19 +56,24 @@ function out = applyPerPartSettings(rawX, rawY, likelihood, settings, ctx)
         'LikelihoodThreshold', settings.likelihoodThreshold, ...
         'MissingThresholdPct', settings.notFoundThresholdPct);
 
-    out.X_clean = cleaned.X;
-    out.Y_clean = cleaned.Y;
-    out.percentNaN = cleaned.PercentNaN;
-    out.percentLowLikelihood = cleaned.PercentLowLikelihood;
-    out.percentBadCombined = cleaned.PercentBadCombined;
-    out.percentOutliers = 0;  % filled in Slice 4
-    out.status = cleaned.Status;
+    % Initialize all fields up-front in a fixed order so that struct
+    % assignment to a heterogeneous struct array (in the controller)
+    % does not blow up with MATLAB:heterogeneousStrucAssignment.
+    out = struct( ...
+        'X_clean',              cleaned.X, ...
+        'Y_clean',              cleaned.Y, ...
+        'X_interp',             nan(size(rawX)), ...
+        'Y_interp',             nan(size(rawY)), ...
+        'X_smooth',             nan(size(rawX)), ...
+        'Y_smooth',             nan(size(rawY)), ...
+        'percentNaN',           cleaned.PercentNaN, ...
+        'percentLowLikelihood', cleaned.PercentLowLikelihood, ...
+        'percentBadCombined',   cleaned.PercentBadCombined, ...
+        'percentOutliers',      0, ...
+        'percentManual',        0, ...
+        'status',               cleaned.Status);
 
     if strcmp(out.status, 'NotFound')
-        out.X_interp = nan(size(rawX));
-        out.Y_interp = nan(size(rawY));
-        out.X_smooth = nan(size(rawX));
-        out.Y_smooth = nan(size(rawY));
         return;
     end
 
@@ -95,6 +100,7 @@ function out = applyPerPartSettings(rawX, rawY, likelihood, settings, ctx)
     out.percentOutliers = round(100 * sum(outliers) / numel(outliers), 2);
 
     % --- 5. Manual regions ------------------------------------------
+    manualMask = false(size(rawX));
     if isfield(ctx, 'manualRegions') && ~isempty(ctx.manualRegions)
         partName = '';
         if isfield(ctx, 'partName'); partName = ctx.partName; end
@@ -107,10 +113,12 @@ function out = applyPerPartSettings(rawX, rawY, likelihood, settings, ctx)
             if isempty(v) || size(v, 2) ~= 2; continue; end
             in = inpolygon(out.X_clean, out.Y_clean, v(:, 1), v(:, 2));
             in = in(:);
+            manualMask = manualMask | in;
             out.X_clean(in) = NaN;
             out.Y_clean(in) = NaN;
         end
     end
+    out.percentManual = round(100 * sum(manualMask) / numel(rawX), 2);
 
     % Recompute combined-bad percent after outlier+manual stages
     nFrames = numel(rawX);
