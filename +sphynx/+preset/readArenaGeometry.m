@@ -31,18 +31,54 @@ function arena = readArenaGeometry(frame, geometry, varargin)
     th = linspace(0, 2*pi, 20000)';
 
     if isempty(p.Results.Points)
-        fh = figure; imshow(frame); hold on;
+        fh = figure; ax = axes(fh); imshow(frame, 'Parent', ax); hold(ax, 'on');
         cleanup = onCleanup(@() closeIfValid(fh));
         switch geometry
             case 'O-maze'
-                uiwait(msgbox('Indicate at least 3 points of OUTER border', 'O-maze', 'modal'));
-                [xOut, yOut] = ginput;
-                uiwait(msgbox('Indicate at least 3 points of INNER border', 'O-maze', 'modal'));
-                [xIn, yIn] = ginput;
-                pts = [xOut(:) yOut(:); NaN NaN; xIn(:) yIn(:)];
+                uiwait(msgbox(['Draw the OUTER border polygon:' newline ...
+                    'click vertices, double-click to finish.'], 'O-maze', 'modal'));
+                hOut = drawpolygon(ax);
+                wait(hOut);
+                if ~isvalid(hOut); pts = zeros(0,2); clear cleanup; return; end
+                outerPts = hOut.Position;
+                uiwait(msgbox(['Draw the INNER border polygon:' newline ...
+                    'click vertices, double-click to finish.'], 'O-maze', 'modal'));
+                hIn = drawpolygon(ax);
+                wait(hIn);
+                if ~isvalid(hIn); innerPts = zeros(0,2); else; innerPts = hIn.Position; end
+                pts = [outerPts; NaN NaN; innerPts];
+            case 'Polygon'
+                title(ax, 'Click polygon vertices, double-click to finish. Drag vertices to refine.', 'Interpreter', 'none');
+                hP = drawpolygon(ax);
+                wait(hP);
+                if ~isvalid(hP); pts = zeros(0,2); clear cleanup; return; end
+                pts = hP.Position;
+            case 'Circle'
+                title(ax, 'Click-and-drag to draw a circle, then refine.', 'Interpreter', 'none');
+                hC = drawcircle(ax);
+                wait(hC);
+                if ~isvalid(hC); pts = zeros(0,2); clear cleanup; return; end
+                % Sample N points around the drawn circle
+                cx = hC.Center(1); cy = hC.Center(2); R = hC.Radius;
+                ang = linspace(0, 2*pi, 60)';
+                pts = [cx + R*cos(ang), cy + R*sin(ang)];
+            case 'Ellipse'
+                title(ax, 'Click-and-drag to draw an ellipse, then refine.', 'Interpreter', 'none');
+                hE = drawellipse(ax);
+                wait(hE);
+                if ~isvalid(hE); pts = zeros(0,2); clear cleanup; return; end
+                % Sample N points around the drawn ellipse
+                cx = hE.Center(1); cy = hE.Center(2);
+                a = hE.SemiAxes(1); b = hE.SemiAxes(2); rot = deg2rad(hE.RotationAngle);
+                ang = linspace(0, 2*pi, 60)';
+                xx = a*cos(ang); yy = b*sin(ang);
+                pts = [cx + xx*cos(rot) - yy*sin(rot), ...
+                       cy + xx*sin(rot) + yy*cos(rot)];
             otherwise
-                [px, py] = ginput;
-                pts = [px(:), py(:)];
+                hP = drawpolygon(ax);
+                wait(hP);
+                if ~isvalid(hP); pts = zeros(0,2); clear cleanup; return; end
+                pts = hP.Position;
         end
         clear cleanup;  % closes figure now
     else
