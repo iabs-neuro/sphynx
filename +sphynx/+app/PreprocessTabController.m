@@ -56,6 +56,7 @@ classdef PreprocessTabController < handle
         VideoLabel
         ShowVideoButton
         VideoReader_           % VideoReader handle (trailing underscore: avoid name clash)
+        VideoWindow            % standalone PreprocessVideoWindow (Slice E)
 
         % Block 4: Save
         SavePanel
@@ -390,22 +391,39 @@ classdef PreprocessTabController < handle
                 obj.FrameLabel.Text = sprintf('Frame %d / %d', frameIdx, n);
             end
             if ~isempty(obj.VideoSlider) && isvalid(obj.VideoSlider)
-                obj.VideoSlider.Value = frameIdx;
+                % Embedded slider remains hidden in Slice E but we still
+                % bound-check before setting Value or MATLAB throws.
+                lim = obj.VideoSlider.Limits;
+                if frameIdx >= lim(1) && frameIdx <= lim(2)
+                    obj.VideoSlider.Value = frameIdx;
+                end
+            end
+            % Sync the standalone video window if open
+            if ~isempty(obj.VideoWindow) && isvalid(obj.VideoWindow)
+                obj.VideoWindow.refreshFrame();
             end
         end
 
         function toggleVideoPanel(obj, enabled)
-            % TOGGLEVIDEOPANEL  Expand/collapse the embedded video row.
+            % TOGGLEVIDEOPANEL  Open/close the standalone video window.
+            % (Slice E: replaced the embedded panel with a separate uifigure
+            % so the user can size it independently and use the play loop
+            % without competing for layout space.)
             if enabled
-                obj.RightGrid.RowHeight{8} = 240;
                 obj.openVideoReader();
-                if ~isempty(obj.State.dlc) && ~isempty(obj.VideoSlider) && isvalid(obj.VideoSlider)
-                    obj.VideoSlider.Limits = [1 obj.State.dlc.nFrames];
+                if isempty(obj.VideoReader_); return; end
+                if isempty(obj.VideoWindow) || ~isvalid(obj.VideoWindow)
+                    obj.VideoWindow = sphynx.app.PreprocessVideoWindow(obj);
                 end
                 obj.setCurrentFrame(obj.State.currentFrame);
             else
-                obj.RightGrid.RowHeight{8} = 0;
+                if ~isempty(obj.VideoWindow) && isvalid(obj.VideoWindow)
+                    delete(obj.VideoWindow);
+                    obj.VideoWindow = [];
+                end
             end
+            % Embedded panel row stays collapsed forever now.
+            obj.RightGrid.RowHeight{8} = 0;
         end
 
         function setManualRegions(obj, regs)
