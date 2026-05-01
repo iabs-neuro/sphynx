@@ -75,6 +75,9 @@ classdef PreprocessTabController < handle
         FromFrameField
         ToFrameField
         GoToFrameField          % video panel
+        ShowRawChk              % toggle raw curve overlay
+        ShowInterpChk
+        ShowSmoothChk
 
         % Log
         LogTextArea
@@ -470,8 +473,38 @@ classdef PreprocessTabController < handle
 
             cla(obj.AxX); cla(obj.AxY); cla(obj.AxLk);
 
+            % Decide which curves to overlay
+            showRaw    = isempty(obj.ShowRawChk)    || obj.ShowRawChk.Value;
+            showInterp = isempty(obj.ShowInterpChk) || obj.ShowInterpChk.Value;
+            showSmooth = isempty(obj.ShowSmoothChk) || obj.ShowSmoothChk.Value;
+
+            % Pull processed traces if available
+            hasProcessed = i <= numel(obj.State.processed) && ...
+                ~isempty(obj.State.processed) && ...
+                ~isempty(obj.State.processed(i).status) && ...
+                strcmp(obj.State.processed(i).status, 'Good');
+            if hasProcessed
+                p = obj.State.processed(i);
+                Xint = p.X_interp(:)' * yScale;
+                Yint = p.Y_interp(:)' * yScale;
+                Xsm  = p.X_smooth(:)' * yScale;
+                Ysm  = p.Y_smooth(:)' * yScale;
+            else
+                Xint = []; Yint = []; Xsm = []; Ysm = [];
+            end
+
             % X(t)
-            plot(obj.AxX, t, X * yScale, 'Color', [0.1 0.4 0.8], 'LineWidth', 1);
+            hold(obj.AxX, 'on');
+            if showRaw
+                plot(obj.AxX, t, X * yScale, 'Color', [0.10 0.40 0.80], 'LineWidth', 1.0);
+            end
+            if showInterp && ~isempty(Xint)
+                plot(obj.AxX, t, Xint, 'Color', [0.95 0.55 0.10], 'LineWidth', 0.9);
+            end
+            if showSmooth && ~isempty(Xsm)
+                plot(obj.AxX, t, Xsm, 'Color', [0.10 0.65 0.20], 'LineWidth', 0.9);
+            end
+            hold(obj.AxX, 'off');
             title(obj.AxX, sprintf('%s — X', partName), 'Interpreter', 'none');
             xlabel(obj.AxX, xLabel); ylabel(obj.AxX, yUnitX);
             if sameView
@@ -482,7 +515,17 @@ classdef PreprocessTabController < handle
             grid(obj.AxX, 'on');
 
             % Y(t)
-            plot(obj.AxY, t, Y * yScale, 'Color', [0.8 0.3 0.1], 'LineWidth', 1);
+            hold(obj.AxY, 'on');
+            if showRaw
+                plot(obj.AxY, t, Y * yScale, 'Color', [0.10 0.40 0.80], 'LineWidth', 1.0);
+            end
+            if showInterp && ~isempty(Yint)
+                plot(obj.AxY, t, Yint, 'Color', [0.95 0.55 0.10], 'LineWidth', 0.9);
+            end
+            if showSmooth && ~isempty(Ysm)
+                plot(obj.AxY, t, Ysm, 'Color', [0.10 0.65 0.20], 'LineWidth', 0.9);
+            end
+            hold(obj.AxY, 'off');
             title(obj.AxY, sprintf('%s — Y', partName), 'Interpreter', 'none');
             xlabel(obj.AxY, xLabel); ylabel(obj.AxY, yUnitY);
             if sameView
@@ -877,15 +920,15 @@ classdef PreprocessTabController < handle
                 ax.Box = 'on';
             end
 
-            % Viewport controls row: from / to / X units dropdown
-            viewport = uigridlayout(obj.RightGrid, [1, 6]);
+            % Viewport controls row: from / to / X units / curve toggles
+            viewport = uigridlayout(obj.RightGrid, [1, 9]);
             viewport.Layout.Row = 4;
             viewport.RowHeight = {28};
-            viewport.ColumnWidth = {60, 80, 50, 80, '1x', 90};
+            viewport.ColumnWidth = {60, 70, 30, 70, 50, 80, 70, 75, 80};
             viewport.Padding = [0 0 0 0];
             viewport.ColumnSpacing = 4;
 
-            lblFrom = uilabel(viewport, 'Text', 'from frame:', 'HorizontalAlignment', 'right');
+            lblFrom = uilabel(viewport, 'Text', 'from:', 'HorizontalAlignment', 'right');
             lblFrom.Layout.Column = 1;
             obj.FromFrameField = uieditfield(viewport, 'numeric', ...
                 'Value', 1, 'Limits', [1 Inf], 'RoundFractionalValues', 'on', ...
@@ -899,13 +942,24 @@ classdef PreprocessTabController < handle
                 'ValueChangedFcn', @(~,~) obj.refreshPreview());
             obj.ToFrameField.Layout.Column = 4;
 
-            lblUnits = uilabel(viewport, 'Text', 'X units:', ...
+            lblUnits = uilabel(viewport, 'Text', 'X:', ...
                 'HorizontalAlignment', 'right');
             lblUnits.Layout.Column = 5;
             obj.XUnitsDropDown = uidropdown(viewport, ...
                 'Items', {'frame', 'sec', 'min'}, 'Value', 'sec', ...
                 'ValueChangedFcn', @(~,~) obj.refreshPreview());
             obj.XUnitsDropDown.Layout.Column = 6;
+
+            % Curve overlay toggles
+            obj.ShowRawChk = uicheckbox(viewport, 'Text', 'raw', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.ShowRawChk.Layout.Column = 7;
+            obj.ShowInterpChk = uicheckbox(viewport, 'Text', 'interp', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.ShowInterpChk.Layout.Column = 8;
+            obj.ShowSmoothChk = uicheckbox(viewport, 'Text', 'smoothed', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.ShowSmoothChk.Layout.Column = 9;
 
             % Bodypart switcher row — Load moved to Block 1, freeing space here.
             switcher = uigridlayout(obj.RightGrid, [1, 6]);
