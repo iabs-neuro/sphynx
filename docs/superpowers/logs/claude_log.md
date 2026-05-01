@@ -254,6 +254,35 @@ Cleanup `Preprocess/processVideos.m`: убрать hardcoded paths (line 16-18),
 - Юзер не задал вопрос про знание pickSmoothWindow — надо помнить что в analyzeSession heuristic ещё работает в legacy fallback (когда нет _Preprocessed.mat).
 - Если юзер захочет сделать Kalman per-part по-настоящему (разные Q/R для bodycenter vs nose) — добавить колонки в таблицу. Сейчас Q/R global.
 
+---
+
+## 2026-05-01 — Полный UX-обзор GUI вкладки
+
+### Что юзер попросил
+«Подробный рассказ что сейчас в GUI реализовано и как работает. Именно блок preprocess».
+
+Не точечные вопросы, а полный обзор для возвращения в контекст. Ранее давал только разбор по 5 точечным вопросам — теперь нужно описать сам интерфейс end-to-end.
+
+### Что ответил
+Структурированный обзор UX (не реализации):
+
+1. **Раскладка** — ASCII-схема: левая 380px scrollable, правая 1x; правая = 7 rows.
+2. **Block 1 (Loading)** — 4 колонки Browse+поле; что обязательно (DLC), что для чего (Preset для pxl2sm/bounds/regions frame).
+3. **Block 2 (Per-part)** — таблица 11 колонок с описанием каждой; кликабельность; live recompute на edit (без debounce); 4 кнопки Default/Compute; Auto-row с dropdown method + param + Auto this/all; красная линия threshold на histogram при Auto.
+4. **Block 3 (Outlier)** — 3 строки (velocity-jump+max; Hampel+win+sigma; Kalman params); глобальные настройки, применяются ВНУТРИ Compute, Kalman активируется per-part через колонку smooth.
+5. **Block 4 (Save)** — Output dir + plots checkbox + Save с staleness check; описание трёх типов файлов (settings/session/plots).
+6. **Правая колонка**: 3 графика (X/Y/histogram с красной линией thr); switcher row (< dropdown > Load logY Video FrameN/M); Manual regions panel; Log; Embedded video toggle.
+7. **Embedded video** — раскрывается на 240px, кадр + красный «+» на (x,y), slider + 4 step buttons; lazy VideoReader; синхронизация плейхеда с X(t)/Y(t).
+8. **Workflow end-to-end** в 11 шагах от Browse DLC до Save.
+9. Live recompute notes: синхронный, без debounce, ~0.1s, можно use=false для пакета правок.
+
+Прочитал перед ответом ничего нового (последний просмотр кода был при предыдущем ответе и при создании всех слайсов). Полагался на свою память о структуре. Если что-то описал неточно — юзер скажет.
+
+### Замечания
+- Старался описывать UX (что юзер видит и куда жмёт), не код. Один раз упомянул `Options.GoodVideoFrame` чтобы объяснить откуда берётся фон для рисования регионов — это знание про данные, не про код.
+- Workflow в 11 шагов сильно перекликается с тем что было в README/гайдах. Это OK — юзер просил ответ в чате, а не ссылку на доку.
+- Если будут просить ещё подробнее по конкретному блоку — давать без повторов того что уже сказал, а углубляться в edge cases.
+
 ### Лог
 Обновил оба лога этим turn'ом до того, как закончил отвечать.
 
