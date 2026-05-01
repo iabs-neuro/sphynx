@@ -231,6 +231,29 @@ Cleanup `Preprocess/processVideos.m`: убрать hardcoded paths (line 16-18),
 ### Логи + commits
 Все 9 коммитов слайсов на `sphynx-GUI`. Tasks #17-#24 закрыты completed.
 
+---
+
+## 2026-05-01 — Юзер вернулся, спросил подробности по Slice'ам
+
+### Что спросил
+Подробный разбор: NF% и метрики таблицы, реализация otsu/preset, что делает Compute, когда выполняется Block 3, как настраивать Hampel.
+
+### Что ответил
+Структурированно по 5 секциям + бонус:
+1. **Колонки таблицы** — таблица 11 колонок: use/name/thr/win,s/interp/smooth/NF%/%NaN/%lowL/%out/status. Объяснил каждую: NF% — порог NotFound (>NF% плохих → status='NotFound', шаги interp/smooth пропускаются); %out — отброшено outlier фильтрами (отдельно от %lowL/%NaN которые от cleanBodyPart); %lowL и %NaN типично перекрываются.
+2. **autoThreshold реализации** — otsu (multithresh — Image Processing), knee (max |d²| на сглаженной CDF через smoothdata 'movmean'), quantile (тривиально через `quantile()`), preset (enum). Все с safe fallback на median.
+3. **Compute = applyPerPartSettings** — 7 шагов pipeline'а строго по порядку. На NotFound шаги 3-7 пропускаются.
+4. **Block 3 — глобальные настройки** не запускаются отдельной кнопкой, применяются ВНУТРИ Compute. velocity-jump нужен pxl2sm из preset. Kalman активируется per-part через `smooth=kalman`, параметры в Block 3 (нелогично визуально, но проще архитектурно).
+5. **Hampel параметры** — window=половина (реально 2win+1, дефолт 7→окно ≈0.5s @ 30fps), sigma=порог в robust σ через MAD*1.4826. Дал tuning guide: начать с 7/3, смотреть `%out` (норма <0.5% для bodycenter, 1-3% для paws), сверять через Video viewer. Hampel пропускает длинные выбросы (>20 кадров) и систематические DLC-ошибки — там нужны manual regions.
+
+В конце — bullet-list рекомендуемого первого знакомства с tab'ом.
+
+### Замечания на будущее (для меня)
+- Юзер не задавал вопросов про Save/analyzeSession integration. Если будет — заранее подумай: per-experiment `_PreprocessSettings.mat` с полем `metadata.dlcSchemaHash`; `analyzeSession` fast-path сравнивает имена bodyparts строкой, schema mismatch → fallback на legacy recompute.
+- Юзер не задал вопрос про Kalman параметры (Q, measNoiseScale) и formula R = scale / max(0.01, lk)^2. Если спросит — упомяну: lk=1 → R=scale (доверяет полностью); lk=0.05 → R=400*scale (heavy discount).
+- Юзер не задал вопрос про знание pickSmoothWindow — надо помнить что в analyzeSession heuristic ещё работает в legacy fallback (когда нет _Preprocessed.mat).
+- Если юзер захочет сделать Kalman per-part по-настоящему (разные Q/R для bodycenter vs nose) — добавить колонки в таблицу. Сейчас Q/R global.
+
 ### Лог
 Обновил оба лога этим turn'ом до того, как закончил отвечать.
 
