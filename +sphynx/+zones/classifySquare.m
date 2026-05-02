@@ -27,6 +27,7 @@ function zones = classifySquare(arenaMask, varargin)
     addParameter(p, 'CornerPoints', [], @(v) isempty(v) || (size(v,2) == 2));
     addParameter(p, 'NumStrips', 3, @(v) isnumeric(v) && v >= 1);
     addParameter(p, 'StripDirection', 'horizontal', @ischar);
+    addParameter(p, 'ArenaVertices', []);   % when set, strips align to arena sides
     parse(p, arenaMask, varargin{:});
 
     arenaMask = arenaMask > 0;
@@ -35,16 +36,15 @@ function zones = classifySquare(arenaMask, varargin)
         case 'corners-walls-center'
             zones = cornersWallsCenter(arenaMask, p.Results);
         case 'strips'
-            zones = sphynx.zones.partitionStrips(arenaMask, p.Results.NumStrips, p.Results.StripDirection);
-            % Also build _realout strips that include the outside-wall
-            % ring (arena inflated outward by wallW). Same N strips, same
-            % direction; user-facing names get a "_realout" suffix.
+            zones = sphynx.zones.partitionStrips(arenaMask, p.Results.NumStrips, ...
+                p.Results.StripDirection, 'ArenaVertices', p.Results.ArenaVertices);
             if ~isempty(p.Results.PixelsPerCm)
                 wallW = p.Results.WallWidthCm * p.Results.PixelsPerCm;
                 bwd = bwdist(arenaMask);
                 arenaRealOut = arenaMask | (bwd > 0 & bwd <= wallW);
                 stripsRealOut = sphynx.zones.partitionStrips(arenaRealOut, ...
-                    p.Results.NumStrips, p.Results.StripDirection);
+                    p.Results.NumStrips, p.Results.StripDirection, ...
+                    'ArenaVertices', p.Results.ArenaVertices);
                 for k = 1:numel(stripsRealOut)
                     stripsRealOut(k).name = sprintf('%s_realout', stripsRealOut(k).name);
                 end

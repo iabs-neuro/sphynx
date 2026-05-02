@@ -1366,10 +1366,19 @@ function Z = computeZonesFromUI(app)
                     'WallWidthCm', wallCm, ...
                     'CornerPoints', cornerPointsFromArena(app.State.arena));
             case 'strips'
+                % Pass arena vertices when geometry is Polygon so strips
+                % run parallel to the arena's sides (TODO #7).
+                arenaVerts = [];
+                if strcmp(app.State.arena.geometry, 'Polygon')
+                    arenaVerts = arenaPolygonVertices(app.State.arena);
+                end
                 Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, ...
                     'Strategy', 'strips', ...
+                    'PixelsPerCm', app.State.pxlPerCm, ...
+                    'WallWidthCm', wallCm, ...
                     'NumStrips', app.NumStripsField.Value, ...
-                    'StripDirection', app.StripDirDropDown.Value);
+                    'StripDirection', app.StripDirDropDown.Value, ...
+                    'ArenaVertices', arenaVerts);
             case 'circle-rings'
                 Z = sphynx.preset.buildZonesCircle(app.State.arena.mask, ...
                     'PixelsPerCm', app.State.pxlPerCm, ...
@@ -1386,6 +1395,22 @@ end
 
 function v = ifNaN(x, fallback)
     if isnan(x); v = fallback; else; v = x; end
+end
+
+function verts = arenaPolygonVertices(arena)
+    % Recover the user's clicked corners from the dense outline.
+    % border_separate_x is a cell array, one entry per arena side; the
+    % first point of each side is a corner.
+    if isfield(arena, 'border_separate_x') && ~isempty(arena.border_separate_x)
+        n = numel(arena.border_separate_x);
+        verts = zeros(n, 2);
+        for k = 1:n
+            verts(k, 1) = arena.border_separate_x{k}(1);
+            verts(k, 2) = arena.border_separate_y{k}(1);
+        end
+    else
+        verts = [arena.border_x(:), arena.border_y(:)];
+    end
 end
 
 function v = getOptField(s, name)
