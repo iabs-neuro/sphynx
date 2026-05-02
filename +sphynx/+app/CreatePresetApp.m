@@ -22,10 +22,17 @@ classdef CreatePresetApp < handle
         TabGroup
         TabCreate
         TabPreprocess
-        TabSynthetic
+        TabDefineActs
         TabAnalyze
-        PreprocessController    % handle to sphynx.app.PreprocessTabController
-        SyntheticController     % handle to sphynx.app.SyntheticDataTabController
+        TabBatch
+        TabPreprocessVideo
+        TabSynthetic
+        PreprocessController       % sphynx.app.PreprocessTabController
+        DefineActsController       % sphynx.app.DefineActsTabController
+        AnalyzeSessionController   % sphynx.app.AnalyzeSessionTabController
+        BatchAnalysisController    % sphynx.app.BatchAnalysisTabController
+        PreprocessVideoController  % sphynx.app.PreprocessVideoTabController
+        SyntheticController        % sphynx.app.SyntheticDataTabController
         % Layout containers
         OuterGrid
         LeftGrid
@@ -546,15 +553,24 @@ classdef CreatePresetApp < handle
             outerWrap.RowHeight = {'1x'};
             outerWrap.ColumnWidth = {'1x'};
             app.TabGroup = uitabgroup(outerWrap);
-            app.TabCreate = uitab(app.TabGroup, 'Title', 'Create Preset');
-            app.TabPreprocess = uitab(app.TabGroup, 'Title', 'Preprocess Tracking');
-            app.TabSynthetic = uitab(app.TabGroup, 'Title', 'Synthetic Data');
-            app.TabAnalyze = uitab(app.TabGroup, 'Title', 'Analyze Session');
+            % Order: Create Preset / Preprocess Tracking / Define Acts /
+            % Analyze Session / Batch Analysis / Preprocess Video /
+            % Synthetic Data (last).
+            app.TabCreate          = uitab(app.TabGroup, 'Title', 'Create Preset');
+            app.TabPreprocess      = uitab(app.TabGroup, 'Title', 'Preprocess Tracking');
+            app.TabDefineActs      = uitab(app.TabGroup, 'Title', 'Define Acts');
+            app.TabAnalyze         = uitab(app.TabGroup, 'Title', 'Analyze Session');
+            app.TabBatch           = uitab(app.TabGroup, 'Title', 'Batch Analysis');
+            app.TabPreprocessVideo = uitab(app.TabGroup, 'Title', 'Preprocess Video');
+            app.TabSynthetic       = uitab(app.TabGroup, 'Title', 'Synthetic Data');
 
             buildCreateTab(app);
-            app.PreprocessController = sphynx.app.PreprocessTabController(app.TabPreprocess, app);
-            app.SyntheticController = sphynx.app.SyntheticDataTabController(app.TabSynthetic, app);
-            buildAnalyzeTab(app);
+            app.PreprocessController      = sphynx.app.PreprocessTabController(app.TabPreprocess, app);
+            app.DefineActsController      = sphynx.app.DefineActsTabController(app.TabDefineActs, app);
+            app.AnalyzeSessionController  = sphynx.app.AnalyzeSessionTabController(app.TabAnalyze, app);
+            app.BatchAnalysisController   = sphynx.app.BatchAnalysisTabController(app.TabBatch, app);
+            app.PreprocessVideoController = sphynx.app.PreprocessVideoTabController(app.TabPreprocessVideo, app);
+            app.SyntheticController       = sphynx.app.SyntheticDataTabController(app.TabSynthetic, app);
         end
 
         function refocus(app)
@@ -854,24 +870,7 @@ function addMoveBtn(parent, col, txt, cb)
     b.Layout.Row = 1; b.Layout.Column = col;
 end
 
-function buildAnalyzeTab(app)
-    g = uigridlayout(app.TabAnalyze, [3, 1]);
-    g.RowHeight = {30, 30, '1x'};
-    lbl1 = uilabel(g, 'Text', 'Analyze Session — placeholder', 'FontSize', 16);
-    lbl1.Layout.Row = 1;
-    lbl2 = uilabel(g, 'Text', ['This tab will host the batch run UI for sphynx.pipeline.runBatch ' ...
-        'and sphynx.pipeline.analyzeSession. For now, run from the Command Window:']);
-    lbl2.Layout.Row = 2;
-    txt = uitextarea(g, 'Value', { ...
-        'cfg = sphynx.pipeline.defaultConfig();', ...
-        'cfg.paths.dlc = ''<repo>/Demo/DLC/<file>.csv'';', ...
-        'cfg.paths.preset = ''<saved preset>.mat'';', ...
-        'cfg.io.saveWorkspace = true;', ...
-        'cfg.paths.outDir = ''<output dir>'';', ...
-        'result = sphynx.pipeline.analyzeSession(cfg);'}, ...
-        'Editable', 'off');
-    txt.Layout.Row = 3;
-end
+% Analyze tab is now AnalyzeSessionTabController.
 
 % =================== Panel builders =======================================
 
