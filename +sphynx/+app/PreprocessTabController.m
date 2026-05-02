@@ -289,8 +289,11 @@ classdef PreprocessTabController < handle
                     val = str2double(raw);
                     if isnan(val); p = 0.05; else; p = max(0.001, min(0.999, val)); end
                 case 'preset'
-                    if isempty(raw); p = 'moderate'; return; end
-                    p = lower(raw);
+                    % Round-5: preset accepts a numeric value directly.
+                    % Empty -> 0.95 default.
+                    if isempty(raw); p = 0.95; return; end
+                    val = str2double(raw);
+                    if ~isnan(val); p = max(0, min(1, val)); else; p = lower(raw); end
                 otherwise
                     p = [];
             end
@@ -299,7 +302,7 @@ classdef PreprocessTabController < handle
         function onAutoMethodChanged(obj, method)
             switch lower(method)
                 case 'quantile'; obj.AutoParamField.Value = '0.05';
-                case 'preset';   obj.AutoParamField.Value = 'moderate';
+                case 'preset';   obj.AutoParamField.Value = '0.95';   % numeric default
                 otherwise;       obj.AutoParamField.Value = '';
             end
         end
@@ -988,7 +991,7 @@ classdef PreprocessTabController < handle
 
             obj.AutoParamField = uieditfield(autoRow, 'text', ...
                 'Value', '', ...
-                'Tooltip', 'param: quantile=0.05 / preset=aggressive|moderate|lax');
+                'Tooltip', 'param: quantile=0.05 (fraction) / preset=0.95 (numeric threshold)');
             obj.AutoParamField.Layout.Column = 3;
 
             bA1 = uibutton(autoRow, 'Text', 'Auto this', ...

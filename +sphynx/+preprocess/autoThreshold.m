@@ -107,8 +107,15 @@ function thr = kneeThreshold(L)
     end
 end
 
-function thr = presetThreshold(name)
-    switch lower(string(name))
+function thr = presetThreshold(value)
+    % Round-5: 'preset' now accepts a numeric value directly. The user
+    % types 0.95 (or whatever) into the Auto param field and that exact
+    % threshold is applied to every part. Legacy keywords still work.
+    if isnumeric(value)
+        thr = double(value);
+        return;
+    end
+    switch lower(string(value))
         case "aggressive"
             thr = 0.99;
         case "moderate"
@@ -116,7 +123,13 @@ function thr = presetThreshold(name)
         case "lax"
             thr = 0.60;
         otherwise
-            error('sphynx:autoThreshold:unknownPreset', ...
-                'Unknown preset: %s (use aggressive/moderate/lax)', name);
+            % Try parsing the string as a number ('0.95' typed in the box).
+            v = str2double(value);
+            if ~isnan(v)
+                thr = v;
+            else
+                error('sphynx:autoThreshold:unknownPreset', ...
+                    'Unknown preset: %s (use a number or aggressive/moderate/lax)', value);
+            end
     end
 end

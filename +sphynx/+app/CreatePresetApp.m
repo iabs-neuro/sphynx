@@ -1388,19 +1388,24 @@ function pickPresetStart(app)
         if isfield(preset.Options, 'NumFrames'); app.State.numFrames = preset.Options.NumFrames; end
     end
 
-    % Arena + objects from ArenaAndObjects struct array (element 1 = arena)
+    % Arena + objects from ArenaAndObjects struct array (element 1 = arena).
+    % NOTE: assemble each entry by field-by-field assignment instead of
+    % struct('field', value, ...). The latter expands cell-array values
+    % into a struct ARRAY (e.g. when border_separate_x is a cell), which
+    % would later make `app.State.arena.border_x` a comma-separated list
+    % and break isempty(...) downstream.
     if isfield(preset, 'ArenaAndObjects') && ~isempty(preset.ArenaAndObjects)
         AAO = preset.ArenaAndObjects;
         % Arena
         if numel(AAO) >= 1 && strcmp(AAO(1).type, 'Arena')
-            app.State.arena = struct( ...
-                'type',              'Arena', ...
-                'geometry',          AAO(1).geometry, ...
-                'border_x',          AAO(1).border_x, ...
-                'border_y',          AAO(1).border_y, ...
-                'border_separate_x', getFieldOr(AAO(1), 'border_separate_x', {}), ...
-                'border_separate_y', getFieldOr(AAO(1), 'border_separate_y', {}), ...
-                'mask',              logical(AAO(1).maskfilled));
+            arenaS.type     = 'Arena';
+            arenaS.geometry = AAO(1).geometry;
+            arenaS.border_x = AAO(1).border_x;
+            arenaS.border_y = AAO(1).border_y;
+            arenaS.border_separate_x = getFieldOr(AAO(1), 'border_separate_x', {});
+            arenaS.border_separate_y = getFieldOr(AAO(1), 'border_separate_y', {});
+            arenaS.mask     = logical(AAO(1).maskfilled);
+            app.State.arena = arenaS;
             % Sync the arena geometry toggle so the picker uses the right one
             app.State.arenaGeometry = AAO(1).geometry;
             for k = 1:numel(app.ArenaGeometryButtons)
@@ -1408,16 +1413,21 @@ function pickPresetStart(app)
                 btn.Value = strcmp(btn.Text, AAO(1).geometry);
             end
         end
-        % Objects
+        % Objects — assemble each one by field-by-field assignment too
         objs = struct('type', {}, 'geometry', {}, 'border_x', {}, ...
                       'border_y', {}, 'mask', {});
         for k = 2:numel(AAO)
-            objs(end+1) = struct( ...
-                'type',     AAO(k).type, ...
-                'geometry', AAO(k).geometry, ...
-                'border_x', AAO(k).border_x, ...
-                'border_y', AAO(k).border_y, ...
-                'mask',     logical(AAO(k).maskfilled)); %#ok<AGROW>
+            o.type     = AAO(k).type;
+            o.geometry = AAO(k).geometry;
+            o.border_x = AAO(k).border_x;
+            o.border_y = AAO(k).border_y;
+            o.mask     = logical(AAO(k).maskfilled);
+            if isempty(objs)
+                objs = o;
+            else
+                objs(end+1) = o; %#ok<AGROW>
+            end
+            clear o;
         end
         app.State.objects = objs;
         app.refreshObjectsList();
