@@ -80,6 +80,7 @@ classdef PreprocessTabController < handle
         ShowRawChk              % toggle raw curve overlay
         ShowInterpChk
         ShowSmoothChk
+        RefreshTimer            % debounce timer for viewport edits
 
         % Log
         LogTextArea
@@ -468,6 +469,20 @@ classdef PreprocessTabController < handle
             if idx < 1 || idx > n; return; end
             obj.State.manualRegions(idx) = [];
             obj.refreshRegionsListBox();
+        end
+
+        function scheduleRefresh(obj)
+            % Debounce viewport edits (~500ms). Each keystroke restarts the
+            % timer; only the last edit fires refreshPreview.
+            if ~isempty(obj.RefreshTimer) && isvalid(obj.RefreshTimer)
+                try; stop(obj.RefreshTimer); catch; end
+                try; delete(obj.RefreshTimer); catch; end
+            end
+            obj.RefreshTimer = timer( ...
+                'ExecutionMode', 'singleShot', ...
+                'StartDelay', 0.5, ...
+                'TimerFcn', @(~,~) obj.refreshPreview());
+            start(obj.RefreshTimer);
         end
 
         function refreshPreview(obj)
@@ -886,8 +901,10 @@ classdef PreprocessTabController < handle
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.computeSelected());
             b3.Layout.Column = 3;
+            % Compute all is the primary action — brighter rose, bold
             b4 = uibutton(btnRow, 'Text', 'Compute all', ...
-                'BackgroundColor', semanticColor('action'), ...
+                'BackgroundColor', [1.00 0.55 0.55], ...
+                'FontWeight', 'bold', ...
                 'ButtonPushedFcn', @(~,~) obj.computeAll());
             b4.Layout.Column = 4;
 
@@ -918,8 +935,10 @@ classdef PreprocessTabController < handle
                 'BackgroundColor', semanticColor('info'), ...
                 'ButtonPushedFcn', @(~,~) obj.autoThresholdPart(obj.State.currentBodyPart));
             bA1.Layout.Column = 4;
+            % Auto all — primary action, brighter
             bA2 = uibutton(autoRow, 'Text', 'Auto all', ...
-                'BackgroundColor', semanticColor('info'), ...
+                'BackgroundColor', [0.55 0.85 1.00], ...
+                'FontWeight', 'bold', ...
                 'ButtonPushedFcn', @(~,~) obj.autoThresholdAll());
             bA2.Layout.Column = 5;
         end
@@ -1021,25 +1040,27 @@ classdef PreprocessTabController < handle
             viewport.Padding = [0 0 0 0];
             viewport.ColumnSpacing = 4;
 
+            % Viewport edits use debounce (500ms) so the user can type
+            % numbers without each keystroke triggering a full redraw.
             uilabel(viewport, 'Text', 'from:', 'HorizontalAlignment', 'right');
             obj.FromFrameField = uieditfield(viewport, 'numeric', ...
                 'Value', 1, 'Limits', [1 Inf], 'RoundFractionalValues', 'on', ...
-                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
             uilabel(viewport, 'Text', 'to:', 'HorizontalAlignment', 'right');
             obj.ToFrameField = uieditfield(viewport, 'numeric', ...
                 'Value', 0, 'Limits', [0 Inf], 'RoundFractionalValues', 'on', ...
                 'Tooltip', '0 = last frame', ...
-                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
             uilabel(viewport, 'Text', 'X:', 'HorizontalAlignment', 'right');
             obj.XUnitsDropDown = uidropdown(viewport, ...
                 'Items', {'frame', 'sec', 'min'}, 'Value', 'sec', ...
-                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
             obj.ShowRawChk = uicheckbox(viewport, 'Text', 'raw', 'Value', true, ...
-                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
             obj.ShowInterpChk = uicheckbox(viewport, 'Text', 'interp', 'Value', true, ...
-                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
             obj.ShowSmoothChk = uicheckbox(viewport, 'Text', 'smoothed', 'Value', true, ...
-                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
         end
 
         function buildSwitcherRow(obj, parent)
