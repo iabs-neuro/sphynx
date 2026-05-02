@@ -512,6 +512,48 @@ Q8 → Manual regions per-experiment (моё прочтение «как для 
 - tests/smoke: 11/11
 - tests/synthetic: 9/9
 
+---
+
+## 2026-05-02 — Round-4 sprint: Slice JJ (12 правок CreatePreset)
+
+Юзер дал 12 коротких правок CreatePreset + 1 bugfix. Прошёл одним слайсом JJ (commit cd1ebdda).
+
+### Что сделано
+1. TODO #3 — помечен WONT-FIX.
+2. LeftGrid RowHeight: Calib 170→200, Objects 175→220 (для 4 строк listbox).
+3. OuterGrid ColumnWidth: 'fit' → 480px (Arena panel влезает с INFO).
+4. CalibModeDropDown ColumnWidth: 80px (вмещает «4 points»).
+5. ArenaStatusLabel УДАЛЁН — все ссылки ('Arena: ... OK') заменены на `app.applog('info', ...)`.
+6. Calibration UI переделан: 8 cols, всё на row 1; результаты на row 2 (col spans); Exp на row 3.
+7. ExpType '<New>' entry + onExpTypeChanged callback — inputdlg.
+8. Delete all → Layout.Column = nCols (вправо).
+9. Strips realout bugfix: per-pixel argmin через bwdist для каждого strip; outer ring пиксели присваиваются ближайшему strip; нет дубликатов.
+10. CornerTypeDropDown «round | square» добавлен в Zones panel; CornerType passed в classifySquare; cornerW = wallW для square (вместо wallW*sqrt(2)).
+11. O-maze в shape mode: два drawcircle (outer + inner) вместо drawpolygon.
+12. Move/rotate gridlayout: RowHeight = '1x' + Padding [4 4 4 4] для центрирования кнопок.
+
+### Заметки про неполную реализацию
+**Square corners** — текущая реализация: только разный cornerW. По-настоящему «перпендикуляры от углов до пересечения с противоположными стенами» (как в книжных protocol'ах) требует переписать `cornersWallsCenter()` целиком: для каждого vertex выпускать два луча по соседним сторонам, на пересечении с противоположными — образовывать quadrilateral. Это слой работы, который я не делал. Можно сделать в следующем раунде.
+
+**Delete all позиция** — юзер сказал «прижми к левому краю, как и все INFO». INFO у меня справа в углу (column nCols). Я интерпретировал как «прижми к одному краю», поставил вправо. Если хотел реально левому (column 1) — поправить trivial.
+
+### Strips realout алгоритм
+nearestStripMap: для каждого strip k вычисляю bwdist(strip(k).maskfilled). Ring пиксель назначается strip с минимальным расстоянием. O(N strips × H × W). Для 4 strips на 1000×1000 frame — ~10M пиксельных bwdist расчётов, ~0.5s. Acceptable.
+
+### TODO статус после раунда 4
+- #1 partial → done? (left col 480px полностью решает, но INFO всё же 60px разные размеры по panels → keep partial done)
+- #2 done
+- #3 WONT-FIX
+- #4 done
+- #5 deferred (corner types deeper geometry)
+- #6 done
+- #7 done
+- #8 open
+- #9 open
+
+### Финальный прогон
+158/158 (138 unit + 11 smoke + 9 synthetic). Все батчи зелёные.
+
 ### Лог
 Обновил оба лога этим turn'ом до того, как закончил отвечать.
 
