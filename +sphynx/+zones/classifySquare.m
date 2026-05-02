@@ -119,7 +119,7 @@ function zones = cornersWallsCenter(arenaMask, opts)
         if isSquareCorner
             % Build a parallelogram per vertex from the two adjacent edges.
             cornersPadded = squareCornerMask(paddedMask, opts.CornerPoints, ...
-                wallW, pad);
+                wallW, pad, 'inner');
             % Restrict to wall band (interior of wallW)
             cornersPadded = cornersPadded & wallsAndCornersPadded;
         else
@@ -147,20 +147,29 @@ function zones = cornersWallsCenter(arenaMask, opts)
     arenaRealOutPadded = paddedMask | outerRing;
     wallsAndCornersRealOutPadded = arenaRealOutPadded & ~centerPadded;
 
-    % Split the outer ring between corners and walls by proximity to
-    % corner points (so corners_realout grows from the corners and
-    % walls_realout grows from the wall segments).
+    % Split the outer ring between corners and walls. Round mode = round
+    % disk via bwdist from the corner point. Square mode = the same
+    % parallelogram extended in the OPPOSITE direction (e1 -> -e1, e2 ->
+    % -e2) so the outside corner is a continuation of the inside one
+    % across the vertex (round-5 fix: previously outer used a circular
+    % bwdist disk, breaking the visual continuity with the inner square).
     if ~isempty(opts.CornerPoints)
-        cornerSeed = false(size(paddedMask));
-        for i = 1:size(opts.CornerPoints, 1)
-            cx = round(opts.CornerPoints(i,1)) + pad;
-            cy = round(opts.CornerPoints(i,2)) + pad;
-            if cx >= 1 && cx <= size(paddedMask,2) && cy >= 1 && cy <= size(paddedMask,1)
-                cornerSeed(cy, cx) = true;
+        if isSquareCorner
+            outerNearCorners = squareCornerMask(paddedMask, opts.CornerPoints, ...
+                wallW, pad, 'outer');
+            outerNearCorners = outerNearCorners & outerRing;
+        else
+            cornerSeed = false(size(paddedMask));
+            for i = 1:size(opts.CornerPoints, 1)
+                cx = round(opts.CornerPoints(i,1)) + pad;
+                cy = round(opts.CornerPoints(i,2)) + pad;
+                if cx >= 1 && cx <= size(paddedMask,2) && cy >= 1 && cy <= size(paddedMask,1)
+                    cornerSeed(cy, cx) = true;
+                end
             end
+            distToCorner = bwdist(cornerSeed);
+            outerNearCorners = outerRing & (distToCorner <= cornerW);
         end
-        distToCorner = bwdist(cornerSeed);
-        outerNearCorners = outerRing & (distToCorner <= cornerW);
     else
         outerNearCorners = false(size(paddedMask));
     end
@@ -188,35 +197,51 @@ function zone = mkZone(name, paddedMask, pad)
     zone.maskfilled = paddedMask(pad+1 : pad+H, pad+1 : pad+W);
 end
 
-function mask = squareCornerMask(paddedMask, cornerPoints, wallW, pad)
-    % Build a "square corner" parallelogram at each vertex: the two
-    % perpendiculars from the vertex along its adjacent edges, each of
-    % length wallW, span a quadrilateral [V, V+wallW*e1, V+wallW*(e1+e2),
-    % V+wallW*e2]. Inpolygon-test on a per-vertex basis, OR the masks.
+function mask = squareCornerMask(paddedMask, cornerPoints, wallW, pad, mode)
+    % Build a "square corner" parallelogram at each vertex.
+    %
+    %   mode = 'inner' (default) — quadrilateral inside the arena,
+    %                              spanned by edges from V toward the two
+    %                              neighboring corners ([V, V+L1*e1,
+    %                              V+L1*e1+L2*e2, V+L2*e2]).
+    %   mode = 'outer'           — same shape, mirrored across V (e1 →
+    %                              -e1, e2 → -e2). Lies outside the arena
+    %                              and extends each side outward by wallW.
+    %                              Used for corners_realout so the outside
+    %                              corner is a straight continuation of
+    %                              the inside one across the vertex.
+    %
+    % Caller intersects the result with arenaMask (inner) or outerRing
+    % (outer) as needed.
+    if nargin < 5 || isempty(mode); mode = 'inner'; end
+    sgn = 1;
+    if strcmpi(mode, 'outer'); sgn = -1; end
+
     [Hp, Wp] = size(paddedMask);
-    [yIdx, xIdx] = find(paddedMask);
+    [yIdx, xIdx] = find(true(Hp, Wp));
     mask = false(Hp, Wp);
     n = size(cornerPoints, 1);
     if n < 3; return; end
     for i = 1:n
         prev = mod(i-2, n) + 1;
         next = mod(i,   n) + 1;
-        V = cornerPoints(i, :) + pad;       % vertex in padded coords
-        % Edge directions OUTWARD from the vertex (toward the prev / next
-        % corner). Lengths normalized.
+        V = cornerPoints(i, :) + pad;
         e1 = cornerPoints(prev, :) - cornerPoints(i, :);
         e2 = cornerPoints(next, :) - cornerPoints(i, :);
         n1 = norm(e1); if n1 == 0; continue; end
         n2 = norm(e2); if n2 == 0; continue; end
         e1 = e1 / n1; e2 = e2 / n2;
-        % Don't extend beyond the actual side length
-        L1 = min(wallW, n1);
-        L2 = min(wallW, n2);
-        % Quadrilateral vertices (CCW or CW — inpolygon doesn't care)
+        % Inner: don't extend past the actual side length. Outer: full wallW.
+        if sgn > 0
+            L1 = min(wallW, n1);
+            L2 = min(wallW, n2);
+        else
+            L1 = wallW; L2 = wallW;
+        end
         P1 = V;
-        P2 = V + L1 * e1;
-        P3 = V + L1 * e1 + L2 * e2;
-        P4 = V + L2 * e2;
+        P2 = V + sgn * L1 * e1;
+        P3 = V + sgn * L1 * e1 + sgn * L2 * e2;
+        P4 = V + sgn * L2 * e2;
         polyX = [P1(1), P2(1), P3(1), P4(1)];
         polyY = [P1(2), P2(2), P3(2), P4(2)];
         in = inpolygon(xIdx, yIdx, polyX, polyY);

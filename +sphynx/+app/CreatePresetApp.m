@@ -768,7 +768,9 @@ function buildCreateTab(app)
     %   panel title ≈ 145), Row 3 Arena (2 rows × 28 + title ≈ 95),
     %   Row 4 Objects (180 fits ~4 listbox entries + buttons),
     %   Row 5 Zones (245), Row 6 Save (75).
-    app.LeftGrid.RowHeight = {100, 145, 95, 150, 245, 75};
+    % Block 4 (Objects) bumped 150 -> 270 — even 2 entries forced a
+    % scrollbar at 150; user wants ~7+ to fit comfortably.
+    app.LeftGrid.RowHeight = {100, 145, 95, 270, 245, 75};
     app.LeftGrid.RowSpacing = 4;
     app.LeftGrid.Padding = [4 4 4 4];
 
@@ -969,13 +971,14 @@ end
 function buildArenaPanel(app)
     % Round-5: split into two rows.
     %   Row 1: 4 yellow geometry toggles + flex spacer + INFO (right edge).
-    %   Row 2: Pick mode + Pick arena + Clear (left-aligned).
+    %   Row 2: Pick mode + Pick arena + flex spacer + Clear (right edge).
     nGeom = 4;       % Polygon / Circle / Ellipse / O-maze
     g = uigridlayout(app.ArenaPanel, [2, nGeom + 2]);
     g.RowHeight = {28, 28};
     g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {55}];
     g.RowSpacing = 4;
     g.ColumnSpacing = 4;
+    g.Padding = [4 4 4 4];
 
     geometries = {'Polygon', 'Circle', 'Ellipse', 'O-maze'};
     app.ArenaGeometryButtons = cell(1, numel(geometries));
@@ -1007,7 +1010,7 @@ function buildArenaPanel(app)
         'BackgroundColor', [0.92 0.55 0.55], ...
         'Tooltip', 'Drop the arena mask (clears dependent zones too)', ...
         'ButtonPushedFcn', @(~,~) app.clearArena());
-    bClear.Layout.Row = 2; bClear.Layout.Column = 3;
+    bClear.Layout.Row = 2; bClear.Layout.Column = nGeom + 2;   % flush right
 end
 
 function buildObjectsPanel(app)
