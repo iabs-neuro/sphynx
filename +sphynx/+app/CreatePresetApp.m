@@ -456,7 +456,7 @@ classdef CreatePresetApp < handle
                     title(ax2, sprintf('%s — zone: %s', baseName, z.name), 'Interpreter', 'none');
                     outPath2 = fullfile(sessionDir, sprintf('%s_zone_%s.png', baseName, sanitize(z.name)));
                     exportgraphics(ax2, outPath2);
-                    sphynx.util.log('info', '[App] saved plot %s', outPath2);
+                    app.applog('info', 'saved plot %s', outPath2);
                     clear cleanup2;
                 end
             end
@@ -690,6 +690,11 @@ classdef CreatePresetApp < handle
             Options.NumStrips       = app.NumStripsField.Value;
             Options.StripDirection  = app.StripDirDropDown.Value;
             Options.ObjectZoneWidthCm = app.ObjectZoneWidthField.Value;
+            % Save the cm distances the user typed during calibration so
+            % that loading this preset later can restore the same values
+            % into the cm Y / cm X fields (round-5 fix).
+            Options.DistanceYCm = app.DistanceYField.Value;
+            Options.DistanceXCm = app.DistanceXField.Value;
         end
 
         function ArenaAndObjects = assembleArenaAndObjects(app)
@@ -1371,11 +1376,25 @@ function pickPresetStart(app)
     app.PresetPathField.Value = app.State.presetPath;
     preset = sphynx.io.readPreset(app.State.presetPath);
 
-    % Calibration
+    % Calibration — pxl/cm and the cm Y / cm X distances the user typed
     if isfield(preset.Options, 'pxl2sm')
         kcorr = ifNaN(getOptField(preset.Options, 'x_kcorr'), 1);
         app.setPixelsPerCm(preset.Options.pxl2sm, 'Y', preset.Options.pxl2sm, ...
             'X', preset.Options.pxl2sm / kcorr, 'KCorr', kcorr);
+    end
+    if isfield(preset.Options, 'DistanceYCm') && ~isempty(preset.Options.DistanceYCm)
+        app.DistanceYField.Value = preset.Options.DistanceYCm;
+    end
+    if isfield(preset.Options, 'DistanceXCm') && ~isempty(preset.Options.DistanceXCm)
+        app.DistanceXField.Value = preset.Options.DistanceXCm;
+    end
+    if isfield(preset.Options, 'ExperimentType') && ~isempty(preset.Options.ExperimentType)
+        items = app.ExpTypeDropDown.Items;
+        if ~ismember(preset.Options.ExperimentType, items)
+            items{end+1} = preset.Options.ExperimentType;
+            app.ExpTypeDropDown.Items = items;
+        end
+        app.ExpTypeDropDown.Value = preset.Options.ExperimentType;
     end
 
     % Frame size + GoodVideoFrame if no video has been loaded yet
@@ -1613,7 +1632,7 @@ function tIdx = currentTargetIdx(app)
     if strcmp(val, 'All')
         tIdx = -1;   % sentinel: arena + all objects
     elseif strcmp(val, 'Arena')
-        if isempty(app.State.arena); tIdx = NaN; sphynx.util.log('warn','[App] Arena not defined yet'); return; end
+        if isempty(app.State.arena); tIdx = NaN; app.applog('warn','Arena not defined yet'); return; end
         tIdx = 0;
     else
         tIdx = find(strcmp({app.State.objects.type}, val), 1);
@@ -1778,7 +1797,7 @@ function autoSaveLayoutPlot(app, sessionDir, baseName)
     title(ax, sprintf('%s — combined layout', baseName), 'Interpreter', 'none');
     outPath = fullfile(sessionDir, sprintf('%s_layout.png', baseName));
     exportgraphics(ax, outPath);
-    sphynx.util.log('info', '[App] saved plot %s', outPath);
+    app.applog('info', 'saved plot %s', outPath);
 end
 
 function savePerZonePlots(app, sessionDir, baseName)
@@ -1797,7 +1816,7 @@ function savePerZonePlots(app, sessionDir, baseName)
         title(ax, sprintf('%s — zone: %s', baseName, z.name), 'Interpreter', 'none');
         outPath = fullfile(sessionDir, sprintf('%s_zone_%s.png', baseName, sanitize(z.name)));
         exportgraphics(ax, outPath);
-        sphynx.util.log('info', '[App] saved plot %s', outPath);
+        app.applog('info', 'saved plot %s', outPath);
         clear cleanup;
     end
 end
