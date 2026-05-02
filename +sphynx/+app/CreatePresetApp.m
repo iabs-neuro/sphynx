@@ -67,6 +67,7 @@ classdef CreatePresetApp < handle
         % Save / plot
         PlotAllCheckbox
         % Preview
+        PreviewPanel
         PreviewAxes
         FrameIndexLabel
         % Move/rotate
@@ -108,6 +109,7 @@ classdef CreatePresetApp < handle
                     app.FrameIndexLabel.Text = sprintf('Frame %d / %d', 1, app.State.numFrames);
                 end
                 app.refreshPreview();
+                app.refreshPreviewTitle();
                 app.status(sprintf('Loaded video: %dx%d, %d frames @ %.1f fps', ...
                     app.State.width, app.State.height, app.State.numFrames, app.State.frameRate));
             catch ME
@@ -350,6 +352,51 @@ classdef CreatePresetApp < handle
             app.refreshZonesLabel();
             app.refreshPreview();
             app.status('Cleared all zones');
+        end
+
+        function clearArena(app)
+            % CLEARARENA  Drop the arena mask (zones get cleared too because
+            % they were built relative to that arena).
+            app.State.arena = [];
+            app.clearZones();
+            app.refreshPreview();
+            app.status('Cleared arena');
+        end
+
+        function deleteAllObjects(app)
+            % DELETEALLOBJECTS  Wipe every object. Zones lose their object
+            % zones via the same auto-clear contract.
+            app.State.objects = struct('type', {}, 'geometry', {}, ...
+                'border_x', {}, 'border_y', {}, 'mask', {});
+            app.refreshObjectsList();
+            app.clearZones();
+            app.refreshPreview();
+            app.status('Deleted all objects');
+        end
+
+        function refreshPreviewTitle(app)
+            if isempty(app.PreviewPanel) || ~isvalid(app.PreviewPanel); return; end
+            if isempty(app.State.videoPath)
+                app.PreviewPanel.Title = 'Preview (no video loaded)';
+                return;
+            end
+            [~, base, ext] = fileparts(app.State.videoPath);
+            app.PreviewPanel.Title = upper([base ext]);
+        end
+
+        function clearAll(app)
+            % CLEARALL  Reset arena, objects, zones (paths and calibration
+            % stay so the user can re-pick geometry on the same video).
+            app.State.arena = [];
+            app.State.objects = struct('type', {}, 'geometry', {}, ...
+                'border_x', {}, 'border_y', {}, 'mask', {});
+            app.State.zones = struct('name', {}, 'type', {}, 'maskfilled', {});
+            app.State.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
+            app.State.zoneStrategies = {};
+            app.refreshObjectsList();
+            app.refreshZonesLabel();
+            app.refreshPreview();
+            app.status('Cleared all geometry (paths and calibration kept)');
         end
 
         function savePreset(app)
@@ -733,8 +780,10 @@ function buildCreateTab(app)
     app.RightGrid.Layout.Column = 2;
     app.RightGrid.RowHeight = {'1x', 40, 40, 130};
     app.RightGrid.RowSpacing = 3;
-    previewWrap = uipanel(app.RightGrid, 'Title', 'Preview');
-    pg = uigridlayout(previewWrap, [1, 1]);
+    app.PreviewPanel = uipanel(app.RightGrid, 'Title', 'Preview', ...
+        'FontSize', 14, 'FontWeight', 'bold', ...
+        'ForegroundColor', [0.55 0.10 0.10]);   % bordo
+    pg = uigridlayout(app.PreviewPanel, [1, 1]);
     app.PreviewAxes = uiaxes(pg);
     app.PreviewAxes.XTick = []; app.PreviewAxes.YTick = [];
 
@@ -884,11 +933,11 @@ end
 
 function buildArenaPanel(app)
     nGeom = 4;       % Polygon / Circle / Ellipse / O-maze
-    % Layout: nGeom geometry buttons | flex spacer | action btn | INFO btn
-    nCols = nGeom + 3;
+    % Layout: nGeom geometry buttons | flex spacer | Pick | Clear | INFO
+    nCols = nGeom + 4;
     g = uigridlayout(app.ArenaPanel, [2, nCols]);
     g.RowHeight = {28, 25};
-    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {'fit'}, {50}];
+    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {'fit'}, {70}, {60}];
     g.ColumnSpacing = 4;
 
     geometries = {'Polygon', 'Circle', 'Ellipse', 'O-maze'};
@@ -907,10 +956,15 @@ function buildArenaPanel(app)
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onPickArena(app));
     bArena.Layout.Row = 1; bArena.Layout.Column = nGeom + 2;
+    bClear = uibutton(g, 'Text', 'Clear', ...
+        'BackgroundColor', [0.92 0.55 0.55], ...
+        'Tooltip', 'Drop the arena mask (clears dependent zones too)', ...
+        'ButtonPushedFcn', @(~,~) app.clearArena());
+    bClear.Layout.Row = 1; bClear.Layout.Column = nGeom + 3;
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Arena', helpArenaText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 3;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 4;
 
     app.ArenaStatusLabel = uilabel(g, 'Text', 'Arena: <none>');
     app.ArenaStatusLabel.Layout.Row = 2; app.ArenaStatusLabel.Layout.Column = [1 nCols];
@@ -960,6 +1014,12 @@ function buildObjectsPanel(app)
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.renameSelectedObject());
     bRename.Layout.Row = 3; bRename.Layout.Column = 3;
+
+    bDelAll = uibutton(g, 'Text', 'Delete all', ...
+        'BackgroundColor', [0.92 0.55 0.55], ...
+        'Tooltip', 'Remove all objects (and dependent object zones)', ...
+        'ButtonPushedFcn', @(~,~) app.deleteAllObjects());
+    bDelAll.Layout.Row = 3; bDelAll.Layout.Column = nGeom + 2;
 end
 
 function onArenaGeometryToggle(app, src)
@@ -1055,9 +1115,9 @@ function buildZonesPanel(app)
 end
 
 function buildSavePanel(app)
-    g = uigridlayout(app.SavePanel, [1 4]);
+    g = uigridlayout(app.SavePanel, [1 5]);
     g.RowHeight = {28};
-    g.ColumnWidth = {'fit', 'fit', '1x', 50};
+    g.ColumnWidth = {'fit', 'fit', '1x', 90, 60};
     g.ColumnSpacing = 4;
     bSave = uibutton(g, 'Text', 'Save preset', ...
         'BackgroundColor', semanticColor('action'), ...
@@ -1065,10 +1125,16 @@ function buildSavePanel(app)
     bSave.Layout.Row = 1; bSave.Layout.Column = 1;
     app.PlotAllCheckbox = uicheckbox(g, 'Text', 'plot all zones', 'Value', false);
     app.PlotAllCheckbox.Layout.Row = 1; app.PlotAllCheckbox.Layout.Column = 2;
+    bClearAll = uibutton(g, 'Text', 'Clear All', ...
+        'BackgroundColor', [0.92 0.55 0.55], ...
+        'FontWeight', 'bold', ...
+        'Tooltip', 'Wipe arena, objects and zones (paths and calibration kept)', ...
+        'ButtonPushedFcn', @(~,~) app.clearAll());
+    bClearAll.Layout.Row = 1; bClearAll.Layout.Column = 4;
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Save', helpSaveText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = 4;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 5;
 end
 
 % buildStatusPanel removed — status now goes to command-line log only.
@@ -1351,14 +1417,20 @@ function tIdx = currentTargetIdx(app)
     end
 end
 
-function applyTransformToTarget(app, tIdx, translation, rotationDeg)
+function applyTransformToTarget(app, tIdx, translation, rotationDeg, sharedPivot)
+    % SHAREDPIVOT (optional): when not empty, rotation uses this [x y] as
+    % the pivot instead of the entity's own centroid. Used by tIdx==-1
+    % ('All') so every child rotates around the same point — the arena
+    % centroid — preserving relative positions (TODO #6 fix).
+    if nargin < 5; sharedPivot = []; end
     if tIdx == -1
-        % Apply same transform to arena and every object.
+        % Compute a shared pivot once for the whole batch
+        pivot = computeSharedPivot(app);
         if ~isempty(app.State.arena)
-            applyTransformToTarget(app, 0, translation, rotationDeg);
+            applyTransformToTarget(app, 0, translation, rotationDeg, pivot);
         end
         for k = 1:numel(app.State.objects)
-            applyTransformToTarget(app, k, translation, rotationDeg);
+            applyTransformToTarget(app, k, translation, rotationDeg, pivot);
         end
         return;
     end
@@ -1368,7 +1440,11 @@ function applyTransformToTarget(app, tIdx, translation, rotationDeg)
         ent = app.State.objects(tIdx);
     end
     if isempty(ent); return; end
-    cx = mean(ent.border_x(:)); cy = mean(ent.border_y(:));
+    if ~isempty(sharedPivot)
+        cx = sharedPivot(1); cy = sharedPivot(2);
+    else
+        cx = mean(ent.border_x(:)); cy = mean(ent.border_y(:));
+    end
     rad = deg2rad(rotationDeg);
     R = [cos(rad), -sin(rad); sin(rad), cos(rad)];
     bx = ent.border_x(:) - cx;
@@ -1389,6 +1465,17 @@ function applyTransformToTarget(app, tIdx, translation, rotationDeg)
         app.State.arena = ent;
     else
         app.State.objects(tIdx) = ent;
+    end
+end
+
+function pivot = computeSharedPivot(app)
+    if ~isempty(app.State.arena) && ~isempty(app.State.arena.border_x)
+        pivot = [mean(app.State.arena.border_x(:)), mean(app.State.arena.border_y(:))];
+    elseif ~isempty(app.State.frame)
+        [Hf, Wf, ~] = size(app.State.frame);
+        pivot = [Wf/2, Hf/2];
+    else
+        pivot = [0, 0];
     end
 end
 
