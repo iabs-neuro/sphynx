@@ -116,6 +116,36 @@ classdef PreprocessTabController < handle
             obj.syncPathFields();
         end
 
+        function loadSynthetic(obj)
+            % LOADSYNTHETIC  Generate a default synthetic DLC scenario in
+            % a temp file and load it as if it were a real csv. Useful
+            % for poking at the preprocess pipeline without a real session.
+            try
+                tmp = tempname();
+                csvPath = [tmp '.csv'];
+                synth = sphynx.preprocess.makeSyntheticDLC( ...
+                    'CsvPath', csvPath, 'OutlierMode', 'mixed');
+                obj.State.paths.dlc = csvPath;
+                obj.State.paths.preset = '';
+                obj.State.paths.video = '';
+                obj.syncPathFields();
+                obj.applog('info', 'Synthetic DLC generated: %d frames, %d parts (mixed outliers)', ...
+                    synth.nFrames, numel(synth.bodyPartsNames));
+                % Stash a minimal preset-like struct so velocity-jump and
+                % bounds work without requiring an actual preset file.
+                pd.Options.Width = synth.frameWidth;
+                pd.Options.Height = synth.frameHeight;
+                pd.Options.FrameRate = synth.frameRate;
+                pd.Options.pxl2sm = synth.pixelsPerCm;
+                pd.Options.GoodVideoFrame = uint8(zeros(synth.frameHeight, synth.frameWidth, 3) + 64);
+                obj.State.presetData = pd;
+                obj.State.frame = pd.Options.GoodVideoFrame;
+                obj.loadAll();
+            catch ME
+                obj.applog('error', 'loadSynthetic failed: %s', ME.message);
+            end
+        end
+
         function loadAll(obj)
             % LOADALL  Validate paths and load DLC + preset frame.
             obj.collectPathsFromFields();
@@ -715,11 +745,16 @@ classdef PreprocessTabController < handle
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
             obj.PresetField.Layout.Row = 2; obj.PresetField.Layout.Column = 4;
 
-            % Bottom row: full-width Load button
+            % Bottom row: full-width Load button + Load synthetic button
             btnLoad = uibutton(g, 'Text', 'Load', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.loadAll());
-            btnLoad.Layout.Row = 3; btnLoad.Layout.Column = [1 4];
+            btnLoad.Layout.Row = 3; btnLoad.Layout.Column = [1 3];
+
+            btnSynth = uibutton(g, 'Text', 'Load synthetic', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ButtonPushedFcn', @(~,~) obj.loadSynthetic());
+            btnSynth.Layout.Row = 3; btnSynth.Layout.Column = 4;
 
             % Try to inherit project root from sibling Preset tab
             obj.inheritRootFromParentApp();

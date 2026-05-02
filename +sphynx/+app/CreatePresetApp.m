@@ -22,8 +22,10 @@ classdef CreatePresetApp < handle
         TabGroup
         TabCreate
         TabPreprocess
+        TabSynthetic
         TabAnalyze
         PreprocessController    % handle to sphynx.app.PreprocessTabController
+        SyntheticController     % handle to sphynx.app.SyntheticDataTabController
         % Layout containers
         OuterGrid
         LeftGrid
@@ -495,10 +497,12 @@ classdef CreatePresetApp < handle
             app.TabGroup = uitabgroup(outerWrap);
             app.TabCreate = uitab(app.TabGroup, 'Title', 'Create Preset');
             app.TabPreprocess = uitab(app.TabGroup, 'Title', 'Preprocess Tracking');
+            app.TabSynthetic = uitab(app.TabGroup, 'Title', 'Synthetic Data');
             app.TabAnalyze = uitab(app.TabGroup, 'Title', 'Analyze Session');
 
             buildCreateTab(app);
             app.PreprocessController = sphynx.app.PreprocessTabController(app.TabPreprocess, app);
+            app.SyntheticController = sphynx.app.SyntheticDataTabController(app.TabSynthetic, app);
             buildAnalyzeTab(app);
         end
 
