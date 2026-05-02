@@ -763,10 +763,12 @@ function buildCreateTab(app)
     % Per-panel height = sum(rowHeights) + (n-1)*rowSpacing + 8 padding
     %                    + ~25 panel title bar. Row heights are 28 px
     %                    uniformly; Scrollable wrapper handles overflow.
-    % Row 1 Load (100), Row 2 Calib (3 rows × 28 + padding ≈ 120),
-    % Row 3 Arena (2 rows × 28 + title ≈ 95), Row 4 Objects (180 fits 4
-    % listbox entries + buttons), Row 5 Zones (245), Row 6 Save (75).
-    app.LeftGrid.RowHeight = {100, 120, 95, 180, 245, 75};
+    % Tuned visually from a screenshot:
+    %   Row 1 Load (100), Row 2 Calib (3 rows × 28 + spacing + padding +
+    %   panel title ≈ 145), Row 3 Arena (2 rows × 28 + title ≈ 95),
+    %   Row 4 Objects (180 fits ~4 listbox entries + buttons),
+    %   Row 5 Zones (245), Row 6 Save (75).
+    app.LeftGrid.RowHeight = {100, 145, 95, 150, 245, 75};
     app.LeftGrid.RowSpacing = 4;
     app.LeftGrid.Padding = [4 4 4 4];
 
@@ -897,13 +899,15 @@ function addLoadCol(g, col, btnText, btnFcn, fieldKey, app)
 end
 
 function buildCalibPanel(app)
-    % Round-4: combined Choose / cm Y / cm X / Compute on one row.
-    % 8 columns: Choose | mode-dropdown | cm-Y label | cm-Y val |
-    %            cm-X label | cm-X val | Compute | INFO
-    g = uigridlayout(app.CalibPanel, [4 8]);
-    g.RowHeight = {28, 28, 28, 28};
+    % Round-4 / Round-5: 3 rows total.
+    %   Row 1: Choose | mode | cm Y | val | cm X | val | Compute | INFO
+    %   Row 2: result labels (Y: / X: / avg: / kcorr:)
+    %   Row 3: Exp dropdown spanning the full width
+    g = uigridlayout(app.CalibPanel, [3 8]);
+    g.RowHeight = {28, 28, 28};
     g.ColumnWidth = {70, 80, 'fit', 50, 'fit', 50, 'fit', 50};
     g.ColumnSpacing = 4;
+    g.RowSpacing = 4;
 
     % Row 1: Choose | mode | cm Y | cmYval | cm X | cmXval | Compute | INFO
     bChoose = uibutton(g, 'Text', 'Choose', ...
