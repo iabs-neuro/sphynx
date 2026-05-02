@@ -8,20 +8,16 @@ polish pass — do not start them without explicit go-ahead.
 ## Cosmetic
 
 ### 1. Block widths / dropdown widths uniformity, INFO width consistency
-- All `INFO` buttons should be visually identical width. Current: 50 px
-  in some panels, 60 px in others. Pick one (probably 60).
-- Dropdowns inside calibration / objects / arena have slightly
-  different metrics; review and unify.
-- Some panel widths "wobble" depending on content; tighten.
+**STATUS: PARTIALLY DONE (Slice AA / Round-3, 2026-05-02).** INFO buttons
+unified at 60 px wide across all panels. Dropdowns / numeric fields
+still slightly variable; address in a future polish pass if needed.
 
 ### 2. Log textarea auto-scroll-to-bottom
-- Currently `scroll(textarea, 'bottom')` is wrapped in try/catch
-  because R2020a does not expose the scroll API for `uitextarea`.
-  The user always wants the latest line visible.
-- Possible workarounds: programmatically clear and re-set Value
-  (forces redraw at the end), or use a different widget (e.g.
-  multi-line `uilabel` inside a scrollable uipanel — manual
-  scroll). Investigate and pick the cleanest.
+**STATUS: DONE (Slice A / Round-2, 2026-04-30).** Workaround used:
+new lines are inserted at the TOP of the textarea Value, so the
+latest message is always the first visible row. R2020a uitextarea
+has no scroll API; this trick avoids the missing API entirely.
+Applied to both PreprocessTabController and CreatePresetApp logs.
 
 ## Functional / performance
 
@@ -38,16 +34,22 @@ polish pass — do not start them without explicit go-ahead.
   One drawcall, fast.
 
 ### 4. Drag-and-drop interactive object drawing
-- Replace ginput-based corner clicks with `drawpolygon`,
-  `drawcircle`, `drawellipse`, `drawassisted` (Image Processing
-  Toolbox ROI tools). Resulting ROI has draggable handles, the
-  user can adjust before confirming.
-- Also helpful for arena.
-- Replaces "Is it correct? Yes/No" loop with a more natural
-  "draw, adjust, double-click to confirm" pattern.
-- See `drawpolygon` docs for the interaction model.
+**STATUS: DONE (Slice H + Slice BB, 2026-04-30 / 2026-05-02).**
+readArenaGeometry uses drawpolygon/drawcircle/drawellipse with
+draggable handles. Slice BB added a `'shape' | 'points'` dropdown
+per Arena and per Objects panel so the user can fall back to the
+legacy ginput flow when preferred. The "Is it correct?" confirm
+loop is preserved for objects.
 
 ### 5. More corner types and outside-arena extensions
+**STATUS: DEFERRED (round-3 user request, 2026-05-02).** User asked
+for a corner-type dropdown 'round | square' — square = perpendiculars
+from the corner sides to the arena edge. Slice CC implemented strips
+parallel to arena sides (TODO #7) but corner-types remained out of
+scope because it requires reworking cornersWallsCenter() in
+classifySquare end-to-end. Open.
+
+
 - Walls-and-corners currently splits the arena interior by
   proximity to corner POINTS (Manhattan-ish). Alternatives to
   expose:
@@ -60,26 +62,20 @@ polish pass — do not start them without explicit go-ahead.
     - Square cap vs round cap at corners.
 
 ### 6. Rigid-body rotation of "All" target — BUG
-- When target=All and user clicks Rot CCW/CW, the current code
-  rotates each mask around ITS OWN centroid. The right behavior
-  is to rotate ALL masks around a common pivot (e.g., arena
-  centroid) so relative positions are preserved.
-- Fix in `applyTransformToTarget`: when tIdx == -1, compute a
-  shared pivot (arena centroid), then translate each child to
-  pivot-relative, rotate, translate back. NOT per-child.
-- Same applies if we ever support multi-object selection.
+**STATUS: DONE (Slice AA, 2026-05-02).** applyTransformToTarget now
+takes an optional sharedPivot. When tIdx == -1, computeSharedPivot()
+returns the arena centroid (or frame center fallback) and that single
+pivot is passed to every child. Children rotate around the same
+point and relative positions are preserved.
 
 ### 7. Strip partitioning when arena is at an angle
-- `partitionStrips` always uses axis-aligned (horizontal /
-  vertical) slabs. If the user's arena is a rotated rectangle
-  (e.g., a Polygon arena drawn at 30°), strips still cut along
-  image-x / image-y, not along the arena's principal axis.
-- Fix: detect arena orientation (e.g., via `regionprops` or PCA
-  on the polygon vertices), compute strips in arena-aligned
-  coordinates, then rotate the strip masks back to image
-  coordinates.
-- Or expose an Angle parameter in the Zones panel so the user
-  can override the strip orientation manually.
+**STATUS: DONE (Slice CC, 2026-05-02).** partitionStrips accepts
+an 'ArenaVertices' name-value. For 4-vertex polygons (square /
+rectangle) the principal direction is the average of opposite
+sides; otherwise PCA on the vertex cloud picks the dominant axis.
+classifySquare and the GUI forward arena vertices through; for
+Circle / Ellipse arenas vertices are unused so axis-aligned
+strips remain.
 
 ### 9. Multi-file mode in Preprocess Tracking tab
 - Load N (DLC csv + preset) pairs at once and treat them as one
