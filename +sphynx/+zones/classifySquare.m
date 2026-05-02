@@ -155,8 +155,11 @@ function zones = cornersWallsCenter(arenaMask, opts)
     % bwdist disk, breaking the visual continuity with the inner square).
     if ~isempty(opts.CornerPoints)
         if isSquareCorner
-            outerNearCorners = squareCornerMask(paddedMask, opts.CornerPoints, ...
-                wallW, pad, 'outer');
+            % Square outer = two rectangles per vertex, each one a
+            % continuation of an adjacent wall through the vertex
+            % (length wallW past V, width wallW outward).
+            outerNearCorners = squareCornerOuterStripsMask(paddedMask, ...
+                opts.CornerPoints, wallW, pad);
             outerNearCorners = outerNearCorners & outerRing;
         else
             cornerSeed = false(size(paddedMask));
@@ -248,6 +251,55 @@ function mask = squareCornerMask(paddedMask, cornerPoints, wallW, pad, mode)
         if any(in)
             idx = sub2ind([Hp, Wp], yIdx(in), xIdx(in));
             mask(idx) = true;
+        end
+    end
+end
+
+function mask = squareCornerOuterStripsMask(paddedMask, cornerPoints, wallW, pad)
+    % For each vertex V, build TWO rectangles outside the arena, each one
+    % a continuation of an adjacent wall through V — length wallW past V,
+    % width wallW perpendicular to the wall (toward the OUTSIDE of the
+    % arena). The pair forms two "wings" stretching past the corner along
+    % the wall directions, so the outer-corner band visually continues
+    % the inner square corner's straight edges past the vertex.
+    [Hp, Wp] = size(paddedMask);
+    [yIdx, xIdx] = find(true(Hp, Wp));
+    mask = false(Hp, Wp);
+    n = size(cornerPoints, 1);
+    if n < 3; return; end
+    cx = mean(cornerPoints(:, 1));
+    cy = mean(cornerPoints(:, 2));
+    for i = 1:n
+        prev = mod(i-2, n) + 1;
+        next = mod(i,   n) + 1;
+        V = cornerPoints(i, :) + pad;
+        % Each adjacent wall = 2 vertices of the polygon. We push wallW
+        % past V along -e and wallW perpendicular outward.
+        for nbr = [prev, next]
+            e = cornerPoints(nbr, :) - cornerPoints(i, :);
+            ne = norm(e); if ne == 0; continue; end
+            e = e / ne;
+            % Two perpendicular candidates; pick the one pointing AWAY
+            % from arena centroid.
+            perpA = [-e(2),  e(1)];
+            perpB = [ e(2), -e(1)];
+            midWall = (cornerPoints(i,:) + cornerPoints(nbr,:)) / 2;
+            if norm(midWall + perpA - [cx, cy]) > norm(midWall + perpB - [cx, cy])
+                nOut = perpA;
+            else
+                nOut = perpB;
+            end
+            P1 = V;
+            P2 = V - wallW * e;
+            P3 = V - wallW * e + wallW * nOut;
+            P4 = V                + wallW * nOut;
+            polyX = [P1(1), P2(1), P3(1), P4(1)];
+            polyY = [P1(2), P2(2), P3(2), P4(2)];
+            in = inpolygon(xIdx, yIdx, polyX, polyY);
+            if any(in)
+                idx = sub2ind([Hp, Wp], yIdx(in), xIdx(in));
+                mask(idx) = true;
+            end
         end
     end
 end

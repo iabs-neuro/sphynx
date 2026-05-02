@@ -768,9 +768,8 @@ function buildCreateTab(app)
     %   panel title ≈ 145), Row 3 Arena (2 rows × 28 + title ≈ 95),
     %   Row 4 Objects (180 fits ~4 listbox entries + buttons),
     %   Row 5 Zones (245), Row 6 Save (75).
-    % Block 4 (Objects) bumped 150 -> 270 — even 2 entries forced a
-    % scrollbar at 150; user wants ~7+ to fit comfortably.
-    app.LeftGrid.RowHeight = {100, 145, 95, 270, 245, 75};
+    % Tuned visually: Block 4 (Objects) at 200 -> listbox ≈ 80 px.
+    app.LeftGrid.RowHeight = {100, 145, 95, 200, 245, 75};
     app.LeftGrid.RowSpacing = 4;
     app.LeftGrid.Padding = [4 4 4 4];
 
