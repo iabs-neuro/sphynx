@@ -142,7 +142,15 @@ function zones = cornersWallsCenter(arenaMask, opts)
 
     % "RealOut" zones: extend arena boundary outward by wallW so tracking
     % jitter just outside the polygon still counts as "in walls/corners".
-    bwdistOutside = bwdist(paddedMask);
+    % Square mode uses chessboard (L_inf) distance so the outer extent is
+    % itself square — that lets the per-corner outer strips (built by
+    % squareCornerOuterStripsMask) fit fully inside the ring instead of
+    % getting clipped at the diagonals.
+    if isSquareCorner
+        bwdistOutside = bwdist(paddedMask, 'chessboard');
+    else
+        bwdistOutside = bwdist(paddedMask);
+    end
     outerRing = (bwdistOutside > 0) & (bwdistOutside <= wallW);
     arenaRealOutPadded = paddedMask | outerRing;
     wallsAndCornersRealOutPadded = arenaRealOutPadded & ~centerPadded;
