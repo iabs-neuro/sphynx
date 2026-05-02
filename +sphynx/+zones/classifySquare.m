@@ -94,14 +94,8 @@ function zones = cornersWallsCenter(arenaMask, opts)
 
     pxlPerCm = opts.PixelsPerCm;
     wallW = opts.WallWidthCm * pxlPerCm;
-    if strcmpi(opts.CornerType, 'square')
-        % Square corners: tight wallW x wallW patches at each vertex
-        % (Manhattan/L-infinity neighborhood instead of L2). This stays
-        % fully inside the arena because we intersect with arenaMask.
-        cornerW = wallW;
-    else
-        cornerW = wallW * sqrt(2);
-    end
+    isSquareCorner = strcmpi(opts.CornerType, 'square');
+    cornerW = wallW * sqrt(2);  % only used by round/Manhattan path
 
     [H, W] = size(arenaMask);
 
@@ -118,20 +112,29 @@ function zones = cornersWallsCenter(arenaMask, opts)
     % Walls and corners region: arena minus center
     wallsAndCornersPadded = paddedMask & ~centerPadded;
 
-    % Corners: pixels within cornerW of any corner POINT
+    % Corners: round = bwdist disk; square = parallelogram from corner along
+    % the two adjacent walls, length wallW each side.
     cornersPadded = false(size(paddedMask));
     if ~isempty(opts.CornerPoints)
-        for i = 1:size(opts.CornerPoints, 1)
-            cx = round(opts.CornerPoints(i,1)) + pad;
-            cy = round(opts.CornerPoints(i,2)) + pad;
-            if cx < 1 || cx > size(paddedMask,2) || cy < 1 || cy > size(paddedMask,1)
-                continue;
+        if isSquareCorner
+            % Build a parallelogram per vertex from the two adjacent edges.
+            cornersPadded = squareCornerMask(paddedMask, opts.CornerPoints, ...
+                wallW, pad);
+            % Restrict to wall band (interior of wallW)
+            cornersPadded = cornersPadded & wallsAndCornersPadded;
+        else
+            for i = 1:size(opts.CornerPoints, 1)
+                cx = round(opts.CornerPoints(i,1)) + pad;
+                cy = round(opts.CornerPoints(i,2)) + pad;
+                if cx < 1 || cx > size(paddedMask,2) || cy < 1 || cy > size(paddedMask,1)
+                    continue;
+                end
+                seed = false(size(paddedMask));
+                seed(cy, cx) = true;
+                distFromCorner = bwdist(seed);
+                cornerNeighborhood = distFromCorner <= cornerW;
+                cornersPadded = cornersPadded | (wallsAndCornersPadded & cornerNeighborhood);
             end
-            seed = false(size(paddedMask));
-            seed(cy, cx) = true;
-            distFromCorner = bwdist(seed);
-            cornerNeighborhood = distFromCorner <= cornerW;
-            cornersPadded = cornersPadded | (wallsAndCornersPadded & cornerNeighborhood);
         end
     end
 
@@ -183,6 +186,45 @@ function zone = mkZone(name, paddedMask, pad)
     zone.name = name;
     zone.type = 'area';
     zone.maskfilled = paddedMask(pad+1 : pad+H, pad+1 : pad+W);
+end
+
+function mask = squareCornerMask(paddedMask, cornerPoints, wallW, pad)
+    % Build a "square corner" parallelogram at each vertex: the two
+    % perpendiculars from the vertex along its adjacent edges, each of
+    % length wallW, span a quadrilateral [V, V+wallW*e1, V+wallW*(e1+e2),
+    % V+wallW*e2]. Inpolygon-test on a per-vertex basis, OR the masks.
+    [Hp, Wp] = size(paddedMask);
+    [yIdx, xIdx] = find(paddedMask);
+    mask = false(Hp, Wp);
+    n = size(cornerPoints, 1);
+    if n < 3; return; end
+    for i = 1:n
+        prev = mod(i-2, n) + 1;
+        next = mod(i,   n) + 1;
+        V = cornerPoints(i, :) + pad;       % vertex in padded coords
+        % Edge directions OUTWARD from the vertex (toward the prev / next
+        % corner). Lengths normalized.
+        e1 = cornerPoints(prev, :) - cornerPoints(i, :);
+        e2 = cornerPoints(next, :) - cornerPoints(i, :);
+        n1 = norm(e1); if n1 == 0; continue; end
+        n2 = norm(e2); if n2 == 0; continue; end
+        e1 = e1 / n1; e2 = e2 / n2;
+        % Don't extend beyond the actual side length
+        L1 = min(wallW, n1);
+        L2 = min(wallW, n2);
+        % Quadrilateral vertices (CCW or CW — inpolygon doesn't care)
+        P1 = V;
+        P2 = V + L1 * e1;
+        P3 = V + L1 * e1 + L2 * e2;
+        P4 = V + L2 * e2;
+        polyX = [P1(1), P2(1), P3(1), P4(1)];
+        polyY = [P1(2), P2(2), P3(2), P4(2)];
+        in = inpolygon(xIdx, yIdx, polyX, polyY);
+        if any(in)
+            idx = sub2ind([Hp, Wp], yIdx(in), xIdx(in));
+            mask(idx) = true;
+        end
+    end
 end
 
 function nearestMap = nearestStripMap(zones, ringMask)

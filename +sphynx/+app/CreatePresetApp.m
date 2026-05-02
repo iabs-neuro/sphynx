@@ -763,9 +763,10 @@ function buildCreateTab(app)
     % Per-panel height = sum(rowHeights) + (n-1)*rowSpacing + 8 padding
     %                    + ~25 panel title bar. Row heights are 28 px
     %                    uniformly; Scrollable wrapper handles overflow.
-    % Round-4: bumped row 2 (Calibration) so the Exp dropdown fits and
-    % row 4 (Objects) so 4 objects fit in the listbox.
-    app.LeftGrid.RowHeight = {100, 200, 105, 220, 245, 75};
+    % Row 1 Load (100), Row 2 Calib (3 rows × 28 + padding ≈ 120),
+    % Row 3 Arena (2 rows × 28 + title ≈ 95), Row 4 Objects (180 fits 4
+    % listbox entries + buttons), Row 5 Zones (245), Row 6 Save (75).
+    app.LeftGrid.RowHeight = {100, 120, 95, 180, 245, 75};
     app.LeftGrid.RowSpacing = 4;
     app.LeftGrid.Padding = [4 4 4 4];
 
@@ -962,12 +963,14 @@ function onExpTypeChanged(app, src)
 end
 
 function buildArenaPanel(app)
+    % Round-5: split into two rows.
+    %   Row 1: 4 yellow geometry toggles + flex spacer + INFO (right edge).
+    %   Row 2: Pick mode + Pick arena + Clear (left-aligned).
     nGeom = 4;       % Polygon / Circle / Ellipse / O-maze
-    % Layout: nGeom geom | flex | Pick mode | Pick | Clear | INFO
-    nCols = nGeom + 5;
-    g = uigridlayout(app.ArenaPanel, [1, nCols]);
-    g.RowHeight = {28};
-    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {70}, {80}, {55}, {55}];
+    g = uigridlayout(app.ArenaPanel, [2, nGeom + 2]);
+    g.RowHeight = {28, 28};
+    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {55}];
+    g.RowSpacing = 4;
     g.ColumnSpacing = 4;
 
     geometries = {'Polygon', 'Circle', 'Ellipse', 'O-maze'};
@@ -980,28 +983,27 @@ function buildArenaPanel(app)
         if i == 1; b.Value = true; end
         app.ArenaGeometryButtons{i} = b;
     end
+    % Row 1 INFO at the right edge
+    bInfo = uibutton(g, 'Text', 'INFO', ...
+        'BackgroundColor', semanticColor('info'), ...
+        'ButtonPushedFcn', @(~,~) showHelp('Arena', helpArenaText()));
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 2;
 
-    % column nGeom+1 is the spacer (kept empty)
+    % Row 2: pick mode | pick | clear, all left-aligned
     app.ArenaPickModeDropDown = uidropdown(g, ...
         'Items', {'shape', 'points'}, 'Value', 'shape', ...
         'Tooltip', 'shape = drag-and-drop ROI; points = click vertices then ENTER');
-    app.ArenaPickModeDropDown.Layout.Row = 1;
-    app.ArenaPickModeDropDown.Layout.Column = nGeom + 2;
+    app.ArenaPickModeDropDown.Layout.Row = 2;
+    app.ArenaPickModeDropDown.Layout.Column = 1;
     bArena = uibutton(g, 'Text', 'Pick arena', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onPickArena(app));
-    bArena.Layout.Row = 1; bArena.Layout.Column = nGeom + 3;
+    bArena.Layout.Row = 2; bArena.Layout.Column = 2;
     bClear = uibutton(g, 'Text', 'Clear', ...
         'BackgroundColor', [0.92 0.55 0.55], ...
         'Tooltip', 'Drop the arena mask (clears dependent zones too)', ...
         'ButtonPushedFcn', @(~,~) app.clearArena());
-    bClear.Layout.Row = 1; bClear.Layout.Column = nGeom + 4;
-    bInfo = uibutton(g, 'Text', 'INFO', ...
-        'BackgroundColor', semanticColor('info'), ...
-        'ButtonPushedFcn', @(~,~) showHelp('Arena', helpArenaText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 5;
-
-    % Arena status label removed in round-4 — status flows to the Log only.
+    bClear.Layout.Row = 2; bClear.Layout.Column = 3;
 end
 
 function buildObjectsPanel(app)
@@ -1132,12 +1134,14 @@ function buildZonesPanel(app)
         'Tooltip', 'round = Manhattan-style nearest-corner; square = perpendiculars from corner sides to opposite walls');
     app.CornerTypeDropDown.Layout.Row = 4; app.CornerTypeDropDown.Layout.Column = 4;
 
-    % Buttons in their own sub-grid so each is sized to its text
+    % Buttons in their own sub-grid so each is sized to its text.
+    % Round-5: Clear pushed to the right edge, painted in the same bright
+    % rose as other delete-style buttons.
     btnPanel = uipanel(g, 'BorderType', 'none');
     btnPanel.Layout.Row = 5; btnPanel.Layout.Column = [1 6];
     bg = uigridlayout(btnPanel, [1, 4]);
     bg.RowHeight = {28};
-    bg.ColumnWidth = {'fit', 'fit', 'fit', '1x'};
+    bg.ColumnWidth = {'fit', 'fit', '1x', 'fit'};
     bg.Padding = [0 0 0 0];
     bg.ColumnSpacing = 4;
     bPreview = uibutton(bg, 'Text', 'Preview', ...
@@ -1148,10 +1152,10 @@ function buildZonesPanel(app)
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.addZones());
     bAdd.Layout.Row = 1; bAdd.Layout.Column = 2;
-    bClear = uibutton(bg, 'Text', 'Clear', ...
-        'BackgroundColor', semanticColor('action'), ...
+    bClear = uibutton(bg, 'Text', 'Clear zones', ...
+        'BackgroundColor', [0.92 0.55 0.55], ...
         'ButtonPushedFcn', @(~,~) app.clearZones());
-    bClear.Layout.Row = 1; bClear.Layout.Column = 3;
+    bClear.Layout.Row = 1; bClear.Layout.Column = 4;
 
     app.ZonesCountLabel = uilabel(g, 'Text', 'Added: -');
     app.ZonesCountLabel.Layout.Row = 6; app.ZonesCountLabel.Layout.Column = [1 6];
