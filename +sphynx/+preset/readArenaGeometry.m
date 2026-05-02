@@ -25,6 +25,7 @@ function arena = readArenaGeometry(frame, geometry, varargin)
     addRequired(p, 'geometry');
     addParameter(p, 'Points', []);
     addParameter(p, 'NumPointsPerSide', 1000);
+    addParameter(p, 'PickMode', 'shape', @(s) any(strcmpi(s, {'shape', 'points'})));
     parse(p, frame, geometry, varargin{:});
 
     [H, W, ~] = size(frame);
@@ -33,6 +34,23 @@ function arena = readArenaGeometry(frame, geometry, varargin)
     if isempty(p.Results.Points)
         fh = figure; ax = axes(fh); imshow(frame, 'Parent', ax); hold(ax, 'on');
         cleanup = onCleanup(@() closeIfValid(fh));
+        if strcmpi(p.Results.PickMode, 'points')
+            % Legacy point-by-point picker via ginput. User clicks vertices,
+            % presses Enter to commit. No drag-and-drop refinement.
+            switch geometry
+                case 'O-maze'
+                    uiwait(msgbox('Click outer border points, then press ENTER', 'O-maze', 'modal'));
+                    [xOut, yOut] = ginput;
+                    uiwait(msgbox('Click inner border points, then press ENTER', 'O-maze', 'modal'));
+                    [xIn, yIn] = ginput;
+                    pts = [xOut(:) yOut(:); NaN NaN; xIn(:) yIn(:)];
+                otherwise
+                    title(ax, 'Click points, then press ENTER. (point-by-point mode)', 'Interpreter', 'none');
+                    [px, py] = ginput;
+                    pts = [px(:), py(:)];
+            end
+            clear cleanup;
+        else
         switch geometry
             case 'O-maze'
                 uiwait(msgbox(['Draw the OUTER border polygon:' newline ...
@@ -81,6 +99,7 @@ function arena = readArenaGeometry(frame, geometry, varargin)
                 pts = hP.Position;
         end
         clear cleanup;  % closes figure now
+        end   % end of shape-mode branch
     else
         pts = p.Results.Points;
     end

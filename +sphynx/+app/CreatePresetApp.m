@@ -50,12 +50,15 @@ classdef CreatePresetApp < handle
         PxlPerCmAvgLabel
         XKcorrLabel
         ExpTypeDropDown
+        CalibModeDropDown   % '4 points' | '2 lines'
         % Arena
         ArenaGeometryButtons      % cell array of state buttons (Polygon/Circle/Ellipse/O-maze)
         ArenaStatusLabel
+        ArenaPickModeDropDown
         % Objects
         ObjectGeometryButtons     % cell array of state buttons (Polygon/Circle/Ellipse)
         ObjectsListBox
+        ObjectPickModeDropDown
         % Zones
         ZonesStrategyDropDown
         WallWidthField
@@ -892,10 +895,14 @@ function buildCalibPanel(app)
     g.ColumnWidth = {'fit', 50, 'fit', 50, '1x', 50};
     g.ColumnSpacing = 4;
 
-    bChoose = uibutton(g, 'Text', 'Choose points', ...
+    bChoose = uibutton(g, 'Text', 'Choose', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onCalibrateChoose(app));
-    bChoose.Layout.Row = 1; bChoose.Layout.Column = [1 2];
+    bChoose.Layout.Row = 1; bChoose.Layout.Column = 1;
+    app.CalibModeDropDown = uidropdown(g, ...
+        'Items', {'4 points', '2 lines'}, 'Value', '4 points', ...
+        'Tooltip', '4 points = legacy click-y1-y2-x1-x2; 2 lines = drawline for Y then for X (only the projection length is used)');
+    app.CalibModeDropDown.Layout.Row = 1; app.CalibModeDropDown.Layout.Column = 2;
     bCompute = uibutton(g, 'Text', 'Compute', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onCalibrateCompute(app));
@@ -933,11 +940,11 @@ end
 
 function buildArenaPanel(app)
     nGeom = 4;       % Polygon / Circle / Ellipse / O-maze
-    % Layout: nGeom geometry buttons | flex spacer | Pick | Clear | INFO
-    nCols = nGeom + 4;
+    % Layout: nGeom geom | flex | Pick mode | Pick | Clear | INFO
+    nCols = nGeom + 5;
     g = uigridlayout(app.ArenaPanel, [2, nCols]);
     g.RowHeight = {28, 25};
-    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {'fit'}, {70}, {60}];
+    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {70}, {'fit'}, {70}, {60}];
     g.ColumnSpacing = 4;
 
     geometries = {'Polygon', 'Circle', 'Ellipse', 'O-maze'};
@@ -952,19 +959,24 @@ function buildArenaPanel(app)
     end
 
     % column nGeom+1 is the spacer (kept empty)
-    bArena = uibutton(g, 'Text', 'Pick arena points', ...
+    app.ArenaPickModeDropDown = uidropdown(g, ...
+        'Items', {'shape', 'points'}, 'Value', 'shape', ...
+        'Tooltip', 'shape = drag-and-drop ROI; points = click vertices then ENTER');
+    app.ArenaPickModeDropDown.Layout.Row = 1;
+    app.ArenaPickModeDropDown.Layout.Column = nGeom + 2;
+    bArena = uibutton(g, 'Text', 'Pick arena', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onPickArena(app));
-    bArena.Layout.Row = 1; bArena.Layout.Column = nGeom + 2;
+    bArena.Layout.Row = 1; bArena.Layout.Column = nGeom + 3;
     bClear = uibutton(g, 'Text', 'Clear', ...
         'BackgroundColor', [0.92 0.55 0.55], ...
         'Tooltip', 'Drop the arena mask (clears dependent zones too)', ...
         'ButtonPushedFcn', @(~,~) app.clearArena());
-    bClear.Layout.Row = 1; bClear.Layout.Column = nGeom + 3;
+    bClear.Layout.Row = 1; bClear.Layout.Column = nGeom + 4;
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Arena', helpArenaText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 4;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 5;
 
     app.ArenaStatusLabel = uilabel(g, 'Text', 'Arena: <none>');
     app.ArenaStatusLabel.Layout.Row = 2; app.ArenaStatusLabel.Layout.Column = [1 nCols];
@@ -972,10 +984,10 @@ end
 
 function buildObjectsPanel(app)
     nGeom = 3;       % Polygon / Circle / Ellipse
-    nCols = nGeom + 3;
+    nCols = nGeom + 4;
     g = uigridlayout(app.ObjectsPanel, [3, nCols]);
     g.RowHeight = {28, '1x', 28};
-    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {'fit'}, {60}];
+    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {70}, {'fit'}, {60}];
     g.ColumnSpacing = 4;
 
     geometries = {'Polygon', 'Circle', 'Ellipse'};
@@ -989,14 +1001,19 @@ function buildObjectsPanel(app)
         app.ObjectGeometryButtons{i} = b;
     end
 
+    app.ObjectPickModeDropDown = uidropdown(g, ...
+        'Items', {'shape', 'points'}, 'Value', 'shape', ...
+        'Tooltip', 'shape = drag-and-drop ROI; points = click vertices then ENTER');
+    app.ObjectPickModeDropDown.Layout.Row = 1;
+    app.ObjectPickModeDropDown.Layout.Column = nGeom + 2;
     bAdd = uibutton(g, 'Text', '+ Add', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onAddObject(app));
-    bAdd.Layout.Row = 1; bAdd.Layout.Column = nGeom + 2;
+    bAdd.Layout.Row = 1; bAdd.Layout.Column = nGeom + 3;
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Objects', helpObjectsText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 3;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 4;
 
     app.ObjectsListBox = uilistbox(g, 'Items', {}, ...
         'ValueChangedFcn', @(~,~) app.refreshPreview());
@@ -1019,7 +1036,7 @@ function buildObjectsPanel(app)
         'BackgroundColor', [0.92 0.55 0.55], ...
         'Tooltip', 'Remove all objects (and dependent object zones)', ...
         'ButtonPushedFcn', @(~,~) app.deleteAllObjects());
-    bDelAll.Layout.Row = 3; bDelAll.Layout.Column = nGeom + 2;
+    bDelAll.Layout.Row = 3; bDelAll.Layout.Column = nGeom + 3;
 end
 
 function onArenaGeometryToggle(app, src)
@@ -1160,14 +1177,40 @@ end
 
 function onCalibrateChoose(app)
     if isempty(app.State.frame); app.status('Load video first'); return; end
-    fh = figure('Name', 'Click 4 calibration points');
+    mode = '4 points';
+    if ~isempty(app.CalibModeDropDown); mode = app.CalibModeDropDown.Value; end
+    fh = figure('Name', sprintf('Calibration (%s)', mode));
     cleanup = onCleanup(@() closeIfValid(fh));
-    imshow(app.State.frame); hold on;
-    title('Click 4 points: Y-pair (1, 2), then X-pair (3, 4)');
-    [xPts, yPts] = ginput(4);
-    app.State.calibPoints = [xPts(:), yPts(:)];
-    clear cleanup;
-    app.status(sprintf('Got %d calibration points; now click "Compute"', size(app.State.calibPoints,1)));
+    ax = axes(fh); imshow(app.State.frame, 'Parent', ax); hold(ax, 'on');
+    if strcmpi(mode, '2 lines')
+        % Two interactive lines. Only the axis-projection length is used:
+        % the Y line contributes abs(dy), the X line contributes abs(dx).
+        title(ax, 'Draw the Y reference line (vertical) — drag, then double-click', 'Interpreter', 'none');
+        hY = drawline(ax);
+        wait(hY);
+        if ~isvalid(hY); clear cleanup; return; end
+        posY = hY.Position;   % 2x2 [x1 y1; x2 y2]
+        title(ax, 'Draw the X reference line (horizontal) — drag, then double-click', 'Interpreter', 'none');
+        hX = drawline(ax);
+        wait(hX);
+        if ~isvalid(hX); clear cleanup; return; end
+        posX = hX.Position;
+        % Pack as 4 points so pixelsPerCm picks up Y from rows 1-2 (vertical
+        % distance) and X from rows 3-4 (horizontal distance).
+        app.State.calibPoints = [ ...
+            posY(1, 1), posY(1, 2); ...
+            posY(2, 1), posY(2, 2); ...
+            posX(1, 1), posX(1, 2); ...
+            posX(2, 1), posX(2, 2)];
+        clear cleanup;
+        app.status('Got 2 calibration lines; now click "Compute"');
+    else
+        title(ax, 'Click 4 points: Y-pair (1, 2), then X-pair (3, 4)', 'Interpreter', 'none');
+        [xPts, yPts] = ginput(4);
+        app.State.calibPoints = [xPts(:), yPts(:)];
+        clear cleanup;
+        app.status(sprintf('Got %d calibration points; now click "Compute"', size(app.State.calibPoints,1)));
+    end
     app.refocus();
 end
 
@@ -1189,8 +1232,13 @@ end
 function onPickArena(app)
     if isempty(app.State.frame); app.status('Load video first'); return; end
     geometry = app.State.arenaGeometry;
+    pickMode = 'shape';
+    if ~isempty(app.ArenaPickModeDropDown)
+        pickMode = app.ArenaPickModeDropDown.Value;
+    end
     try
-        arena = sphynx.preset.readArenaGeometry(app.State.frame, geometry);
+        arena = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
+            'PickMode', pickMode);
         app.State.arena = arena;
         app.ArenaStatusLabel.Text = sprintf('Arena: %s OK', geometry);
         app.refreshPreview();
@@ -1209,9 +1257,14 @@ function onAddObject(app)
     % old mask is NOT shown on preview while the user re-picks.
     if isempty(app.State.frame); app.status('Load video first'); return; end
     geometry = app.State.objectGeometry;
+    pickMode = 'shape';
+    if ~isempty(app.ObjectPickModeDropDown)
+        pickMode = app.ObjectPickModeDropDown.Value;
+    end
     while true
         try
-            obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry);
+            obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
+                'PickMode', pickMode);
             obj.type = sprintf('Object%d', numel(app.State.objects) + 1);
             if isempty(app.State.objects)
                 app.State.objects = obj;
