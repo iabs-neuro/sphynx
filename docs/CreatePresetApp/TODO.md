@@ -35,12 +35,16 @@ legacy ginput flow when preferred. The "Is it correct?" confirm
 loop is preserved for objects.
 
 ### 5. More corner types and outside-arena extensions
-**STATUS: DEFERRED (round-3 user request, 2026-05-02).** User asked
-for a corner-type dropdown 'round | square' — square = perpendiculars
-from the corner sides to the arena edge. Slice CC implemented strips
-parallel to arena sides (TODO #7) but corner-types remained out of
-scope because it requires reworking cornersWallsCenter() in
-classifySquare end-to-end. Open.
+**STATUS: PARTIAL (round-5, 2026-05-02).** Inner square corners work
+(parallelogram from V along the two adjacent walls). Outer-ring
+"continuation" strips (corners_realout with CornerType=square) still
+don't render the way the user wants — even after switching the outer
+ring to chessboard distance and using two perpendicular strips per
+vertex. Visually the wings still don't follow the user's red-circled
+intent. Needs a fresh look; possibly the issue is interpretation —
+maybe the user wants the outer strips to extend further than wallW,
+or to be placed differently relative to the wall direction. Confirm
+with annotated screenshot before re-implementing.
 
 
 - Walls-and-corners currently splits the arena interior by
@@ -69,6 +73,28 @@ sides; otherwise PCA on the vertex cloud picks the dominant axis.
 classifySquare and the GUI forward arena vertices through; for
 Circle / Ellipse arenas vertices are unused so axis-aligned
 strips remain.
+
+### 10. Verify preset loading flow
+**OPEN (round-5, 2026-05-02).** User asked to revisit the preset
+load path: Block 1 -> Browse Preset -> ensure the preset's
+calibration / arena / objects / zones populate the GUI state and
+show on the Preview without the user having to re-pick anything.
+Test: open app, load video, load a previously-saved preset, verify:
+  - calibration fields show pxl2sm values
+  - arena outline appears on the preview
+  - objects appear in the listbox and on the preview
+  - zones (if present) populate
+Currently uncertain whether all four populate cleanly — needs end-
+to-end test. If broken, fix `loadPreset` / `setPresetPath` /
+`refreshPreview` chain.
+
+### 11. Square outer corners — visual continuation still wrong
+**OPEN (round-5, 2026-05-02).** Inner square corners work; outer
+"corners_realout" strips don't visually match the user's intent
+even after two reimplementations (mirror-of-inner across V, then
+two perpendicular wall-extension rectangles with chessboard outer
+ring). User confirmed: "all still wrong". Needs annotated screenshot
+showing the desired geometry before another attempt.
 
 ### 9. Multi-file mode in Preprocess Tracking tab
 - Load N (DLC csv + preset) pairs at once and treat them as one
