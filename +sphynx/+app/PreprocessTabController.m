@@ -436,9 +436,8 @@ classdef PreprocessTabController < handle
 
         function toggleVideoPanel(obj, enabled)
             % TOGGLEVIDEOPANEL  Open/close the standalone video window.
-            % (Slice E: replaced the embedded panel with a separate uifigure
-            % so the user can size it independently and use the play loop
-            % without competing for layout space.)
+            % (Slice E: standalone uifigure; Slice DD: embedded panel
+            % removed entirely from the layout.)
             if enabled
                 obj.openVideoReader();
                 if isempty(obj.VideoReader_); return; end
@@ -452,8 +451,6 @@ classdef PreprocessTabController < handle
                     obj.VideoWindow = [];
                 end
             end
-            % Embedded panel row stays collapsed forever now.
-            obj.RightGrid.RowHeight{8} = 0;
         end
 
         function setManualRegions(obj, regs)
@@ -673,32 +670,106 @@ classdef PreprocessTabController < handle
     methods (Access = private)
         % ===== UI ===========================================================
         function buildUI(obj)
-            obj.OuterGrid = uigridlayout(obj.Tab, [1, 2]);
-            obj.OuterGrid.ColumnWidth = {760, '1x'};   % wider so per-part table fits
-            obj.OuterGrid.RowHeight = {'1x'};
+            % Round-3 layout (Slice DD):
+            %   row 1: TopBar (Output dir + Save + Clear All)
+            %   row 2: Block 1 (Loading) + Block 2 (Outlier) | Block 3 (Per-part)
+            %   row 3: X(t) + Y(t) full width        | likelihood histogram (vertical)
+            %   row 4: BottomBar (viewport / switcher / regions / log / video toggle)
+            obj.OuterGrid = uigridlayout(obj.Tab, [4, 2]);
+            obj.OuterGrid.RowHeight = {36, 380, '1x', 250};
+            obj.OuterGrid.ColumnWidth = {'1x', 380};
             obj.OuterGrid.Padding = [4 4 4 4];
+            obj.OuterGrid.RowSpacing = 4;
             obj.OuterGrid.ColumnSpacing = 6;
 
-            obj.buildLeft();
-            obj.buildRight();
+            obj.buildTopBar();          % row 1, cols [1 2]
+            obj.buildBlocksLeftCol();   % row 2 col 1 (Loading + Outlier stacked)
+            obj.buildPerPartPanel();    % row 2 col 2 (Block 3 — set parent to OuterGrid)
+            obj.buildPlots();           % row 3 col 1 (X+Y), row 3 col 2 (hist)
+            obj.buildBottomBar();       % row 4, cols [1 2]
         end
 
-        function buildLeft(obj)
-            % Scrollable container so all panels stay visible on shorter windows.
-            % Order after the user feedback: Loading -> Outlier filter ->
-            % Per-part settings -> Save (so Compute is the LAST action,
-            % after all settings have been chosen).
-            obj.LeftPanel = uigridlayout(obj.OuterGrid, [4, 1]);
-            obj.LeftPanel.Layout.Column = 1;
-            obj.LeftPanel.Scrollable = 'on';
-            obj.LeftPanel.RowHeight = {150, 150, 360, 150};
-            obj.LeftPanel.RowSpacing = 6;
-            obj.LeftPanel.Padding = [2 2 2 2];
+        function buildTopBar(obj)
+            tb = uigridlayout(obj.OuterGrid, [1, 5]);
+            tb.Layout.Row = 1; tb.Layout.Column = [1 2];
+            tb.RowHeight = {30};
+            tb.ColumnWidth = {80, '1x', 60, 130, 90};
+            tb.Padding = [0 0 0 0];
+            tb.ColumnSpacing = 4;
 
-            obj.buildLoadingPanel();   % row 1
-            obj.buildOutlierPanel();   % row 2 (was 3)
-            obj.buildPerPartPanel();   % row 3 (was 2)
-            obj.buildSavePanel();      % row 4
+            btnOut = uibutton(tb, 'Text', 'Output dir', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.pickOutputDir());
+            btnOut.Layout.Column = 1;
+            obj.OutputDirField = uieditfield(tb, 'text', 'Value', '');
+            obj.OutputDirField.Layout.Column = 2;
+            obj.SavePlotsCheckbox = uicheckbox(tb, 'Text', 'plots', ...
+                'Tooltip', 'save per-part PNG plots when saving', 'Value', true);
+            obj.SavePlotsCheckbox.Layout.Column = 3;
+            bSave = uibutton(tb, 'Text', 'Save preprocessed', ...
+                'BackgroundColor', [1.00 0.55 0.55], ...
+                'FontWeight', 'bold', ...
+                'ButtonPushedFcn', @(~,~) obj.savePreprocessed());
+            bSave.Layout.Column = 4;
+            bClearAll = uibutton(tb, 'Text', 'Clear All', ...
+                'BackgroundColor', [0.92 0.55 0.55], ...
+                'FontWeight', 'bold', ...
+                'Tooltip', 'Wipe DLC, settings, regions; keep paths', ...
+                'ButtonPushedFcn', @(~,~) obj.clearAll());
+            bClearAll.Layout.Column = 5;
+        end
+
+        function buildBlocksLeftCol(obj)
+            % Stack Block 1 (Loading) + Block 2 (Outlier) vertically in col 1
+            obj.LeftPanel = uigridlayout(obj.OuterGrid, [2, 1]);
+            obj.LeftPanel.Layout.Row = 2; obj.LeftPanel.Layout.Column = 1;
+            obj.LeftPanel.RowHeight = {160, '1x'};
+            obj.LeftPanel.RowSpacing = 4;
+            obj.LeftPanel.Padding = [0 0 0 0];
+
+            obj.buildLoadingPanel();   % parent = LeftPanel, Row 1
+            obj.buildOutlierPanel();   % parent = LeftPanel, Row 2
+        end
+
+        function buildPlots(obj)
+            % Row 3: X(t) + Y(t) full width (col 1) + hist vertical (col 2)
+            plotsGrid = uigridlayout(obj.OuterGrid, [2, 2]);
+            plotsGrid.Layout.Row = 3; plotsGrid.Layout.Column = [1 2];
+            plotsGrid.RowHeight = {'1x', '1x'};
+            plotsGrid.ColumnWidth = {'1x', 220};
+            plotsGrid.RowSpacing = 4;
+            plotsGrid.ColumnSpacing = 6;
+            plotsGrid.Padding = [0 0 0 0];
+
+            obj.AxX = uiaxes(plotsGrid);
+            obj.AxX.Layout.Row = 1; obj.AxX.Layout.Column = 1;
+            obj.AxX.Box = 'on';
+
+            obj.AxY = uiaxes(plotsGrid);
+            obj.AxY.Layout.Row = 2; obj.AxY.Layout.Column = 1;
+            obj.AxY.Box = 'on';
+
+            % Histogram spans both rows on the right
+            obj.AxLk = uiaxes(plotsGrid);
+            obj.AxLk.Layout.Row = [1 2]; obj.AxLk.Layout.Column = 2;
+            obj.AxLk.Box = 'on';
+        end
+
+        function buildBottomBar(obj)
+            % Row 4: viewport + switcher + regions + log + video toggle
+            bb = uigridlayout(obj.OuterGrid, [4, 1]);
+            bb.Layout.Row = 4; bb.Layout.Column = [1 2];
+            bb.RowHeight = {32, 32, 100, '1x'};
+            bb.RowSpacing = 4;
+            bb.Padding = [0 0 0 0];
+
+            obj.buildViewportRow(bb);   % row 1
+            obj.buildSwitcherRow(bb);   % row 2
+            obj.buildRegionsPanelInline(bb); % row 3
+            obj.buildLogInline(bb);     % row 4
+
+            % Video panel — separate row collapsed (Slice E uses standalone window)
+            obj.RightGrid = bb;   % alias for backward compat with toggleVideoPanel
         end
 
         function buildLoadingPanel(obj)
@@ -761,8 +832,8 @@ classdef PreprocessTabController < handle
         end
 
         function buildPerPartPanel(obj)
-            obj.PerPartPanel = uipanel(obj.LeftPanel, 'Title', '3. Per-part settings');
-            obj.PerPartPanel.Layout.Row = 3;
+            obj.PerPartPanel = uipanel(obj.OuterGrid, 'Title', '3. Per-part settings');
+            obj.PerPartPanel.Layout.Row = 2; obj.PerPartPanel.Layout.Column = 2;
             g = uigridlayout(obj.PerPartPanel, [4, 1]);
             g.RowHeight = {24, '1x', 32, 32};
             g.RowSpacing = 4;
@@ -942,40 +1013,103 @@ classdef PreprocessTabController < handle
             end
         end
 
-        function buildSavePanel(obj)
-            obj.SavePanel = uipanel(obj.LeftPanel, 'Title', '4. Save');
-            obj.SavePanel.Layout.Row = 4;
-            g = uigridlayout(obj.SavePanel, [3, 3]);
-            g.RowHeight = {28, 28, 36};   % Save button row taller so it fits
-            g.ColumnWidth = {80, '1x', 80};
-            g.RowSpacing = 6;
-            g.ColumnSpacing = 4;
-            g.Padding = [6 6 6 6];
+        function buildViewportRow(obj, parent)
+            viewport = uigridlayout(parent, [1, 9]);
+            viewport.Layout.Row = 1;
+            viewport.RowHeight = {28};
+            viewport.ColumnWidth = {50, 60, 30, 60, 50, 70, 60, 70, 80};
+            viewport.Padding = [0 0 0 0];
+            viewport.ColumnSpacing = 4;
 
-            % Row 1: Output dir
-            btnOut = uibutton(g, 'Text', 'Output dir', ...
-                'BackgroundColor', semanticColor('action'), ...
-                'ButtonPushedFcn', @(~,~) obj.pickOutputDir());
-            btnOut.Layout.Row = 1; btnOut.Layout.Column = 1;
-            obj.OutputDirField = uieditfield(g, 'text', 'Value', '');
-            obj.OutputDirField.Layout.Row = 1; obj.OutputDirField.Layout.Column = [2 3];
-
-            % Row 2: Save plots checkbox
-            obj.SavePlotsCheckbox = uicheckbox(g, 'Text', 'save plots per body part', ...
-                'Value', true);
-            obj.SavePlotsCheckbox.Layout.Row = 2; obj.SavePlotsCheckbox.Layout.Column = [1 3];
-
-            % Row 3: Save button (full width, taller)
-            bSave = uibutton(g, 'Text', 'Save preprocessed', ...
-                'BackgroundColor', semanticColor('action'), ...
-                'ButtonPushedFcn', @(~,~) obj.savePreprocessed());
-            bSave.Layout.Row = 3; bSave.Layout.Column = [1 3];
+            uilabel(viewport, 'Text', 'from:', 'HorizontalAlignment', 'right');
+            obj.FromFrameField = uieditfield(viewport, 'numeric', ...
+                'Value', 1, 'Limits', [1 Inf], 'RoundFractionalValues', 'on', ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            uilabel(viewport, 'Text', 'to:', 'HorizontalAlignment', 'right');
+            obj.ToFrameField = uieditfield(viewport, 'numeric', ...
+                'Value', 0, 'Limits', [0 Inf], 'RoundFractionalValues', 'on', ...
+                'Tooltip', '0 = last frame', ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            uilabel(viewport, 'Text', 'X:', 'HorizontalAlignment', 'right');
+            obj.XUnitsDropDown = uidropdown(viewport, ...
+                'Items', {'frame', 'sec', 'min'}, 'Value', 'sec', ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.ShowRawChk = uicheckbox(viewport, 'Text', 'raw', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.ShowInterpChk = uicheckbox(viewport, 'Text', 'interp', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.ShowSmoothChk = uicheckbox(viewport, 'Text', 'smoothed', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
         end
 
-        function buildRight(obj)
+        function buildSwitcherRow(obj, parent)
+            switcher = uigridlayout(parent, [1, 6]);
+            switcher.Layout.Row = 2;
+            switcher.RowHeight = {28};
+            switcher.ColumnWidth = {28, 200, 28, 80, 80, '1x'};
+            switcher.Padding = [0 0 0 0];
+            switcher.ColumnSpacing = 4;
+
+            obj.PrevButton = uibutton(switcher, 'Text', '<', ...
+                'BackgroundColor', semanticColor('geometry'), ...
+                'ButtonPushedFcn', @(~,~) obj.prevBodyPart());
+            obj.BodyPartDropDown = uidropdown(switcher, 'Items', {'(no DLC loaded)'}, ...
+                'Value', '(no DLC loaded)', ...
+                'ValueChangedFcn', @(s,~) obj.onDropDownChanged(s.Value));
+            obj.NextButton = uibutton(switcher, 'Text', '>', ...
+                'BackgroundColor', semanticColor('geometry'), ...
+                'ButtonPushedFcn', @(~,~) obj.nextBodyPart());
+            obj.LogScaleButton = uibutton(switcher, 'state', 'Text', 'log Y', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.ShowVideoButton = uibutton(switcher, 'state', 'Text', 'Video', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ValueChangedFcn', @(s, ~) obj.toggleVideoPanel(s.Value));
+            obj.FrameLabel = uilabel(switcher, 'Text', 'Frame -/-', ...
+                'HorizontalAlignment', 'right');
+        end
+
+        function buildRegionsPanelInline(obj, parent)
+            obj.RegionsPanel = uipanel(parent, 'Title', 'Manual exclusion regions');
+            obj.RegionsPanel.Layout.Row = 3;
+            rg = uigridlayout(obj.RegionsPanel, [2, 6]);
+            rg.RowHeight = {28, '1x'};
+            rg.ColumnWidth = {110, 130, 100, 70, 70, '1x'};
+            rg.Padding = [4 4 4 4];
+            rg.RowSpacing = 4;
+            rg.ColumnSpacing = 4;
+
+            uibutton(rg, 'Text', 'Add region', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.addManualRegion());
+            obj.RegionsAppliesDropDown = uidropdown(rg, ...
+                'Items', {'all'}, 'Value', 'all');
+            obj.RegionsScopeDropDown = uidropdown(rg, ...
+                'Items', {'experiment', 'session'}, 'Value', 'experiment');
+            uibutton(rg, 'Text', 'Delete', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.deleteSelectedRegion());
+            uibutton(rg, 'Text', 'Clear', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.clearAllRegions());
+            uilabel(rg, 'Text', '');
+
+            obj.RegionsListBox = uilistbox(rg, 'Items', {});
+            obj.RegionsListBox.Layout.Row = 2;
+            obj.RegionsListBox.Layout.Column = [1 6];
+        end
+
+        function buildLogInline(obj, parent)
+            obj.LogTextArea = uitextarea(parent, 'Editable', 'off', ...
+                'Value', {''});
+            obj.LogTextArea.Layout.Row = 4;
+        end
+
+        function buildRight_DEPRECATED(obj)   %#ok<DEFNU>
+            % Kept for reference only — replaced by buildPlots/buildBottomBar
+            % in the Slice DD layout. NOT called from buildUI anymore.
             obj.RightGrid = uigridlayout(obj.OuterGrid, [8, 1]);
             obj.RightGrid.Layout.Column = 2;
-            % Rows: X(t), Y(t), histogram, viewport, switcher, regions, log, video
             obj.RightGrid.RowHeight = {'1x', '1x', '1x', 32, 36, 100, 110, 0};
             obj.RightGrid.RowSpacing = 4;
             obj.RightGrid.Padding = [2 2 2 2];

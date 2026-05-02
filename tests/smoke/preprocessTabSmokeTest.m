@@ -170,9 +170,9 @@ function testVideoToggleAndFrameNav(testCase)
     pc.setCurrentFrame(99999);  % clamp
     verifyEqual(testCase, pc.State.currentFrame, pc.State.dlc.nFrames);
 
-    % Toggle off
+    % Toggle off — standalone window should close
     pc.toggleVideoPanel(false);
-    verifyEqual(testCase, pc.RightGrid.RowHeight{8}, 0);
+    verifyTrue(testCase, isempty(pc.VideoWindow) || ~isvalid(pc.VideoWindow));
 end
 
 function testSavePreprocessedRoundTrip(testCase)
