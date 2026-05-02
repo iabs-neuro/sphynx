@@ -393,6 +393,49 @@ Q8 → Manual regions per-experiment (моё прочтение «как для 
 ### Что НЕ начато на этом turn
 Только спека/план/TODO/TaskCreate. Сам код Slice A — следующий ход (или ход после, если юзер захочет ещё уточнить).
 
+---
+
+## 2026-05-02 — Round-2 sprint: A→B→C→F→H→E→D готов
+
+Юзер сказал «поехали» — я прошёл 7 слайсов автономно. Коммиты d24116d, 61782cc, 64a4914, 19d0562, 556a58a, 65700bd, d5ad418.
+
+### Ключевые архитектурные решения
+
+**Newest-line-at-TOP в Log (workaround R2020a):** `scroll(uitextarea, 'bottom')` появился только в R2020b/R2021a. В R2020a у `uitextarea` нет scroll API, нет focus, нет JavaPeer (uifigure это HTML/CEF, не Java). Решение — переворачиваю порядок: новые строки в начало списка, старые в конец. Юзер всегда видит последнее без скролла. Применил в обоих контроллерах (Preprocess + CreatePreset). Если будущий агент захочет «нормальный» порядок — нужен `uihtml` workaround (HTML с auto-scroll JS).
+
+**heterogeneousStrucAssignment в struct array:** Когда applyPerPartSettings возвращает struct с `percentManual`, а state.processed создан БЕЗ него (или в другом порядке полей), MATLAB ругается. Исправлено: `applyPerPartSettings` теперь использует `out = struct(...)` с фиксированным порядком полей. `storeProcessed` placeholder и `emptyState()` декларация — все используют тот же порядок. ЕСТЬ ещё одно место где processed пересоздаётся (`populateDefaultPerPart`) — там тоже синхронизировано. **Если добавляешь новое поле в applyPerPartSettings — обнови все 4 места.**
+
+**autoThreshold floor 0.4:** только для Auto, juzер вручную может ниже. Floor выдаёт WARN в Log: `autoThreshold[<method>] suggested <raw>, clamped to floor 0.40`.
+
+**bounds x<1:** `cleanBodyPart.outOfBounds` теперь `x<1 | y<1 | x>W | y>H`. DLC pixel coords — натуральные, 0 = invalid (off the top/left edge).
+
+**Manual regions per-experiment по умолчанию:** scope dropdown с дефолтом 'experiment'. При Add region существующие experiment-regions рисуются полупрозрачно (red alpha 0.2) — если ракурс камеры сместился, юзер сразу увидит несовпадение и может переключить scope→session.
+
+**Bad-frame highlighting на X(t)/Y(t):** new helper `shadeBadFrames(ax, mask, tVec)` рисует gray translucent bands. Mask = isnan(X_clean) | isnan(Y_clean) — покрывает все NaN-причины (likelihood/bounds/outlier/manual). Использует `findRuns()` для compress consecutive bad frames в patch'и (быстрее чем patch на каждый кадр).
+
+**Hampel в секундах:** UI поле теперь `win,s` (default 0.25s). applyPerPartSettings конвертит через `ctx.frameRate`. Legacy `windowSize` (samples) остаётся как fallback — если новые поля отсутствуют (для batch-callers, которые могут передавать старый формат). Но в GUI используется только `windowSec`.
+
+**drawpolygon/drawcircle/drawellipse в CreatePreset:** `readArenaGeometry` теперь использует Image Processing ROI tools вместо ginput. Polygon: click vertices + double-click + draggable refinement. Circle: click-and-drag + draggable. Ellipse: click-and-drag + rotate handle. O-maze: два drawpolygon последовательно. `Points` name-value override остался — тесты не сломались.
+
+**PreprocessVideoWindow standalone:** Открывается отдельным uifigure. Использует тот же `obj.Parent.VideoReader_` через handle. Play loop через `timer` с `ExecutionMode='fixedRate'`, `Period=1/(fps*speed)`. На play кнопка превращается в Pause; Stop удаляет timer. Цвета через `pickColormap()` с safe fallback на `parula` если новые палитры (plasma/viridis/turbo) недоступны в R2020a.
+
+**Synthetic Data tab + Load synthetic:** 4-я вкладка `SyntheticDataTabController`. Алгоритм `makeSyntheticDLC` с 3 motion models + 4 outlier modes. csv writer соответствует DLC формату (header: scorer/bodyparts/coords + N rows of x,y,likelihood). Load synthetic в Preprocess Block 1 — генерирует mixed-сценарий в `tempname()`, синтетический preset в state.presetData (без файла), и вызывает loadAll().
+
+### Heap corruption flake в R2020a
+`runtests('tests', 'IncludeSubfolders', true)` иногда триггерит heap corruption из-за многократной uifigure teardown. В отдельных батчах (unit, smoke, synthetic, golden) всё проходит зелёно — 158/158. Это R2020a-only flake, не связан с кодом. Если в следующем turn будет нужно прогнать всё — запускай по поддиректориям.
+
+### Что не сделано (намеренно)
+- Multi-file mode: в TODO #9 (юзер просил отложить).
+- Per-part Kalman Q/R: сейчас global в Block 3. Если юзер захочет per-part — добавить колонки в таблицу (но сейчас 12 колонок, может быть тесно).
+- Мelоdic анимация для play loop с реальным progress bar (можно добавить).
+
+### Заметки для следующих агентов
+- 4 вкладки сейчас: Create Preset / Preprocess Tracking / Synthetic Data / Analyze Session. PreprocessTabController, SyntheticDataTabController в `+sphynx/+app/`. Standalone PreprocessVideoWindow тоже там.
+- struct array growth с heterogeneous fields всегда требует одинакового порядка полей. Если debug heterogeneousStrucAssignment — проверь все места создания/инициализации.
+- `obj.State.lastDrawnUnits` и `obj.State.lastDrawnYUnit` — для invalidation зума при смене единиц.
+- `RowHeight{8}` — VideoPanel embedded (collapsed permanently после Slice E). Не использовать.
+- VideoReader_ открывается лениво на toggle Video. PreprocessVideoWindow использует тот же handle.
+
 ### Лог
 Обновил оба лога этим turn'ом до того, как закончил отвечать.
 

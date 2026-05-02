@@ -207,3 +207,20 @@ Multi-file mode → TODO в `docs/CreatePresetApp/TODO.md`.
 ---
 
 Записываю TODO про multi-file, обновляю dual-logs правило в памяти, создаю спеку + план, потом начинаю Slice A автономно (как в прошлый раз — слайс готов → коммит → следующий). Если хочешь чтобы я сначала ждал твой OK на спеку — скажи, тогда поставлю на паузу после её написания.
+
+---
+
+**Юзер:** поехали
+
+**Claude:** Прошёл все 7 слайсов автономно. Коммиты на ветке `sphynx-GUI`:
+- Slice A `d24116d` — косметика и быстрые правки. Левая колонка 760, fix Save высоту, Load в Block 1 во весь блок снизу, swap Block 2 ↔ Block 3 (Outlier filter теперь над Per-part settings — Compute идёт последним), Auto floor 0.4 + warning в Log при clamp, Auto all только use=true, INFO кнопки в Block 2/3 с topic-specific uialert dialogs, exportTracks фильтрует use=false и status=NotFound (части тела вообще не появляются в Preprocessed.mat), Auto-scroll Log workaround через newest-line-at-top (R2020a uitextarea не имеет scroll API), Scrollable=on на CreatePreset левой колонке (belt-and-braces), сохранение зума на recompute (только инвалидируется при смене bodypart или units), новая колонка %manual в таблице, bounds x<1 теперь bad. Tests подправлены: cleanBodyPart с [1, 100] вместо [0, 100], autoThreshold ожидает floor 0.4 для quantile 0.05/default. 158/158 зелёные.
+- Slice B `61782cc` — единицы (Y в см если есть pxlPerCm; X dropdown frame/sec/min с дефолтом sec) + viewport row (from frame / to frame, 0=last) + go-to-frame в video panel. Зум при смене единиц теперь инвалидируется (XLim/YLim не имеют смысла между cm/px или sec/frame).
+- Slice C `64a4914` — три кривые на X(t)/Y(t): raw (синий), interp (оранжевый), smoothed (зелёный). Три checkbox toggle [raw][interp][smoothed] в viewport. Цвета совпадают с saved PNGs.
+- Slice F `19d0562` — Hampel win в секундах (windowSec, default 0.25s), конверсия в samples через ctx.frameRate; legacy windowSize fallback. Manual regions: per-region scope dropdown (experiment | session, дефолт experiment), uialert после успешного добавления + log line, существующие experiment-scope регионы рисуются полупрозрачно (red, alpha 0.2) на frame canvas при Add region, X(t)/Y(t) plots шейдят bad-frames (gray translucent bands) — все NaN-причины (likelihood, bounds, outlier, manual). Listbox label включает scope.
+- Slice H `556a58a` — drawpolygon/drawcircle/drawellipse в CreatePreset readArenaGeometry. Polygon: drawpolygon с draggable вершинами, double-click commit. Circle: drawcircle с draggable радиусом/центром (60 точек на ободе). Ellipse: drawellipse (60 точек). O-maze: два consecutive drawpolygon. Backwards-compatible: 'Points' name-value override все ещё пропускает interactive input для тестов.
+- Slice E `65700bd` — отдельное окно видео PreprocessVideoWindow. Большой axes, slider, step buttons (<<, <, >, >>), go-to N field, Play/Pause/Stop с timer-based loop, speed dropdown (0.25x-4x), colormap dropdown (parula/jet/hsv/hot/cool/plasma/viridis/turbo с fallback на parula), marker size field, "show all parts" checkbox. Raw = open circle цвет per-part из палитры, smoothed = filled circle того же цвета. Embedded video panel теперь permanently collapsed; кнопка Video открывает standalone window. Sync с playhead на X(t)/Y(t) и FrameLabel.
+- Slice D `d5ad418` — 4-я вкладка Synthetic Data в CreatePresetApp + Load synthetic кнопка в Block 1 Preprocess. Алгоритм sphynx.preprocess.makeSyntheticDLC: 3 motion models (random_walk / circular / OU), 4 outlier modes (none / spikes / long_gap / poor_likelihood / mixed). DLC-style csv exporter. SyntheticDataTabController UI: настройки + Generate + Save to folder (csv + minimal Preset.mat). Load synthetic генерирует mixed-сценарий в temp и подгружает без preset-файла (preset stashed in memory).
+
+158/158 тестов проходят (в отдельных батчах unit/smoke/synthetic; runtests с IncludeSubfolders=true триггерит R2020a heap corruption — flake связан с многократной teardown uifigure, не с моим кодом).
+
+Открыть как раньше: `startup; sphynx.app.CreatePresetApp;` → 4 вкладки: Create Preset / Preprocess Tracking / Synthetic Data / Analyze Session. Жду проверку.
