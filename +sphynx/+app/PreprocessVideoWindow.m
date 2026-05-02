@@ -28,6 +28,12 @@ classdef PreprocessVideoWindow < handle
         ShowAllChk      % show all parts vs only the current
         PlayButton
         Timer           % MATLAB timer for play loop
+        % Build preview: precomputed frame array for fast playback
+        PreviewBuffer   % HxWx3xN uint8
+        PreviewStart    % first frame index of the buffer
+        PreviewEnd      % last frame index
+        BuildFromField
+        BuildToField
     end
 
     methods
@@ -84,10 +90,16 @@ classdef PreprocessVideoWindow < handle
             if isempty(obj.Ax) || ~isvalid(obj.Ax); return; end
             if isempty(obj.Parent.VideoReader_); return; end
             f = obj.Parent.State.currentFrame;
-            try
-                img = read(obj.Parent.VideoReader_, f);
-            catch
-                return;
+            % Fast path: prebuilt buffer covers the requested frame
+            if ~isempty(obj.PreviewBuffer) && ...
+                    f >= obj.PreviewStart && f <= obj.PreviewEnd
+                img = obj.PreviewBuffer(:, :, :, f - obj.PreviewStart + 1);
+            else
+                try
+                    img = read(obj.Parent.VideoReader_, f);
+                catch
+                    return;
+                end
             end
             cla(obj.Ax);
             imshow(img, 'Parent', obj.Ax);
@@ -103,9 +115,9 @@ classdef PreprocessVideoWindow < handle
     methods (Access = private)
         function buildUI(obj)
             obj.Figure = uifigure('Name', 'Preprocess Video', ...
-                'Position', [100 80 900 720]);
-            g = uigridlayout(obj.Figure, [3, 1]);
-            g.RowHeight = {'1x', 36, 36};
+                'Position', [100 80 900 760]);
+            g = uigridlayout(obj.Figure, [4, 1]);
+            g.RowHeight = {'1x', 36, 36, 36};
             g.Padding = [6 6 6 6];
             g.RowSpacing = 6;
 
@@ -171,6 +183,63 @@ classdef PreprocessVideoWindow < handle
             obj.ShowAllChk = uicheckbox(settings, 'Text', 'show all parts', ...
                 'Value', true, ...
                 'ValueChangedFcn', @(~,~) obj.refreshFrame());
+
+            % Row 4: build preview interval
+            buildRow = uigridlayout(g, [1, 6]);
+            buildRow.Layout.Row = 4;
+            buildRow.RowHeight = {30};
+            buildRow.ColumnWidth = {80, 80, 50, 80, 110, '1x'};
+            buildRow.Padding = [0 0 0 0];
+            buildRow.ColumnSpacing = 4;
+            uilabel(buildRow, 'Text', 'Buffer from:', 'HorizontalAlignment', 'right');
+            obj.BuildFromField = uieditfield(buildRow, 'numeric', ...
+                'Value', 1, 'Limits', [1 Inf], 'RoundFractionalValues', 'on');
+            uilabel(buildRow, 'Text', 'to:', 'HorizontalAlignment', 'right');
+            obj.BuildToField = uieditfield(buildRow, 'numeric', ...
+                'Value', 300, 'Limits', [1 Inf], 'RoundFractionalValues', 'on', ...
+                'Tooltip', 'max ~30s; longer ranges get trimmed');
+            uibutton(buildRow, 'Text', 'Build preview', ...
+                'BackgroundColor', [1.00 0.55 0.55], 'FontWeight', 'bold', ...
+                'ButtonPushedFcn', @(~,~) obj.buildPreview());
+        end
+
+        function buildPreview(obj)
+            if isempty(obj.Parent.VideoReader_); return; end
+            n = obj.Parent.State.dlc.nFrames;
+            fps = obj.Parent.VideoReader_.FrameRate;
+            f1 = max(1, min(n, round(obj.BuildFromField.Value)));
+            f2 = max(f1, min(n, round(obj.BuildToField.Value)));
+            % Cap interval to ~30s of footage to avoid blowing memory.
+            maxFrames = round(30 * fps);
+            if f2 - f1 + 1 > maxFrames
+                uialert(obj.Figure, sprintf( ...
+                    'Interval %d-%d exceeds 30s limit (%d frames). Trimming.', ...
+                    f1, f2, maxFrames), 'Build preview', 'Icon', 'warning');
+                f2 = f1 + maxFrames - 1;
+            end
+            nFr = f2 - f1 + 1;
+            dlg = uiprogressdlg(obj.Figure, 'Title', 'Building preview', ...
+                'Message', sprintf('Reading %d frames...', nFr), ...
+                'Cancelable', 'on');
+            cleaner = onCleanup(@() closeIfValid(dlg));
+            % Allocate buffer
+            sample = read(obj.Parent.VideoReader_, f1);
+            obj.PreviewBuffer = zeros([size(sample), nFr], 'uint8');
+            obj.PreviewBuffer(:, :, :, 1) = sample;
+            for k = 2:nFr
+                if dlg.CancelRequested
+                    obj.PreviewBuffer = [];
+                    return;
+                end
+                obj.PreviewBuffer(:, :, :, k) = read(obj.Parent.VideoReader_, f1 + k - 1);
+                if mod(k, 30) == 0 || k == nFr
+                    dlg.Value = k / nFr;
+                    dlg.Message = sprintf('Reading frames... %d / %d', k, nFr);
+                end
+            end
+            obj.PreviewStart = f1;
+            obj.PreviewEnd = f2;
+            obj.refreshFrame();
         end
 
         function togglePlay(obj)
@@ -275,6 +344,12 @@ function cmap = tryColormap(name, n)
         cmap = feval(name, n);   % R2020b+ has plasma/viridis/turbo
     catch
         cmap = parula(n);
+    end
+end
+
+function closeIfValid(h)
+    if ~isempty(h) && isvalid(h)
+        try; close(h); catch; end
     end
 end
 
