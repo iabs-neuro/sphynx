@@ -436,6 +436,47 @@ Q8 → Manual regions per-experiment (моё прочтение «как для 
 - `RowHeight{8}` — VideoPanel embedded (collapsed permanently после Slice E). Не использовать.
 - VideoReader_ открывается лениво на toggle Video. PreprocessVideoWindow использует тот же handle.
 
+---
+
+## 2026-05-02 — Round-3 фидбек: 14 правок, ответил вопросами + планом
+
+### Юзер запросил
+**CreatePreset (7 правок):** dropdown «способ выделения» (точки vs фигура) для арены и объектов раздельно; калибровка отрезком; имя файла большими в preview; автоочистка масок при загрузке нового видео; strips параллельно сторонам квадрата; описание двойного клика; Clear all + delete all + clear arena кнопки.
+
+**Preprocess (6 правок):** пересборка layout (1+2 слева, 3 справа сверху, графики во всю ширину снизу); маленькие numeric boxes; auto/compute all поярче; кнопка применения интервала просмотра; ускорение видео (precompute интервала с progress bar).
+
+**Synthetic (2 правки):** настройки выбросов (количество + распределение длины); likelihood модели (бимодальное / унимодальное в 1 / унимодальное в 0).
+
+**TODO check:** проверить пересечения и что можно закрыть заодно.
+
+### Что я сделал
+Только анализ и план — НЕ начинал код, потому что:
+1. Многое требует уточнения (особенно Q6 «двойной клик» — неясная формулировка).
+2. Layout пересборка крупная, лучше согласовать.
+3. Q12 (видео precompute) — серьёзный feature, нужно знать предельный интервал.
+4. Q14 (likelihood модели) нужно зафиксировать формат до кодирования.
+
+### План из 8 слайсов AA-HH
+- AA: CreatePreset cosmetics + Clear all/delete all/arena delete + filename overlay + auto-clear video + TODO #6 (rotation) + TODO #1 (widths).
+- BB: Pick mode dropdown + калибровка 2-lines.
+- CC: Strips параллельно сторонам (TODO #7).
+- DD: Preprocess layout пересборка.
+- EE: Preprocess маленькие numeric + поярче кнопки + Apply view.
+- FF: Video кэш + Build preview.
+- GG: Synthetic настройки выбросов + likelihood режимы.
+- HH: Tests + docs.
+
+### Заметки для следующих агентов
+- TODO в `docs/CreatePresetApp/TODO.md` обновлю в Slice HH (вычеркнуть #2, #4 как сделанные; пометить #7 как закрытый через Slice CC).
+- Для strips параллельно сторонам: использовать PCA на arena vertices (или regionprops Orientation). Вычислить principal axis, сделать strips в arena-aligned, потом imrotate обратно в image coords.
+- Для калибровки 2-lines: drawline ROI tool возвращает Position 2x2 [x1 y1; x2 y2]. Длина проекции на Y = abs(diff(Position(:,2))), на X = abs(diff(Position(:,1))).
+- Для Build preview интервала: VideoReader.read([startF endF]) загружает в память H×W×3×N массив. На 1 мин 30fps 800x600 ≈ 2.6GB — слишком много. Лимит 30 sec = 1.3GB. Или downsample до 15fps.
+- Для авто-очистки масок при Browse Video: добавить в callback того же места где обновляется State.frame. Hook через State.lastVideoPath, сравнение с новым.
+- Для TODO #6 (rigid-body rotation): в `applyTransformToTarget` когда tIdx == -1, вычислить shared pivot = arena centroid, потом для каждого child translate to pivot-relative → rotate → translate back. NOT per-child rotation.
+
+### Что НЕ начато на этом turn
+Только спека + 14 уточняющих вопросов. Если юзер скажет «по твоим предложениям, поехали» — начну сразу, иначе жду ответов.
+
 ### Лог
 Обновил оба лога этим turn'ом до того, как закончил отвечать.
 
