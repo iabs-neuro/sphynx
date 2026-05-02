@@ -22,16 +22,9 @@ Applied to both PreprocessTabController and CreatePresetApp logs.
 ## Functional / performance
 
 ### 3. Filled zone overlay in preview without slowdown
-- Today preview uses outline-only via `bwboundaries+plot` to stay
-  responsive with many zones on large frames. User wants filled
-  fill that's still fast.
-- Approach: composite all zones into a single overlay RGBA image
-  ahead of time, then a single `image()` call. Per-pixel alpha
-  blending in MATLAB. Pre-compute on Add to set / Preview, cache
-  until State changes.
-- Or: use `imagesc` + transparency on a labeled mask (label
-  matrix where each int = zone id, mapped to colors via colormap).
-  One drawcall, fast.
+**STATUS: WONT-FIX (2026-05-02).** Outline-only preview works fine
+in practice; user dropped this from the backlog. Filled overlay is
+still produced for the saved layout PNG via the regular `patch` path.
 
 ### 4. Drag-and-drop interactive object drawing
 **STATUS: DONE (Slice H + Slice BB, 2026-04-30 / 2026-05-02).**

@@ -53,17 +53,26 @@ function arena = readArenaGeometry(frame, geometry, varargin)
         else
         switch geometry
             case 'O-maze'
-                uiwait(msgbox(['Draw the OUTER border polygon:' newline ...
-                    'click vertices, double-click to finish.'], 'O-maze', 'modal'));
-                hOut = drawpolygon(ax);
+                % O-maze is conceptually two concentric circles. Use
+                % drawcircle for both — drag-to-size, then drag the rim
+                % to refine, double-click to commit.
+                uiwait(msgbox('Draw the OUTER border circle (drag, double-click to finish)', 'O-maze', 'modal'));
+                hOut = drawcircle(ax);
                 wait(hOut);
                 if ~isvalid(hOut); pts = zeros(0,2); clear cleanup; return; end
-                outerPts = hOut.Position;
-                uiwait(msgbox(['Draw the INNER border polygon:' newline ...
-                    'click vertices, double-click to finish.'], 'O-maze', 'modal'));
-                hIn = drawpolygon(ax);
+                cxO = hOut.Center(1); cyO = hOut.Center(2); RO = hOut.Radius;
+                ang = linspace(0, 2*pi, 60)';
+                outerPts = [cxO + RO*cos(ang), cyO + RO*sin(ang)];
+
+                uiwait(msgbox('Draw the INNER border circle (drag, double-click to finish)', 'O-maze', 'modal'));
+                hIn = drawcircle(ax);
                 wait(hIn);
-                if ~isvalid(hIn); innerPts = zeros(0,2); else; innerPts = hIn.Position; end
+                if ~isvalid(hIn)
+                    innerPts = zeros(0,2);
+                else
+                    cxI = hIn.Center(1); cyI = hIn.Center(2); RI = hIn.Radius;
+                    innerPts = [cxI + RI*cos(ang), cyI + RI*sin(ang)];
+                end
                 pts = [outerPts; NaN NaN; innerPts];
             case 'Polygon'
                 title(ax, 'Click polygon vertices, double-click to finish. Drag vertices to refine.', 'Interpreter', 'none');

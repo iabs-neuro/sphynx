@@ -28,6 +28,8 @@ function zones = classifySquare(arenaMask, varargin)
     addParameter(p, 'NumStrips', 3, @(v) isnumeric(v) && v >= 1);
     addParameter(p, 'StripDirection', 'horizontal', @ischar);
     addParameter(p, 'ArenaVertices', []);   % when set, strips align to arena sides
+    addParameter(p, 'CornerType', 'round', ...
+        @(s) any(strcmpi(s, {'round', 'square'})));
     parse(p, arenaMask, varargin{:});
 
     arenaMask = arenaMask > 0;
@@ -36,17 +38,38 @@ function zones = classifySquare(arenaMask, varargin)
         case 'corners-walls-center'
             zones = cornersWallsCenter(arenaMask, p.Results);
         case 'strips'
+            % First split the arena into N equal strips. Then each
+            % "_realout" strip is the same partition extended outward
+            % by wallW only WITHIN the slab — i.e. each inner strip
+            % grows toward the outside edge it touches, never overlapping
+            % the inflation ring of another strip. This way the union of
+            % strip{i} + strip{i}_realout equals the local part of the
+            % outside-wall ring, not a duplicate global partition (round-4
+            % bug fix).
             zones = sphynx.zones.partitionStrips(arenaMask, p.Results.NumStrips, ...
                 p.Results.StripDirection, 'ArenaVertices', p.Results.ArenaVertices);
             if ~isempty(p.Results.PixelsPerCm)
                 wallW = p.Results.WallWidthCm * p.Results.PixelsPerCm;
                 bwd = bwdist(arenaMask);
-                arenaRealOut = arenaMask | (bwd > 0 & bwd <= wallW);
-                stripsRealOut = sphynx.zones.partitionStrips(arenaRealOut, ...
-                    p.Results.NumStrips, p.Results.StripDirection, ...
-                    'ArenaVertices', p.Results.ArenaVertices);
-                for k = 1:numel(stripsRealOut)
-                    stripsRealOut(k).name = sprintf('%s_realout', stripsRealOut(k).name);
+                outsideRing = bwd > 0 & bwd <= wallW;
+                stripsRealOut = struct('name', {}, 'type', {}, 'maskfilled', {});
+                for k = 1:numel(zones)
+                    inner = zones(k).maskfilled;
+                    % For each outside-ring pixel: assign to the strip
+                    % whose pixels are nearest. Use bwdist of the strip
+                    % itself; pick the strip with minimum distance.
+                    % Computed lazily via watershed-style nearest-strip
+                    % map below.
+                    stripsRealOut(k).name = sprintf('%s_realout', zones(k).name); %#ok<AGROW>
+                    stripsRealOut(k).type = 'area';
+                    stripsRealOut(k).maskfilled = inner;   % seed with inner
+                end
+                if any(outsideRing(:))
+                    nearestStrip = nearestStripMap(zones, outsideRing);
+                    for k = 1:numel(zones)
+                        own = (nearestStrip == k);
+                        stripsRealOut(k).maskfilled = stripsRealOut(k).maskfilled | own;
+                    end
                 end
                 zones = [zones, stripsRealOut];
             end
@@ -71,7 +94,14 @@ function zones = cornersWallsCenter(arenaMask, opts)
 
     pxlPerCm = opts.PixelsPerCm;
     wallW = opts.WallWidthCm * pxlPerCm;
-    cornerW = wallW * sqrt(2);
+    if strcmpi(opts.CornerType, 'square')
+        % Square corners: tight wallW x wallW patches at each vertex
+        % (Manhattan/L-infinity neighborhood instead of L2). This stays
+        % fully inside the arena because we intersect with arenaMask.
+        cornerW = wallW;
+    else
+        cornerW = wallW * sqrt(2);
+    end
 
     [H, W] = size(arenaMask);
 
@@ -153,4 +183,19 @@ function zone = mkZone(name, paddedMask, pad)
     zone.name = name;
     zone.type = 'area';
     zone.maskfilled = paddedMask(pad+1 : pad+H, pad+1 : pad+W);
+end
+
+function nearestMap = nearestStripMap(zones, ringMask)
+    % For every pixel in ringMask, return the index k of the strip
+    % whose interior is closest. Computed via per-strip bwdist; the
+    % strip with the minimum distance to a pixel wins.
+    [H, W] = size(ringMask);
+    nearestMap = zeros(H, W, 'uint8');
+    bestDist = inf(H, W);
+    for k = 1:numel(zones)
+        d = bwdist(zones(k).maskfilled);
+        better = ringMask & (d < bestDist);
+        bestDist(better) = d(better);
+        nearestMap(better) = k;
+    end
 end

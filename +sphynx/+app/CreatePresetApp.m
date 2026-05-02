@@ -63,6 +63,7 @@ classdef CreatePresetApp < handle
         ZonesStrategyDropDown
         WallWidthField
         MiddleWidthField
+        CornerTypeDropDown
         NumStripsField
         StripDirDropDown
         ObjectZoneWidthField
@@ -152,7 +153,7 @@ classdef CreatePresetApp < handle
                 arena = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
                     'Points', points);
                 app.State.arena = arena;
-                app.ArenaStatusLabel.Text = sprintf('Arena: %s OK', geometry);
+                app.applog('info', 'Arena: %s OK', geometry);
                 app.refreshPreview();
                 onZoneStrategyChanged(app);   % object-zone field may change
                 app.refreshMoveTargets();
@@ -747,7 +748,9 @@ end
 
 function buildCreateTab(app)
     app.OuterGrid = uigridlayout(app.TabCreate, [1, 2]);
-    app.OuterGrid.ColumnWidth = {'fit', '1x'};   % left: fits content, right: flex
+    % Round-4: explicit 480 px so all 'fit' panels (Arena with extra
+    % buttons / Objects) have enough room for INFO etc.
+    app.OuterGrid.ColumnWidth = {480, '1x'};
     app.OuterGrid.RowHeight = {'1x'};
 
     % Wrap left column in a scrollable panel so panels stay readable
@@ -760,7 +763,9 @@ function buildCreateTab(app)
     % Per-panel height = sum(rowHeights) + (n-1)*rowSpacing + 8 padding
     %                    + ~25 panel title bar. Row heights are 28 px
     %                    uniformly; Scrollable wrapper handles overflow.
-    app.LeftGrid.RowHeight = {100, 170, 105, 175, 245, 75};
+    % Round-4: bumped row 2 (Calibration) so the Exp dropdown fits and
+    % row 4 (Objects) so 4 objects fit in the listbox.
+    app.LeftGrid.RowHeight = {100, 200, 105, 220, 245, 75};
     app.LeftGrid.RowSpacing = 4;
     app.LeftGrid.Padding = [4 4 4 4];
 
@@ -793,9 +798,10 @@ function buildCreateTab(app)
     % Row 2: nav (Next frame + frame label + target dropdown + step)
     navPanel = uipanel(app.RightGrid);
     cg = uigridlayout(navPanel, [1, 6]);
-    cg.RowHeight = {28};
+    cg.RowHeight = {'1x'};   % stretch to fit panel height — vertically centered
     cg.ColumnWidth = {'fit', 110, 'fit', 'fit', 'fit', 60};
     cg.ColumnSpacing = 4;
+    cg.Padding = [4 4 4 4];
     bNext = uibutton(cg, 'Text', 'Next frame', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.nextFrame());
@@ -811,12 +817,13 @@ function buildCreateTab(app)
     app.MoveStepField = uieditfield(cg, 'numeric', 'Value', 5, 'Limits', [0.1, 200]);
     app.MoveStepField.Layout.Row = 1; app.MoveStepField.Layout.Column = 6;
 
-    % Row 3: arrow + rotate buttons (10% taller than rest = 26 px)
+    % Row 3: arrow + rotate buttons
     movePanel = uipanel(app.RightGrid);
     mg = uigridlayout(movePanel, [1, 6]);
-    mg.RowHeight = {28};
+    mg.RowHeight = {'1x'};   % stretch to fit panel height — vertically centered
     mg.ColumnWidth = {80, 80, 80, 80, 80, 80};
     mg.ColumnSpacing = 4;
+    mg.Padding = [4 4 4 4];
     addMoveBtn(mg, 1, 'Left',  @() app.moveTarget([-1  0]));
     addMoveBtn(mg, 2, 'Right', @() app.moveTarget([ 1  0]));
     addMoveBtn(mg, 3, 'Up',    @() app.moveTarget([ 0 -1]));
@@ -889,62 +896,78 @@ function addLoadCol(g, col, btnText, btnFcn, fieldKey, app)
 end
 
 function buildCalibPanel(app)
-    % 6 columns: label | value | label | value | flex | INFO
-    g = uigridlayout(app.CalibPanel, [4 6]);
+    % Round-4: combined Choose / cm Y / cm X / Compute on one row.
+    % 8 columns: Choose | mode-dropdown | cm-Y label | cm-Y val |
+    %            cm-X label | cm-X val | Compute | INFO
+    g = uigridlayout(app.CalibPanel, [4 8]);
     g.RowHeight = {28, 28, 28, 28};
-    g.ColumnWidth = {'fit', 50, 'fit', 50, '1x', 50};
+    g.ColumnWidth = {70, 80, 'fit', 50, 'fit', 50, 'fit', 50};
     g.ColumnSpacing = 4;
 
+    % Row 1: Choose | mode | cm Y | cmYval | cm X | cmXval | Compute | INFO
     bChoose = uibutton(g, 'Text', 'Choose', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onCalibrateChoose(app));
     bChoose.Layout.Row = 1; bChoose.Layout.Column = 1;
     app.CalibModeDropDown = uidropdown(g, ...
         'Items', {'4 points', '2 lines'}, 'Value', '4 points', ...
-        'Tooltip', '4 points = legacy click-y1-y2-x1-x2; 2 lines = drawline for Y then for X (only the projection length is used)');
+        'Tooltip', '4 points = legacy click-y1-y2-x1-x2; 2 lines = drawline');
     app.CalibModeDropDown.Layout.Row = 1; app.CalibModeDropDown.Layout.Column = 2;
+    lblY = uilabel(g, 'Text', 'cm Y:'); lblY.Layout.Row = 1; lblY.Layout.Column = 3;
+    app.DistanceYField = uieditfield(g, 'numeric', 'Value', 50, 'Limits', [0.1, Inf]);
+    app.DistanceYField.Layout.Row = 1; app.DistanceYField.Layout.Column = 4;
+    lblX = uilabel(g, 'Text', 'cm X:'); lblX.Layout.Row = 1; lblX.Layout.Column = 5;
+    app.DistanceXField = uieditfield(g, 'numeric', 'Value', 50, 'Limits', [0.1, Inf]);
+    app.DistanceXField.Layout.Row = 1; app.DistanceXField.Layout.Column = 6;
     bCompute = uibutton(g, 'Text', 'Compute', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) onCalibrateCompute(app));
-    bCompute.Layout.Row = 1; bCompute.Layout.Column = [3 4];
+    bCompute.Layout.Row = 1; bCompute.Layout.Column = 7;
     bInfo = uibutton(g, 'Text', 'INFO', ...
         'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Calibration', helpCalibrationText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = 6;
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 8;
 
-    lblY = uilabel(g, 'Text', 'cm Y:');
-    lblY.Layout.Row = 2; lblY.Layout.Column = 1;
-    app.DistanceYField = uieditfield(g, 'numeric', 'Value', 50, 'Limits', [0.1, Inf]);
-    app.DistanceYField.Layout.Row = 2; app.DistanceYField.Layout.Column = 2;
-    lblX = uilabel(g, 'Text', 'cm X:');
-    lblX.Layout.Row = 2; lblX.Layout.Column = 3;
-    app.DistanceXField = uieditfield(g, 'numeric', 'Value', 50, 'Limits', [0.1, Inf]);
-    app.DistanceXField.Layout.Row = 2; app.DistanceXField.Layout.Column = 4;
-
+    % Row 2: result labels
     app.PxlPerCmYLabel = uilabel(g, 'Text', 'Y: ?');
-    app.PxlPerCmYLabel.Layout.Row = 3; app.PxlPerCmYLabel.Layout.Column = 1;
+    app.PxlPerCmYLabel.Layout.Row = 2; app.PxlPerCmYLabel.Layout.Column = [1 2];
     app.PxlPerCmXLabel = uilabel(g, 'Text', 'X: ?');
-    app.PxlPerCmXLabel.Layout.Row = 3; app.PxlPerCmXLabel.Layout.Column = 2;
+    app.PxlPerCmXLabel.Layout.Row = 2; app.PxlPerCmXLabel.Layout.Column = [3 4];
     app.PxlPerCmAvgLabel = uilabel(g, 'Text', 'avg: ?');
-    app.PxlPerCmAvgLabel.Layout.Row = 3; app.PxlPerCmAvgLabel.Layout.Column = 3;
+    app.PxlPerCmAvgLabel.Layout.Row = 2; app.PxlPerCmAvgLabel.Layout.Column = [5 6];
     app.XKcorrLabel = uilabel(g, 'Text', 'kcorr: ?');
-    app.XKcorrLabel.Layout.Row = 3; app.XKcorrLabel.Layout.Column = 4;
+    app.XKcorrLabel.Layout.Row = 2; app.XKcorrLabel.Layout.Column = [7 8];
 
+    % Row 3: Exp type — '<New>' lets the user define a custom experiment.
     lblExp = uilabel(g, 'Text', 'Exp:');
-    lblExp.Layout.Row = 4; lblExp.Layout.Column = 1;
+    lblExp.Layout.Row = 3; lblExp.Layout.Column = 1;
     app.ExpTypeDropDown = uidropdown(g, ...
         'Items', {'Novelty OF','BowlsOpenField','NOL','Holes Track','Odor Track', ...
-                  'Freezing Track','New Track','Complex Context','OF_Obj','3DM'});
-    app.ExpTypeDropDown.Layout.Row = 4; app.ExpTypeDropDown.Layout.Column = [2 5];
+                  'Freezing Track','New Track','Complex Context','OF_Obj','3DM','<New>'}, ...
+        'ValueChangedFcn', @(s, ~) onExpTypeChanged(app, s));
+    app.ExpTypeDropDown.Layout.Row = 3; app.ExpTypeDropDown.Layout.Column = [2 8];
+end
+
+function onExpTypeChanged(app, src)
+    if ~strcmp(src.Value, '<New>'); return; end
+    answer = inputdlg('New experiment name:', 'Experiment', 1, {'MyExp'});
+    if isempty(answer); src.Value = src.Items{1}; return; end
+    name = strtrim(answer{1});
+    if isempty(name); src.Value = src.Items{1}; return; end
+    items = src.Items;
+    items{end+1} = name;
+    src.Items = items;
+    src.Value = name;
+    app.status(sprintf('Added experiment type "%s"', name));
 end
 
 function buildArenaPanel(app)
     nGeom = 4;       % Polygon / Circle / Ellipse / O-maze
     % Layout: nGeom geom | flex | Pick mode | Pick | Clear | INFO
     nCols = nGeom + 5;
-    g = uigridlayout(app.ArenaPanel, [2, nCols]);
-    g.RowHeight = {28, 25};
-    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {70}, {'fit'}, {70}, {60}];
+    g = uigridlayout(app.ArenaPanel, [1, nCols]);
+    g.RowHeight = {28};
+    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {70}, {80}, {55}, {55}];
     g.ColumnSpacing = 4;
 
     geometries = {'Polygon', 'Circle', 'Ellipse', 'O-maze'};
@@ -978,8 +1001,7 @@ function buildArenaPanel(app)
         'ButtonPushedFcn', @(~,~) showHelp('Arena', helpArenaText()));
     bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 5;
 
-    app.ArenaStatusLabel = uilabel(g, 'Text', 'Arena: <none>');
-    app.ArenaStatusLabel.Layout.Row = 2; app.ArenaStatusLabel.Layout.Column = [1 nCols];
+    % Arena status label removed in round-4 — status flows to the Log only.
 end
 
 function buildObjectsPanel(app)
@@ -1036,7 +1058,7 @@ function buildObjectsPanel(app)
         'BackgroundColor', [0.92 0.55 0.55], ...
         'Tooltip', 'Remove all objects (and dependent object zones)', ...
         'ButtonPushedFcn', @(~,~) app.deleteAllObjects());
-    bDelAll.Layout.Row = 3; bDelAll.Layout.Column = nGeom + 3;
+    bDelAll.Layout.Row = 3; bDelAll.Layout.Column = nGeom + 4;   % flush right
 end
 
 function onArenaGeometryToggle(app, src)
@@ -1103,6 +1125,12 @@ function buildZonesPanel(app)
     lblObjZone.Layout.Row = 4; lblObjZone.Layout.Column = 1;
     app.ObjectZoneWidthField = uieditfield(g, 'numeric', 'Value', 2.5, 'Limits', [0, Inf]);
     app.ObjectZoneWidthField.Layout.Row = 4; app.ObjectZoneWidthField.Layout.Column = 2;
+    lblCorners = uilabel(g, 'Text', 'Corners:');
+    lblCorners.Layout.Row = 4; lblCorners.Layout.Column = 3;
+    app.CornerTypeDropDown = uidropdown(g, ...
+        'Items', {'round', 'square'}, 'Value', 'round', ...
+        'Tooltip', 'round = Manhattan-style nearest-corner; square = perpendiculars from corner sides to opposite walls');
+    app.CornerTypeDropDown.Layout.Row = 4; app.CornerTypeDropDown.Layout.Column = 4;
 
     % Buttons in their own sub-grid so each is sized to its text
     btnPanel = uipanel(g, 'BorderType', 'none');
@@ -1240,7 +1268,7 @@ function onPickArena(app)
         arena = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
             'PickMode', pickMode);
         app.State.arena = arena;
-        app.ArenaStatusLabel.Text = sprintf('Arena: %s OK', geometry);
+        app.applog('info', 'Arena: %s OK', geometry);
         app.refreshPreview();
         onZoneStrategyChanged(app);
         app.refreshMoveTargets();
@@ -1360,10 +1388,15 @@ function Z = computeZonesFromUI(app)
         wallCm = app.WallWidthField.Value;
         switch strategy
             case 'corners-walls-center'
+                cornerType = 'round';
+                if ~isempty(app.CornerTypeDropDown)
+                    cornerType = app.CornerTypeDropDown.Value;
+                end
                 Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, ...
                     'Strategy', 'corners-walls-center', ...
                     'PixelsPerCm', app.State.pxlPerCm, ...
                     'WallWidthCm', wallCm, ...
+                    'CornerType', cornerType, ...
                     'CornerPoints', cornerPointsFromArena(app.State.arena));
             case 'strips'
                 % Pass arena vertices when geometry is Polygon so strips
