@@ -34,17 +34,17 @@ per Arena and per Objects panel so the user can fall back to the
 legacy ginput flow when preferred. The "Is it correct?" confirm
 loop is preserved for objects.
 
-### 5. More corner types and outside-arena extensions
-**STATUS: PARTIAL (round-5, 2026-05-02).** Inner square corners work
-(parallelogram from V along the two adjacent walls). Outer-ring
-"continuation" strips (corners_realout with CornerType=square) still
-don't render the way the user wants — even after switching the outer
-ring to chessboard distance and using two perpendicular strips per
-vertex. Visually the wings still don't follow the user's red-circled
-intent. Needs a fresh look; possibly the issue is interpretation —
-maybe the user wants the outer strips to extend further than wallW,
-or to be placed differently relative to the wall direction. Confirm
-with annotated screenshot before re-implementing.
+### 5. Square corner types — outer continuation bug (was #5 + #11)
+**STATUS: OPEN BUG (round-5, 2026-05-02).** Inner square corners
+work (parallelogram from V along the two adjacent walls). Outer
+"corners_realout" strips don't visually match the user's intent
+even after THREE reimplementations:
+  1. cornerW = wallW (Manhattan radius) — too small / round-ish.
+  2. mirror-of-inner across V — diagonal square outside.
+  3. two perpendicular wall-extension rectangles + chessboard outer
+     ring — still wrong per user.
+User confirmed all three: "still all wrong". Needs annotated
+screenshot showing the desired geometry before a fresh attempt.
 
 
 - Walls-and-corners currently splits the arena interior by
@@ -88,14 +88,6 @@ Currently uncertain whether all four populate cleanly — needs end-
 to-end test. If broken, fix `loadPreset` / `setPresetPath` /
 `refreshPreview` chain.
 
-### 11. Square outer corners — visual continuation still wrong
-**OPEN (round-5, 2026-05-02).** Inner square corners work; outer
-"corners_realout" strips don't visually match the user's intent
-even after two reimplementations (mirror-of-inner across V, then
-two perpendicular wall-extension rectangles with chessboard outer
-ring). User confirmed: "all still wrong". Needs annotated screenshot
-showing the desired geometry before another attempt.
-
 ### 9. Multi-file mode in Preprocess Tracking tab
 - Load N (DLC csv + preset) pairs at once and treat them as one
   combined session for likelihood-threshold tuning.
@@ -113,6 +105,11 @@ showing the desired geometry before another attempt.
   scope.
 
 ### 8. Zone-name conventions unified with downstream scripts
+**REMINDER:** Reconcile naming when starting the "construct behavior
+acts" stage — at that point the pipeline reads zones by name and
+mismatches will surface immediately. Until then defer.
+
+
 - Current zone names are a mix of legacy (`ArenaCornersAllRealOut`,
   `Object1RealOut`) and new (`walls_and_corners`, `arena_realout`,
   `corners_realout`).

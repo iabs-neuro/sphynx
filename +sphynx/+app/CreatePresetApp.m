@@ -1370,13 +1370,86 @@ function pickPresetStart(app)
     app.State.presetPath = fullfile(p, f);
     app.PresetPathField.Value = app.State.presetPath;
     preset = sphynx.io.readPreset(app.State.presetPath);
+
+    % Calibration
     if isfield(preset.Options, 'pxl2sm')
         kcorr = ifNaN(getOptField(preset.Options, 'x_kcorr'), 1);
         app.setPixelsPerCm(preset.Options.pxl2sm, 'Y', preset.Options.pxl2sm, ...
             'X', preset.Options.pxl2sm / kcorr, 'KCorr', kcorr);
     end
-    app.status(sprintf('Loaded preset: %s', f));
+
+    % Frame size + GoodVideoFrame if no video has been loaded yet
+    if isempty(app.State.frame) && isfield(preset.Options, 'GoodVideoFrame') ...
+            && ~isempty(preset.Options.GoodVideoFrame)
+        app.State.frame = preset.Options.GoodVideoFrame;
+        if isfield(preset.Options, 'Width');     app.State.width = preset.Options.Width;     end
+        if isfield(preset.Options, 'Height');    app.State.height = preset.Options.Height;    end
+        if isfield(preset.Options, 'FrameRate'); app.State.frameRate = preset.Options.FrameRate; end
+        if isfield(preset.Options, 'NumFrames'); app.State.numFrames = preset.Options.NumFrames; end
+    end
+
+    % Arena + objects from ArenaAndObjects struct array (element 1 = arena)
+    if isfield(preset, 'ArenaAndObjects') && ~isempty(preset.ArenaAndObjects)
+        AAO = preset.ArenaAndObjects;
+        % Arena
+        if numel(AAO) >= 1 && strcmp(AAO(1).type, 'Arena')
+            app.State.arena = struct( ...
+                'type',              'Arena', ...
+                'geometry',          AAO(1).geometry, ...
+                'border_x',          AAO(1).border_x, ...
+                'border_y',          AAO(1).border_y, ...
+                'border_separate_x', getFieldOr(AAO(1), 'border_separate_x', {}), ...
+                'border_separate_y', getFieldOr(AAO(1), 'border_separate_y', {}), ...
+                'mask',              logical(AAO(1).maskfilled));
+            % Sync the arena geometry toggle so the picker uses the right one
+            app.State.arenaGeometry = AAO(1).geometry;
+            for k = 1:numel(app.ArenaGeometryButtons)
+                btn = app.ArenaGeometryButtons{k};
+                btn.Value = strcmp(btn.Text, AAO(1).geometry);
+            end
+        end
+        % Objects
+        objs = struct('type', {}, 'geometry', {}, 'border_x', {}, ...
+                      'border_y', {}, 'mask', {});
+        for k = 2:numel(AAO)
+            objs(end+1) = struct( ...
+                'type',     AAO(k).type, ...
+                'geometry', AAO(k).geometry, ...
+                'border_x', AAO(k).border_x, ...
+                'border_y', AAO(k).border_y, ...
+                'mask',     logical(AAO(k).maskfilled)); %#ok<AGROW>
+        end
+        app.State.objects = objs;
+        app.refreshObjectsList();
+    end
+
+    % Zones (already in the canonical {name, type, maskfilled} shape)
+    if isfield(preset, 'Zones') && ~isempty(preset.Zones)
+        app.State.zones = preset.Zones;
+        if isfield(preset.Options, 'WallWidthCm')
+            app.WallWidthField.Value = preset.Options.WallWidthCm;
+        end
+        if isfield(preset.Options, 'MiddleWidthCm')
+            app.MiddleWidthField.Value = preset.Options.MiddleWidthCm;
+        end
+    end
+
+    app.refreshMoveTargets();
+    onZoneStrategyChanged(app);
+    app.refreshPreview();
+    app.refreshPreviewTitle();
+    app.applog('info', 'Loaded preset: %s — arena=%s, %d object(s), %d zone(s)', ...
+        f, ifempty(getFieldOr(app.State.arena, 'geometry', '<none>'), '<none>'), ...
+        numel(app.State.objects), numel(app.State.zones));
     app.refocus();
+end
+
+function v = getFieldOr(s, name, fallback)
+    if isstruct(s) && isfield(s, name); v = s.(name); else; v = fallback; end
+end
+
+function v = ifempty(x, fallback)
+    if isempty(x); v = fallback; else; v = x; end
 end
 
 function startDir = pickStart(app)
