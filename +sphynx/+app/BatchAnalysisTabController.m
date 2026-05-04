@@ -17,6 +17,7 @@ classdef BatchAnalysisTabController < handle
         % Sessions
         SessionsListBox
         OutDirField
+        ActsLibraryField
         SavePlotsChk
         SaveMatChk
         AggregateChk
@@ -103,6 +104,9 @@ classdef BatchAnalysisTabController < handle
                 cfg.io.saveWorkspace = obj.SaveMatChk.Value;
                 cfg.viz.headless = true;
                 cfg.verbose = 'warn';
+                if ~isempty(obj.ActsLibraryField) && ~isempty(obj.ActsLibraryField.Value)
+                    cfg.acts.libraryPath = obj.ActsLibraryField.Value;
+                end
                 try
                     res = sphynx.pipeline.analyzeSession(cfg);
                     obj.applog('info', 'OK: %s (%d acts)', ...
@@ -152,9 +156,9 @@ classdef BatchAnalysisTabController < handle
         end
 
         function buildLeft(obj, parent)
-            left = uigridlayout(parent, [9, 1]);
+            left = uigridlayout(parent, [11, 1]);
             left.Layout.Column = 1;
-            left.RowHeight = {28, '1x', 28, 28, 28, 28, 28, 30, 100};
+            left.RowHeight = {28, '1x', 28, 28, 28, 28, 28, 28, 28, 30, 100};
             left.RowSpacing = 4;
             left.Padding = [0 0 0 0];
 
@@ -182,6 +186,14 @@ classdef BatchAnalysisTabController < handle
             uibutton(left, 'Text', 'Browse out dir', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickOutDir());
+
+            % Acts library (optional)
+            uilabel(left, 'Text', 'Acts library:');
+            obj.ActsLibraryField = uieditfield(left, 'text', 'Value', '', ...
+                'Tooltip', 'optional .mat from Define Acts; empty = built-in defaults');
+            uibutton(left, 'Text', 'Browse acts library', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.pickActsLibrary());
 
             % Toggles
             obj.SavePlotsChk = uicheckbox(left, 'Text', 'Save per-zone plots', 'Value', false);
@@ -217,6 +229,13 @@ classdef BatchAnalysisTabController < handle
             d = uigetdir(obj.guessStartDir(), 'Output dir');
             if isequal(d, 0); return; end
             obj.OutDirField.Value = d;
+        end
+
+        function pickActsLibrary(obj)
+            [f, p] = uigetfile({'*.mat', 'Acts library .mat'}, ...
+                'Pick acts library', obj.guessStartDir());
+            if isequal(f, 0); return; end
+            obj.ActsLibraryField.Value = fullfile(p, f);
         end
 
         function dir = guessStartDir(obj)

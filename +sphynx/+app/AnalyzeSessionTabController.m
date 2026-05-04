@@ -17,6 +17,7 @@ classdef AnalyzeSessionTabController < handle
         DLCField
         PresetField
         OutDirField
+        ActsLibraryField
 
         % Threshold overrides
         RestField
@@ -59,6 +60,9 @@ classdef AnalyzeSessionTabController < handle
             cfg.acts.restThresholdCmS = obj.RestField.Value;
             cfg.acts.locThresholdCmS  = obj.LocField.Value;
             cfg.acts.freezingMode     = obj.FreezingModeDropDown.Value;
+            if ~isempty(obj.ActsLibraryField) && ~isempty(obj.ActsLibraryField.Value)
+                cfg.acts.libraryPath = obj.ActsLibraryField.Value;
+            end
             cfg.io.saveWorkspace = ~isempty(cfg.paths.outDir);
             cfg.viz.headless = true;
             cfg.verbose = 'info';
@@ -89,9 +93,9 @@ classdef AnalyzeSessionTabController < handle
         end
 
         function buildLeftConfig(obj, parent)
-            left = uigridlayout(parent, [12, 2]);
+            left = uigridlayout(parent, [14, 2]);
             left.Layout.Column = 1;
-            left.RowHeight = repmat({30}, 1, 12);
+            left.RowHeight = repmat({30}, 1, 14);
             left.ColumnWidth = {110, '1x'};
             left.RowSpacing = 4;
             left.Padding = [0 0 0 0];
@@ -102,8 +106,11 @@ classdef AnalyzeSessionTabController < handle
             obj.PresetField = uieditfield(left, 'text', 'Value', '');
             uilabel(left, 'Text', 'Output dir:');
             obj.OutDirField = uieditfield(left, 'text', 'Value', '');
+            uilabel(left, 'Text', 'Acts library:');
+            obj.ActsLibraryField = uieditfield(left, 'text', 'Value', '', ...
+                'Tooltip', 'optional .mat from Define Acts; built-in defaults if empty');
 
-            % Browse row
+            % Browse row 1: DLC / Preset / Out dir
             uilabel(left, 'Text', '');
             br = uigridlayout(left, [1, 3]);
             br.RowHeight = {28};
@@ -116,6 +123,12 @@ classdef AnalyzeSessionTabController < handle
                 'ButtonPushedFcn', @(~,~) obj.pickPath('Preset'));
             uibutton(br, 'Text', 'Out dir...', 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('OutDir'));
+
+            % Browse row 2: Acts library
+            uilabel(left, 'Text', '');
+            uibutton(left, 'Text', 'Acts library...', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.pickPath('ActsLibrary'));
 
             uilabel(left, 'Text', 'Rest cm/s:');
             obj.RestField = uieditfield(left, 'numeric', 'Value', 1);
@@ -186,6 +199,10 @@ classdef AnalyzeSessionTabController < handle
                 case 'OutDir'
                     d = uigetdir(startDir, 'Output dir');
                     if ~isequal(d, 0); obj.OutDirField.Value = d; end
+                case 'ActsLibrary'
+                    [f, p] = uigetfile({'*.mat', 'Acts library .mat'}, ...
+                        'Pick acts library', startDir);
+                    if ~isequal(f, 0); obj.ActsLibraryField.Value = fullfile(p, f); end
             end
         end
 

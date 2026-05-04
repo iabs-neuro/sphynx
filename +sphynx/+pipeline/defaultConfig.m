@@ -39,6 +39,7 @@ function cfg = defaultConfig()
     cfg.preprocess.perPart.smoothingPolyOrder = 3;
     cfg.preprocess.perPart.notFoundThresholdPct = 90;
 
+    cfg.acts.libraryPath = '';   % optional path to a custom acts library .mat
     cfg.acts.restThresholdCmS  = 1;
     cfg.acts.locThresholdCmS   = 5;
     cfg.acts.minRunSeconds     = 0.25;

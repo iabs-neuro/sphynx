@@ -229,6 +229,48 @@ function result = analyzeSession(config)
         end
     end
 
+    % --- 9b. Custom acts library (optional) ----------------------------------
+    % If config.acts.libraryPath points to a saved acts library, evaluate
+    % every act in it and append the results to Acts. Names are unique-d
+    % so a custom act named "rest" doesn't collide with the built-in.
+    if isfield(config.acts, 'libraryPath') && ~isempty(config.acts.libraryPath)
+        if isfile(config.acts.libraryPath)
+            try
+                customActs = sphynx.io.loadActsSet(config.acts.libraryPath);
+                ctx = struct();
+                ctx.X = BPX; ctx.Y = BPY;
+                ctx.velocityCmS = BPV;
+                ctx.bodyParts = bodyPartsNames;
+                ctx.zones = Zones;
+                ctx.frameRate = frameRate;
+                ctx.pixelsPerCm = pxlPerCm;
+                ctx.allActs = customActs;
+                ctx.resultsByName = containers.Map();
+                results = sphynx.acts.evalActsLibrary(customActs, ctx);
+                names = keys(results);
+                for k = 1:numel(names)
+                    nm = names{k};
+                    finalName = nm;
+                    while any(strcmp({Acts.ActName}, finalName))
+                        finalName = [nm, '_custom'];
+                        if any(strcmp({Acts.ActName}, finalName))
+                            finalName = sprintf('%s_custom%d', nm, k);
+                            break;
+                        end
+                    end
+                    Acts(end+1).ActName = finalName; %#ok<AGROW>
+                    Acts(end).ActArrayRefine = double(results(nm));
+                end
+                log('info', 'Custom acts library: %d acts from %s', ...
+                    numel(names), config.acts.libraryPath);
+            catch ME
+                log('warn', 'Failed to apply custom acts library: %s', ME.message);
+            end
+        else
+            log('warn', 'cfg.acts.libraryPath does not exist: %s', config.acts.libraryPath);
+        end
+    end
+
     % --- 10. Stats per act ---------------------------------------------------
     centerVelocity = BodyPartsTraces(end).VelocitySmoothed; % synthetic-or-real Center
     if Point.Center <= numel(BodyPartsTraces)
@@ -344,10 +386,23 @@ end
 
 function spec = legacyZoneActSpec()
     % { zoneName,                actName,    bodyPartName }
+    %
+    % Zone names match what sphynx.zones.classifySquare and
+    % sphynx.preset.buildObjectZones actually produce in CreatePresetApp:
+    %   classifySquare 'corners-walls-center':
+    %     corners / walls / walls_and_corners / center /
+    %     arena_realout / corners_realout / walls_realout /
+    %     walls_and_corners_realout
+    %   buildObjectZones:
+    %     Object1Real / Object1RealOut / Object1Out / ... /
+    %     ObjectAllReal / ObjectAllRealOut / ObjectAllOut
+    %
+    % If a zone isn't in the preset (e.g. Object3RealOut for a 2-object
+    % session), the loop in step 9 silently skips it — no error.
     spec = {
-        'ArenaCornersAllRealOut', 'corners',  'tailbase';
-        'ArenaWallsAllRealOut',   'walls',    'tailbase';
-        'Center',                 'center',   'tailbase';
+        'corners_realout',        'corners',  'tailbase';
+        'walls_realout',          'walls',    'tailbase';
+        'center',                 'center',   'tailbase';
         'Object1RealOut',         'object1',  'nose';
         'Object2RealOut',         'object2',  'nose';
         'Object3RealOut',         'object3',  'nose';
