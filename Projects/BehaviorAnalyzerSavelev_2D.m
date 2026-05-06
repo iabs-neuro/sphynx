@@ -1,5 +1,6 @@
-function [Acts, BodyPartsTraces, Point] = BehaviorAnalyzerFOF(PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut,StartTime, EndTime, PathPreset, FilenamePreset)
+function [Acts, BodyPartsTraces, Point] = BehaviorAnalyzerSavelev_2D(PathVideo, FilenameVideo, PathDLC, FilenameDLC, PathOut,StartTime, EndTime, PathPreset, FilenamePreset)
 % VVP. Deep Behavior analyses tool
+% 20.03 Freezing box mod added
 
 % Input description
 % PathVideo - path of video file
@@ -48,15 +49,15 @@ AngleDop = -pi/2;
 
 if nargin<9
     %% loading video and videotracking files
-    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','w:\Projects\FOF\BehaviorData\2_Combined\');
-    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','w:\Projects\FOF\BehaviorData\3_DLC\');
-    PathOut = uigetdir('d:\Projects\H_mice\5_Behavior\', 'Pick a Directory for Outputs');
+    [FilenameVideo, PathVideo]  = uigetfile('*.*','Select video file','D:\Projects\Savelev\H_mice\HM_CC_1D');
+    [FilenameDLC, PathDLC]  = uigetfile('*.csv','Select DLC file with body parts','D:\Projects\Savelev\H_mice\HM_CC_1D');
+    PathOut = uigetdir('D:\Projects\Savelev\H_mice\Behavior\1Day', 'Pick a Directory for Outputs');
     
     % loading preset file
     answer = questdlg('Do you have preset file?', 'Uploading files', 'Yes','No','Yes');
     switch answer
         case 'Yes'
-            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','w:\Projects\FOF\BehaviorData\\4_Preset\');
+            [FilenamePreset, PathPreset]  = uigetfile('*.mat','Select preset file','D:\Projects\Savelev\H_mice\Behavior\Presets');
         case 'No'
             [FilenamePreset, PathPreset] = CreatePreset(FilenameVideo,PathVideo,PathOut);
     end
@@ -73,7 +74,7 @@ end
 load(sprintf('%s//%s', PathPreset, FilenamePreset), 'Options','Zones','ArenaAndObjects');
 
 Options.MiddleCenterCm = 20;
-Options.StatusBodyPartThreshold = 90;                                   % threshold for missing bodyparts
+Options.StatusBodyPartThreshold = 95;                                   % threshold for missing bodyparts
 
 % reading video file
 readerobj = VideoReader(sprintf('%s%s', PathVideo, FilenameVideo));
@@ -239,7 +240,7 @@ for part=1:BodyPartsNumber
             BodyPartsTracesMainX(part,:) = BodyPartsTraces(part).TraceSmoothed.X;
             BodyPartsTracesMainY(part,:) = BodyPartsTraces(part).TraceSmoothed.Y;
     end
-        
+
     if PlotOption.track
         h = figure('Position', Screensize);
         plot(time,BodyPartsTraces(part).TraceOriginal.X./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
@@ -252,7 +253,7 @@ for part=1:BodyPartsNumber
         saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.png', PathOut,BodyPartsTraces(part).BodyPartName));
         saveas(h, sprintf('%s\\BodyPartsTraces\\%s_X_coordinate.fig', PathOut,BodyPartsTraces(part).BodyPartName));
         delete(h);
-        
+
         h = figure('Position', Screensize);
         plot(time,BodyPartsTraces(part).TraceOriginal.Y./Options.pxl2sm, 'b', 'LineWidth', LineWidth.Traces.Original); hold on;
         plot(time,BodyPartsTraces(part).TraceInterpolated.Y./Options.pxl2sm,'r', 'LineWidth', LineWidth.Traces.Interpolated);hold on;
@@ -553,30 +554,11 @@ ylocomotion = MouseCenterY'.*Acts(3).ActArrayRefine;
 xlocomotion(xlocomotion == 0) = NaN;
 ylocomotion(ylocomotion == 0) = NaN;
 
-%% middle-area defining
-Options.MiddleCenterCm = 20;
-Options.MiddleCenterPxl = Options.MiddleCenterCm*Options.pxl2sm;
-Zones(strcmp({Zones.name}, 'Center')).name = 'CenterArea';
-
-TempMask = single(~Zones(strcmp({Zones.name}, 'CenterArea')).maskfilled);
-TempMask = bwdist(TempMask);
-TempMask(TempMask >= Options.MiddleCenterPxl) = 0;
-TempMask(TempMask>0) = 1;
-
-Zones(end+1).name = 'middle_zone';
-Zones(end).type = 'area';
-Zones(end).maskfilled = TempMask;
-
-Zones(end+1).name = 'center';
-Zones(end).type = 'area';
-Zones(end).maskfilled = single(Zones(strcmp({Zones.name}, 'CenterArea')).maskfilled) - single(Zones(strcmp({Zones.name}, 'middle_zone')).maskfilled);
-
-%% Task-specific Acts 
-
-ZonesOption.NameZone = {'WallsAndCornersRealOut' 'middle_zone' 'center'};
-ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter'};
-ZonesOption.NameAct = {'walls' 'middle_zone' 'center'};
-ZonesOption.NumBodyPart = [find(strcmp(BodyPartsNames, ZonesOption.NameBodyPart{1})) find(strcmp(BodyPartsNames, ZonesOption.NameBodyPart{2})) find(strcmp(BodyPartsNames, ZonesOption.NameBodyPart{3}))];
+% sectors
+ZonesOption.NameZone = {'Center' 'WallsAndCornersRealOut' 'Object1Real' 'Object2Real' 'Object3Real' 'Object4Real' 'Object5Real' 'Object6Real'};
+ZonesOption.NameBodyPart = {'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter' 'bodycenter'};
+ZonesOption.NameAct = {'center' 'walls' 'sector_black1' 'sector_black2' 'sector_white' 'sector_striped' 'sector_striped_small' 'sector_striped_big'};
+ZonesOption.NumBodyPart = [13 13 13 13 13 13 13 13];
 
 ZonesOption.NumZone = zeros(1,length(ZonesOption.NameZone));
 for zone = 1:length(ZonesOption.NameZone)
@@ -647,30 +629,30 @@ delete(h);
 
 if PlotOption.acts
     MaxPoints = 200;
-    
-    for act = 1:size(Acts,2)
-%     for act = [3 4 5 8 9 10 11 12 13]
+
+%     for act = 1:size(Acts,2)
+    for act = [8:13]
         fprintf('Plotting video %d/%d. Act: %s\n', act, size(Acts,2), string(Acts(act).ActName));
         v = VideoWriter(sprintf('%s\\ActsVideo\\%s_act_%s',PathOut, Filename, string(Acts(act).ActName)),'MPEG-4');
         v.FrameRate = Options.FrameRate;
         open(v);
         h = waitbar(1/n_frames, sprintf('Plotting video, frame %d of %d', 0,  n_frames));
-        
+
         videoframes = find(Acts(act).ActArrayRefine');
         videoframesMax = min(length(videoframes),MaxPoints);
-        
+
         for k = videoframes(1:videoframesMax)
-            
+
             if ~mod(k,10)
                 h = waitbar(k/n_frames, h, sprintf('Plotting video, frame %d of %d', k,  n_frames));
             end
-            
+
             if isempty(Acts(act).Zone)
                 RealFrame = read(readerobj,k+StartTime-1);
             else
                 RealFrame = round((Zones(Acts(act).Zone).maskfilled*255 + single(read(readerobj,k+StartTime-1)))./2);
             end
-            
+
             % field of view
             if Acts(act).ActName == "bowlInView" || Acts(act).ActName == "objectInView"
                 RealFrame = insertShape(RealFrame, 'Line', View.Line.L(k,:), 'LineWidth', 3, 'Color', 'red');
@@ -682,13 +664,13 @@ if PlotOption.acts
                 RealFrame = insertShape(RealFrame,'circle', [BodyPartsTraces(part).TraceOriginal.X(k)/Options.x_kcorr BodyPartsTraces(part).TraceOriginal.Y(k) MarkSize*2],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
                 RealFrame = insertShape(RealFrame,'filledcircle', [BodyPartsTracesMainX(part,k)/Options.x_kcorr BodyPartsTracesMainY(part,k) MarkSize],'Color',colorbase(part,:).*255,'LineWidth',1, 'Opacity', 1, 'SmoothEdges', false);
             end
-            
+
             writeVideo(v,uint8(RealFrame));
         end
         close(v);
         delete(h);
     end
-    
+
 end
 %% creating outputs table of features
 
