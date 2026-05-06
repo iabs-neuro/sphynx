@@ -25,12 +25,16 @@ classdef CreatePresetApp < handle
         TabDefineActs
         TabAnalyze
         TabBatch
+        TabMakeOutputTable
+        TabPlotData
         TabPreprocessVideo
         TabSynthetic
         PreprocessController       % sphynx.app.PreprocessTabController
         DefineActsController       % sphynx.app.DefineActsTabController
         AnalyzeSessionController   % sphynx.app.AnalyzeSessionTabController
         BatchAnalysisController    % sphynx.app.BatchAnalysisTabController
+        MakeOutputTableController  % sphynx.app.MakeOutputTableTabController
+        PlotDataController         % sphynx.app.PlotDataTabController
         PreprocessVideoController  % sphynx.app.PreprocessVideoTabController
         SyntheticController        % sphynx.app.SyntheticDataTabController
         % Layout containers
@@ -561,6 +565,8 @@ classdef CreatePresetApp < handle
             app.TabDefineActs      = uitab(app.TabGroup, 'Title', 'Define Acts');
             app.TabAnalyze         = uitab(app.TabGroup, 'Title', 'Analyze Session');
             app.TabBatch           = uitab(app.TabGroup, 'Title', 'Batch Analysis');
+            app.TabMakeOutputTable = uitab(app.TabGroup, 'Title', 'Make Output Table');
+            app.TabPlotData        = uitab(app.TabGroup, 'Title', 'Plot Data');
             app.TabPreprocessVideo = uitab(app.TabGroup, 'Title', 'Preprocess Video');
             app.TabSynthetic       = uitab(app.TabGroup, 'Title', 'Synthetic Data');
 
@@ -569,6 +575,8 @@ classdef CreatePresetApp < handle
             app.DefineActsController      = sphynx.app.DefineActsTabController(app.TabDefineActs, app);
             app.AnalyzeSessionController  = sphynx.app.AnalyzeSessionTabController(app.TabAnalyze, app);
             app.BatchAnalysisController   = sphynx.app.BatchAnalysisTabController(app.TabBatch, app);
+            app.MakeOutputTableController = sphynx.app.MakeOutputTableTabController(app.TabMakeOutputTable, app);
+            app.PlotDataController        = sphynx.app.PlotDataTabController(app.TabPlotData, app);
             app.PreprocessVideoController = sphynx.app.PreprocessVideoTabController(app.TabPreprocessVideo, app);
             app.SyntheticController       = sphynx.app.SyntheticDataTabController(app.TabSynthetic, app);
         end

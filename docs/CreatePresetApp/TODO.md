@@ -88,6 +88,41 @@ Currently uncertain whether all four populate cleanly — needs end-
 to-end test. If broken, fix `loadPreset` / `setPresetPath` /
 `refreshPreview` chain.
 
+### 12. CreatePreset — verify download/upload preset round-trip
+**OPEN (round-7, 2026-05-06).** User reported the download preset feature
+needs verification: confirm that loading a saved preset in a new session
+restores arena/objects/zones/calibration cleanly (already partially fixed
+in TODO #10 but the user still wants a second check).
+
+### 13. CreatePreset — zone display when loading next video + new preset
+**OPEN (round-7, 2026-05-06).** Verify that when the user switches to a
+new video and then loads a different preset on top, old arena/objects/
+zones from the previous session don't leak onto the preview canvas.
+
+### 14. CreatePreset — warnings on duplicate / inconsistent zones
+**OPEN (round-7, 2026-05-06).** Add warnings (Log line + uialert) when:
+  * Adding a strategy that produces zone names already in State.zones
+    (currently silently appends duplicates with same name).
+  * Calibration changes after zones are committed (zones are in pixel
+    space but pxlPerCm shifts the implied physical extent).
+  * Preset is saved without arena defined.
+
+### 15. Preprocess Tracking — layout polish
+**OPEN (round-7, 2026-05-06).** User requested a cleaner layout:
+  * Block 1 and Block 2 stacked, Block 3 top-right.
+  * Plots span full width below blocks 1-3.
+This was the round-3 layout; current round-5 layout puts blocks 1+2+3
+in a single left column. Revert / rework.
+
+### 16. Preprocess Tracking — log Y button missing
+**OPEN (round-7, 2026-05-06).** The log-Y toggle for the likelihood
+histogram disappeared during one of the layout refactors. Restore.
+
+### 17. Preprocess Tracking — likelihood vs. X / vs. Y plots (optional)
+**OPEN (round-7, 2026-05-06).** Add two checkbox-controlled plots:
+likelihood as a function of X and as a function of Y, alongside the
+existing histogram. Useful for spotting spatial bias in tracking.
+
 ### 9. Multi-file mode in Preprocess Tracking tab
 - Load N (DLC csv + preset) pairs at once and treat them as one
   combined session for likelihood-threshold tuning.
