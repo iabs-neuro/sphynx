@@ -32,8 +32,13 @@ classdef AnalyzeSessionTabController < handle
 
         % Plots
         TrajAxes
+        HeatmapAxes
         TimelineAxes
         SpeedHistAxes
+        SpeedTraceAxes
+
+        % Etogram filter
+        ShowZoneActsCheckbox
 
         % Log
         LogTextArea
@@ -180,27 +185,38 @@ classdef AnalyzeSessionTabController < handle
                 'Tooltip', 'After Run — render mp4 with body parts and active acts overlay', ...
                 'ButtonPushedFcn', @(~,~) obj.renderActsVideo());
 
+            uilabel(left, 'Text', '');
+            obj.ShowZoneActsCheckbox = uicheckbox(left, ...
+                'Text', 'Show zone acts in etogram', ...
+                'Value', false, ...
+                'Tooltip', ['Zone acts (corners/walls/center/etc.) are auto-' ...
+                            'derived from the preset. Hide them to keep the ' ...
+                            'etogram focused on built-ins + custom library.'], ...
+                'ValueChangedFcn', @(~,~) obj.refreshResults());
+
             % Log area
             uilabel(left, 'Text', '');
             obj.LogTextArea = uitextarea(left, 'Editable', 'off', 'Value', {''});
         end
 
         function buildRightResults(obj, parent)
-            right = uigridlayout(parent, [3, 2]);
+            % 4 rows: results table | trajectory + heatmap | etogram |
+            % speed histogram + speed trace.
+            right = uigridlayout(parent, [4, 2]);
             right.Layout.Column = 2;
-            right.RowHeight = {180, '1x', 180};
+            right.RowHeight = {160, '1x', 180, 180};
             right.ColumnWidth = {'1x', '1x'};
             right.RowSpacing = 4;
             right.ColumnSpacing = 6;
             right.Padding = [0 0 0 0];
 
-            % Top: results table spanning both cols
+            % Row 1: results table spanning both cols
             obj.ResultTable = uitable(right, 'ColumnName', ...
                 {'Act', '%', 'duration', 'count', 'mean dur, s'});
             obj.ResultTable.Layout.Row = 1;
             obj.ResultTable.Layout.Column = [1 2];
 
-            % Middle row: trajectory (left), timeline (right)
+            % Row 2: trajectory (over GoodVideoFrame, axes in cm) + heatmap
             obj.TrajAxes = uiaxes(right);
             obj.TrajAxes.Layout.Row = 2; obj.TrajAxes.Layout.Column = 1;
             title(obj.TrajAxes, 'Trajectory');
@@ -208,16 +224,32 @@ classdef AnalyzeSessionTabController < handle
             obj.TrajAxes.YDir = 'reverse';
             obj.TrajAxes.Box = 'on';
 
+            obj.HeatmapAxes = uiaxes(right);
+            obj.HeatmapAxes.Layout.Row = 2; obj.HeatmapAxes.Layout.Column = 2;
+            title(obj.HeatmapAxes, 'Occupancy heatmap');
+            obj.HeatmapAxes.DataAspectRatio = [1 1 1];
+            obj.HeatmapAxes.YDir = 'reverse';
+            obj.HeatmapAxes.Box = 'on';
+
+            % Row 3: etogram (full width)
             obj.TimelineAxes = uiaxes(right);
-            obj.TimelineAxes.Layout.Row = 2; obj.TimelineAxes.Layout.Column = 2;
-            title(obj.TimelineAxes, 'Acts timeline');
+            obj.TimelineAxes.Layout.Row = 3;
+            obj.TimelineAxes.Layout.Column = [1 2];
+            title(obj.TimelineAxes, 'Acts etogram');
             obj.TimelineAxes.Box = 'on';
 
-            % Bottom: speed histogram spanning
+            % Row 4: speed histogram + speed-vs-time trace
             obj.SpeedHistAxes = uiaxes(right);
-            obj.SpeedHistAxes.Layout.Row = 3; obj.SpeedHistAxes.Layout.Column = [1 2];
+            obj.SpeedHistAxes.Layout.Row = 4;
+            obj.SpeedHistAxes.Layout.Column = 1;
             title(obj.SpeedHistAxes, 'Speed histogram');
             obj.SpeedHistAxes.Box = 'on';
+
+            obj.SpeedTraceAxes = uiaxes(right);
+            obj.SpeedTraceAxes.Layout.Row = 4;
+            obj.SpeedTraceAxes.Layout.Column = 2;
+            title(obj.SpeedTraceAxes, 'Speed vs time');
+            obj.SpeedTraceAxes.Box = 'on';
         end
 
         function pickPath(obj, kind)
@@ -248,6 +280,8 @@ classdef AnalyzeSessionTabController < handle
         function refreshResults(obj)
             if isempty(obj.State.result); return; end
             r = obj.State.result;
+
+            % --- Results table (full library, including zone acts) -----
             n = numel(r.Acts);
             data = cell(n, 5);
             for k = 1:n
@@ -260,46 +294,192 @@ classdef AnalyzeSessionTabController < handle
             end
             obj.ResultTable.Data = data;
 
-            % Trajectory: bodycenter smoothed
-            try
-                bps = r.BodyPartsTraces;
-                idx = find(strcmpi({bps.BodyPartName}, 'bodycenter'), 1);
-                if isempty(idx); idx = 1; end
-                cla(obj.TrajAxes);
-                plot(obj.TrajAxes, bps(idx).TraceSmoothed.X, bps(idx).TraceSmoothed.Y, ...
-                    'Color', [0.10 0.50 0.90], 'LineWidth', 1);
-                obj.TrajAxes.DataAspectRatio = [1 1 1];
-                obj.TrajAxes.YDir = 'reverse';
-                title(obj.TrajAxes, sprintf('Trajectory — %s', bps(idx).BodyPartName), ...
-                    'Interpreter', 'none');
-
-                % Speed histogram
-                cla(obj.SpeedHistAxes);
-                v = bps(idx).VelocitySmoothed;
-                if ~isempty(v)
-                    histogram(obj.SpeedHistAxes, v, 50, ...
-                        'FaceColor', [0.30 0.70 0.30], 'EdgeColor', 'none');
-                    xlabel(obj.SpeedHistAxes, 'speed, cm/s');
-                    title(obj.SpeedHistAxes, 'Speed histogram (bodycenter)');
-                end
-            catch
+            % --- Bodycenter idx (used by trajectory + heatmap + speed) -
+            bps = r.BodyPartsTraces;
+            idx = find(strcmpi({bps.BodyPartName}, 'bodycenter'), 1);
+            if isempty(idx); idx = 1; end
+            pxlPerCm = 1;
+            if isfield(r, 'Options') && isfield(r.Options, 'pxl2sm')
+                pxlPerCm = r.Options.pxl2sm;
+            end
+            X = bps(idx).TraceSmoothed.X(:);
+            Y = bps(idx).TraceSmoothed.Y(:);
+            xCm = X / pxlPerCm;
+            yCm = Y / pxlPerCm;
+            v   = bps(idx).VelocitySmoothed(:);
+            frameRate = NaN;
+            if isfield(r, 'Options') && isfield(r.Options, 'FrameRate')
+                frameRate = r.Options.FrameRate;
             end
 
-            % Acts timeline
-            cla(obj.TimelineAxes);
-            hold(obj.TimelineAxes, 'on');
+            % --- Trajectory over GoodVideoFrame, cm axes --------------
+            try
+                obj.drawTrajectory(r, bps, idx, X, Y, pxlPerCm);
+            catch ME
+                obj.applog('warn', 'Trajectory plot failed: %s', ME.message);
+            end
+
+            % --- Occupancy heatmap (cm grid) --------------------------
+            try
+                obj.drawHeatmap(xCm, yCm, r);
+            catch ME
+                obj.applog('warn', 'Heatmap plot failed: %s', ME.message);
+            end
+
+            % --- Speed histogram + speed-vs-time trace ----------------
+            try
+                obj.drawSpeed(v, frameRate);
+            catch ME
+                obj.applog('warn', 'Speed plot failed: %s', ME.message);
+            end
+
+            % --- Etogram (filtered + categorized) ---------------------
+            obj.drawEtogram(r);
+        end
+
+        function drawTrajectory(obj, r, bps, idx, X, Y, pxlPerCm)
+            ax = obj.TrajAxes;
+            cla(ax); hold(ax, 'on');
+            frame = [];
+            if isfield(r, 'Options')
+                opts = r.Options;
+                for fld = {'GoodVideoFrame', 'GoodVideoFrameGray'}
+                    if isfield(opts, fld{1}) && ~isempty(opts.(fld{1}))
+                        frame = opts.(fld{1}); break;
+                    end
+                end
+            end
+            if ~isempty(frame)
+                imshow(frame, 'Parent', ax, ...
+                    'XData', [0 size(frame,2)/pxlPerCm], ...
+                    'YData', [0 size(frame,1)/pxlPerCm]);
+            end
+            plot(ax, X/pxlPerCm, Y/pxlPerCm, ...
+                'Color', [0.10 0.50 0.90], 'LineWidth', 1.0);
+            ax.DataAspectRatio = [1 1 1];
+            ax.YDir = 'reverse';
+            ax.XLim = [0 size(frame,2)/pxlPerCm];
+            ax.YLim = [0 size(frame,1)/pxlPerCm];
+            xlabel(ax, 'X, cm', 'FontSize', 12);
+            ylabel(ax, 'Y, cm', 'FontSize', 12);
+            ax.FontSize = 11;
+            title(ax, sprintf('Trajectory (%s)', bps(idx).BodyPartName), ...
+                'Interpreter', 'none', 'FontSize', 13);
+            hold(ax, 'off');
+        end
+
+        function drawHeatmap(obj, xCm, yCm, r)
+            ax = obj.HeatmapAxes;
+            cla(ax);
+            % Frame extent in cm to bound the heatmap.
+            extentX = max(xCm); extentY = max(yCm);
+            if isfield(r, 'Options') && isfield(r.Options, 'pxl2sm') ...
+                    && isfield(r.Options, 'Width') && isfield(r.Options, 'Height')
+                extentX = r.Options.Width / r.Options.pxl2sm;
+                extentY = r.Options.Height / r.Options.pxl2sm;
+            end
+            % 1 cm bins
+            edgesX = 0:1:max(extentX, 1);
+            edgesY = 0:1:max(extentY, 1);
+            valid = isfinite(xCm) & isfinite(yCm);
+            counts = histcounts2(xCm(valid), yCm(valid), edgesX, edgesY);
+            % imagesc expects rows=Y, cols=X
+            imagesc(ax, edgesX, edgesY, counts');
+            ax.YDir = 'reverse';
+            colormap(ax, 'parula');
+            cb = colorbar(ax);
+            cb.Label.String = 'frames';
+            cb.Label.FontSize = 11;
+            ax.DataAspectRatio = [1 1 1];
+            ax.XLim = [0 extentX]; ax.YLim = [0 extentY];
+            xlabel(ax, 'X, cm', 'FontSize', 12);
+            ylabel(ax, 'Y, cm', 'FontSize', 12);
+            ax.FontSize = 11;
+            title(ax, 'Occupancy heatmap (1 cm bins)', 'FontSize', 13);
+        end
+
+        function drawSpeed(obj, v, frameRate)
+            % Histogram (150 bins, cm/s) and the velocity trace.
+            ax1 = obj.SpeedHistAxes;
+            cla(ax1);
+            if ~isempty(v) && any(isfinite(v))
+                histogram(ax1, v(isfinite(v)), 150, ...
+                    'FaceColor', [0.30 0.70 0.30], 'EdgeColor', 'none');
+            end
+            xlabel(ax1, 'speed, cm/s', 'FontSize', 12);
+            ylabel(ax1, 'frames', 'FontSize', 12);
+            ax1.FontSize = 11;
+            title(ax1, 'Speed histogram (bodycenter)', 'FontSize', 13);
+
+            ax2 = obj.SpeedTraceAxes;
+            cla(ax2);
+            if ~isempty(v)
+                if isfinite(frameRate)
+                    t = (0:numel(v)-1)' / frameRate;
+                    plot(ax2, t, v, 'Color', [0.30 0.55 0.85], 'LineWidth', 0.8);
+                    xlabel(ax2, 'time, s', 'FontSize', 12);
+                else
+                    plot(ax2, 1:numel(v), v, 'Color', [0.30 0.55 0.85], 'LineWidth', 0.8);
+                    xlabel(ax2, 'frame', 'FontSize', 12);
+                end
+                ylabel(ax2, 'speed, cm/s', 'FontSize', 12);
+            end
+            ax2.FontSize = 11;
+            title(ax2, 'Speed vs time (bodycenter)', 'FontSize', 13);
+        end
+
+        function drawEtogram(obj, r)
+            ax = obj.TimelineAxes;
+            cla(ax); hold(ax, 'on');
+
+            % Filter zone acts unless checkbox is on. Always show
+            % built-ins + custom-library acts.
+            showZone = ~isempty(obj.ShowZoneActsCheckbox) ...
+                && obj.ShowZoneActsCheckbox.Value;
+            keep = false(1, numel(r.Acts));
+            for k = 1:numel(r.Acts)
+                cat = '';
+                if isfield(r.Acts(k), 'Category')
+                    cat = r.Acts(k).Category;
+                end
+                if isempty(cat); cat = 'builtin'; end  % defensive
+                keep(k) = strcmp(cat, 'builtin') ...
+                    || strcmp(cat, 'custom') ...
+                    || (showZone && strcmp(cat, 'zone'));
+            end
+            actsToPlot = r.Acts(keep);
+            n = numel(actsToPlot);
+            if n == 0
+                title(ax, 'Acts etogram — no acts to show');
+                hold(ax, 'off'); return;
+            end
+
+            % Color palette: built-ins use lines(.), custom acts use
+            % a contrasting palette so they stand out.
+            builtinPal = lines(7);
+            customPal  = [hsv(7) * 0.6 + 0.3];  % softened HSV, distinct
             for k = 1:n
-                a = r.Acts(k).ActArrayRefine;
-                if ~islogical(a) && ~isnumeric(a); continue; end
+                a = actsToPlot(k).ActArrayRefine;
+                cat = '';
+                if isfield(actsToPlot(k), 'Category'); cat = actsToPlot(k).Category; end
+                switch cat
+                    case 'custom'; col = customPal(mod(k-1,7)+1, :);
+                    case 'zone';   col = [0.5 0.5 0.5];
+                    otherwise;     col = builtinPal(mod(k-1,7)+1, :);
+                end
                 yLine = ones(size(a)) * (n - k + 1);
                 yLine(~a) = NaN;
-                plot(obj.TimelineAxes, 1:numel(a), yLine, '-', 'LineWidth', 5);
+                plot(ax, 1:numel(a), yLine, '-', 'LineWidth', 5, 'Color', col);
             end
-            obj.TimelineAxes.YTick = 1:n;
-            obj.TimelineAxes.YTickLabel = flip({r.Acts.ActName});
-            xlabel(obj.TimelineAxes, 'frame');
-            title(obj.TimelineAxes, 'Acts timeline');
-            hold(obj.TimelineAxes, 'off');
+            ax.YTick = 1:n;
+            ax.YTickLabel = flip({actsToPlot.ActName});
+            xlabel(ax, 'frame', 'FontSize', 12);
+            ax.FontSize = 11;
+            ax.YLim = [0.5 n + 0.5];
+            title(ax, sprintf('Acts etogram (%d acts shown%s)', n, ...
+                ternary(showZone, '', '; zone acts hidden')), ...
+                'Interpreter', 'none', 'FontSize', 13);
+            hold(ax, 'off');
         end
 
         function applog(obj, level, fmt, varargin)
@@ -336,4 +516,8 @@ end
 
 function closeIfValid(h)
     if ~isempty(h) && isvalid(h); try; close(h); catch; end; end
+end
+
+function out = ternary(cond, a, b)
+    if cond; out = a; else; out = b; end
 end

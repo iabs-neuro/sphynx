@@ -172,13 +172,16 @@ function result = analyzeSession(config)
         getOpt(Options, 'velocity_locomotion', config.acts.locThresholdCmS), ...
         minRunFrames);
 
-    Acts = struct('ActName', {}, 'ActArrayRefine', {});
+    Acts = struct('ActName', {}, 'ActArrayRefine', {}, 'Category', {});
     Acts(end+1).ActName = 'rest';
     Acts(end).ActArrayRefine = double(speed.rest(:)');
+    Acts(end).Category = 'builtin';
     Acts(end+1).ActName = 'walk';
     Acts(end).ActArrayRefine = double(speed.walk(:)');
+    Acts(end).Category = 'builtin';
     Acts(end+1).ActName = 'locomotion';
     Acts(end).ActArrayRefine = double(speed.locomotion(:)');
+    Acts(end).Category = 'builtin';
 
     % --- 7. Freezing ---------------------------------------------------------
     BPV = zeros(nKept, nFrames);
@@ -189,6 +192,7 @@ function result = analyzeSession(config)
         getOpt(Options, 'velocity_rest', config.acts.restThresholdCmS), minRunFrames);
     Acts(end+1).ActName = 'freezing';
     Acts(end).ActArrayRefine = double(freeze(:)');
+    Acts(end).Category = 'builtin';
 
     % --- 8. Rear -------------------------------------------------------------
     rearOk = ~isempty(Point.Tailbase) && ~isempty(Point.LeftHindLimb) && ~isempty(Point.RightHindLimb);
@@ -207,6 +211,7 @@ function result = analyzeSession(config)
                 'MinRunFrames', minRunFrames);
             Acts(end+1).ActName = 'rear';
             Acts(end).ActArrayRefine = double(r(:)');
+            Acts(end).Category = 'builtin';
         catch ME
             log('warn', 'Rear detection failed: %s', ME.message);
         end
@@ -226,6 +231,7 @@ function result = analyzeSession(config)
             mask = sphynx.acts.zoneAct(Zones(zIdx).maskfilled, BPX, BPY, partIdx, minRunFrames);
             Acts(end+1).ActName = actName; %#ok<AGROW>
             Acts(end).ActArrayRefine = double(mask(:)');
+            Acts(end).Category = 'zone';
         end
     end
 
@@ -260,6 +266,7 @@ function result = analyzeSession(config)
                     end
                     Acts(end+1).ActName = finalName; %#ok<AGROW>
                     Acts(end).ActArrayRefine = double(results(nm));
+                    Acts(end).Category = 'custom';
                 end
                 log('info', 'Custom acts library: %d acts from %s', ...
                     numel(names), config.acts.libraryPath);

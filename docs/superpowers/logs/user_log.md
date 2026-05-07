@@ -661,3 +661,47 @@ Batch analysis — задать пути, настроить визуализа�
 
 Можешь запускать Make-video снова. Класс парсится, тесты PASS.
 
+
+---
+
+## План MVP + Round 8 + Round 9 (2026-05-08)
+
+После твоего длинного списка я разобрался с приоритетами. Аудит показал: **Batch / Make Output / Plot Data — функционально готовы**. Узкие места — Define Acts (visual-баг с make-video) и Analyze Session (сырые plots).
+
+**Что НЕ блокер MVP** (всё ушло в `docs/TODO.md` с приоритетами P1..P4):
+- CreatePreset — все правки (download preset, дубль зон, copy object, варнинги). Заморожен.
+- Preprocess Track — рекомпоновка, log-кнопка, likelihood plots.
+- Big features — Project tab, Barnes metrics, SLEAP/Bonsai, numbered tabs, per-exp defaults, metadata pipeline.
+- Macro — MATLAB upgrade / Python rewrite (P4, требуют отдельного разговора).
+
+### Round 8 — Define Acts make-video (commit 0724dac)
+
+**Корень бага «первый кадр = акт»:** алгоритм брал `find(bool, 1, 'first')`. Для rest-акта velocity=0 уже на frame 1, поэтому окно стартовало с скучного «лежит у стены». Исправил:
+
+1. Run-length-encode boolean, нахожу **самый длинный непрерывный сегмент акта**, центрирую окно длительности на его середине. Теперь видео гарантированно показывает «настоящий» эпизод акта.
+2. Видео-кадр = DLC-индекс + `cfg.range.startFrame - 1`. По дефолту = 0, так что для тебя ничего не меняется. Защита на будущее, если когда-то загрузишь partial DLC.
+3. implay-окно теперь стартует ~1280×960 (раньше дефолт-маленькое), zoom 50%. Если R2020a API скушает — try/catch молча проглотит. Frame-слайдер у implay уже встроен (timeline снизу), отдельно ничего не делал.
+
+### Round 9 — Analyze Session (this commit)
+
+**Этограмма (твоё «откуда какие-то кастомные акты»):** zone-акты (corners/walls/center/...) теперь скрыты по дефолту. Чекбокс «Show zone acts in etogram» в левой панели — поставь галку, если хочешь увидеть их. Built-in акты (rest/walk/locomotion/freezing/rear) и custom-library акты раскрашены разными палитрами, чтобы было видно, что откуда пришло. Это потребовало добавить `Category` поле в Act struct (`builtin` / `zone` / `custom`) — теперь любая обработка может фильтровать по типу.
+
+**Скорость:**
+- Гистограмма: 50 → 150 бинов, label «speed, cm/s».
+- Новый axes справа: **velocity vs time** (линия), x-ось в секундах (через FrameRate из preset).
+
+**Trajectory + heatmap (вместо одинарной trajectory):**
+- Trajectory теперь **поверх GoodVideoFrame** из preset. Оси в **см** (через `pxl2sm`), labels «X, cm» / «Y, cm», крупный шрифт 12-13pt, всё на английском.
+- Новый axes справа: **2D occupancy heatmap** через `histcounts2`, шаг 1 см, parula colormap, colorbar с frames.
+
+**Layout правой панели:** 3 строки → 4 строки: results table | trajectory + heatmap | etogram | speed hist + speed trace. Стало плотнее, но всё видно.
+
+**Что не сделано в Round 9 (P2 в TODO.md):**
+- Multi-bodypart выбор для trajectory (сейчас только bodycenter).
+- Background-shading рестов/walk/locomotion на speed-trace.
+- Группировка строк этограммы по категориям с заголовками.
+
+Класс `AnalyzeSessionTabController` парсится, 4/4 smoke + UI-build тесты PASS. Запусти Run analyze на своей сессии — должно быть видно: trajectory на кадре, heatmap, чистая этограмма без zone-шума, скорость с trace.
+
+Файлы: `+sphynx/+pipeline/analyzeSession.m` (Category), `+sphynx/+app/AnalyzeSessionTabController.m` (вся правая панель + checkbox), `docs/TODO.md` (новый).
+

@@ -903,3 +903,47 @@ O(r²) per circle, 14 точек × N кадров — не bottleneck. Без �
 - Класс парсится: 66 методов, 33 props (без изменений — добавил только file-scope helper).
 - 4/4 PASS (smoke + UI build).
 
+
+### 2026-05-08 — План MVP + Round 8 (Define Acts make-video) + Round 9 (Analyze Session plots)
+
+Юзер дал длиннющий список TODO + макро-фичи. План-режим: запустил 3 Explore-агента параллельно → выяснил, что Batch / Make Output Table / Plot Data функционально готовы. Корень make-video бага юзера — не off-by-one в индексах, а тупой `find(bool, 1, 'first')` который ставит окно на frame 1 где rest акт активен с самого старта (velocity=0). План `C:\Users\User\.claude\plans\07-05-structured-flask.md` утверждён.
+
+**Round 8 — Define Acts make-video (commit 0724dac):**
+1. Алгоритм: run-length-encode bool, выбираем самый длинный run, центрируем окно длительности на его середине. Helper `findActiveRuns` file-scope.
+2. videoOffset через `result.config.range.startFrame - 1` (0 по умолчанию). renderActFramesInMemory принимает `videoOffset` параметром, делает `read(reader, f + videoOffset)`. DLC-индексы остаются 1-based.
+3. implay: `set(hPlay.Parent, 'Position', [80 80 1280 960])` + `hPlay.Visual.ScaleFactor = 0.5` в try/catch.
+
+**Round 9 — Analyze Session (this commit):**
+
+1. **`analyzeSession.m`** — каждому Act теперь присваивается `Category`: 'builtin' (rest/walk/locomotion/freezing/rear), 'zone' (corners/walls/center/etc.), 'custom' (из user library). Backwards-compat: defensive в GUI — пустой Category треактуется как 'builtin'.
+
+2. **`AnalyzeSessionTabController.m`** — большая перестройка правой панели:
+   - 3 ряда → 4 ряда: results table | trajectory + heatmap | etogram | speed hist + speed trace.
+   - Новые props: `HeatmapAxes`, `SpeedTraceAxes`, `ShowZoneActsCheckbox`.
+   - **`drawTrajectory`** — `imshow` с `XData/YData` в cm (через `pxlPerCm`), затем plot bodycenter trace в cm. `DataAspectRatio=[1 1 1]`, оси labelled «X, cm» / «Y, cm» 12pt, title 13pt.
+   - **`drawHeatmap`** — `histcounts2(xCm, yCm, edgesX, edgesY)` с шагом 1 cm, `imagesc` parula. Колорбар с подписью «frames». Те же cm-оси.
+   - **`drawSpeed`** — гистограмма 50→150 бинов; новый `SpeedTraceAxes` с `plot(t, v)` где `t = (0:N-1)/frameRate`. X-axis в секундах если frameRate известен, иначе frame.
+   - **`drawEtogram`** — фильтрует акты по Category: 'builtin'+'custom' видны всегда, 'zone' только если `ShowZoneActsCheckbox.Value`. Built-ins красятся через `lines(7)`, custom — через смягчённый HSV (визуально отделяемый блок). Title показывает «zone acts hidden» когда фильтр активен.
+   - Чекбокс `Show zone acts in etogram` добавлен в левую config-панель, default OFF, ValueChangedFcn → `refreshResults()`.
+   - file-scope helper `ternary(cond, a, b)` (для условной title-строки).
+
+**Decisions made on the fly:**
+- Не модифицировал `legacyZoneActSpec` — Category добавляется на месте присваивания акта в `analyzeSession.m`, минимум кода.
+- `imshow` в uiaxes с XData/YData — поддерживается в R2020a (Image Processing Toolbox installed). Если juser-ский preset frame очень крупный, masштаб сохраняется через `xCm = X / pxlPerCm`.
+- Heatmap отдельным axes, не оверлеем на trajectory — иначе теряется trajectory line под цветом. Можно потом добавить альфа-смешение, P3.
+- 1-cm bin в heatmap — компромисс: для NOF арены 50×50 cm это 2500 bins, нормально. Для крупнее можно крутануть с UI.
+
+**Тесты:**
+- `?sphynx.app.AnalyzeSessionTabController` — после правок парсится OK.
+- `runtests({...})` — 4/4 PASS (testAnyZoneSentinel, testMergeStrategies, createPresetAppSmokeTest×2). Полная сборка UI tree включая Analyze tab — без ошибок.
+- Не тестировал: live в MATLAB GUI (требует runнуть analyzeSession на реальной сессии). Юзер сделает.
+
+**Создан `docs/TODO.md`** со всеми deferred-пунктами из его длинного списка, ранжированы P1..P4. Туда ушли:
+- Все CreatePreset правки (frozen).
+- Preprocess Track (рекомпоновка, log-кнопка, likelihood plots).
+- Define Acts P2: act post-filters (median + min-duration).
+- Analyze P2: multi-bodypart trajectory.
+- Большие фичи: numbered tabs, Barnes maze, per-exp defaults, Project tab, metadata, super-table warnings, mouse-list extraction, SLEAP/Bonsai, кинематограммы.
+- Barnes maze — все 8+9 метрик из его списка.
+- Macro: MATLAB upgrade / Python rewrite (P4, требуют разговора).
+
