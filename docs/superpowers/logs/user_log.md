@@ -645,3 +645,19 @@ Batch analysis — задать пути, настроить визуализа�
 
 Файл: `+sphynx/+app/DefineActsTabController.m`. Класс парсится OK (66 методов, 33 props). Smoke + UI build тесты PASS.
 
+
+---
+
+## Make-video hotfix — `insertShape` requires Computer Vision Toolbox (2026-05-08)
+
+Ты запустил Make-video и получил:
+> [ERROR] [Acts] Make-video failed: Undefined function 'insertShape' for input arguments of type 'uint8'.
+
+`insertShape` живёт в Computer Vision Toolbox, которого у тебя в R2020a нет (проверил `ver` сегодня). Это моя ошибка — я скопировал стиль из `BehaviorAnalyzer.m`, который тоже опирается на CVT (видимо, BA ты в этой версии MATLAB не запускал).
+
+**Фикс:** заменил `insertShape(...)` на собственный helper `stampCircle(img, cx, cy, r, color)` — точечная отрисовка в `uint8` напрямую через meshgrid + индексирование. Без зависимостей. По выходу один в один: те же точки на bodypart, акт-bodypart красным и побольше.
+
+Также обновил свою memory про toolboxes: CVT теперь definitively «не установлен», добавил правило «не использовать insertShape/insertText/insertMarker, использовать stampCircle-style рендер».
+
+Можешь запускать Make-video снова. Класс парсится, тесты PASS.
+

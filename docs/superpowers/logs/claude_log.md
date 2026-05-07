@@ -884,3 +884,22 @@ File-scope helpers: `updateMakeVideoDlg`, `closeIfValid`, `deleteIfExists`.
 **Не тестировал:**
 - Live в MATLAB GUI (требует preset+video+DLC реальные на машине юзера). Сам makeActVideo через analyzeSession→insertShape→implay — путь известный, риск минимальный. Если упадёт — скорее всего размер zoneMask vs reader.Width/Height (preset рисовался на одном кадре, видео может быть другого разрешения), уже защищено `if size(zoneMask,1)~=H ...; zoneMask=[]; end`.
 
+
+### Round-7g hotfix — 2026-05-08 — insertShape → stampCircle (no CVT)
+
+Юзер запустил makeActVideo: «Make-video failed: Undefined function 'insertShape' for input arguments of type 'uint8'». Computer Vision Toolbox у него нет (verified `ver` 2026-05-08 — NOT INSTALLED). BehaviorAnalyzer.m использует `insertShape`, но юзер видимо BA в этой R2020a инстансе не гонял; я неосторожно повторил тот же путь.
+
+**Фикс:** заменил оба вызова `insertShape(img,'filledcircle',[x y r],'Color',col,...)` на новый file-scope helper `stampCircle(img, cx, cy, r, color)`:
+- Берёт `[H W C]`, промоутит grayscale в RGB.
+- Округляет cx/cy/r, клиппит по границам.
+- meshgrid → mask `(xg-cx).^2+(yg-cy).^2 <= r^2`.
+- Перебирает каналы, overwrites uint8 пиксели.
+
+O(r²) per circle, 14 точек × N кадров — не bottleneck. Без какого-либо toolbox dep.
+
+Также обновил memory `project_matlab_toolboxes.md`: CVT теперь definitively «not installed» (раньше было «verify before using»), добавил правило «не использовать insertShape/insertText/insertMarker/insertObjectAnnotation, используй stampCircle-style indexing или axes+getframe».
+
+Тесты после фикса:
+- Класс парсится: 66 методов, 33 props (без изменений — добавил только file-scope helper).
+- 4/4 PASS (smoke + UI build).
+

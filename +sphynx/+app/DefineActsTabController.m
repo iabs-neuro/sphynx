@@ -998,9 +998,7 @@ classdef DefineActsTabController < handle
                     else
                         rad = markSize; col = bpColors(b, :);
                     end
-                    img = insertShape(img, 'filledcircle', ...
-                        [xb yb rad], 'Color', col, ...
-                        'Opacity', 1, 'SmoothEdges', false);
+                    img = stampCircle(img, xb, yb, rad, col);
                 end
                 frames(:, :, :, i) = img;
                 if mod(i, 10) == 0 && ~isempty(dlg) && isvalid(dlg)
@@ -1185,6 +1183,29 @@ function newName = uniqueName(base, taken)
         if ~ismember(candidate, taken); newName = candidate; return; end
         n = n + 1;
     end
+end
+
+function img = stampCircle(img, cx, cy, r, color)
+    % Paint a filled disc onto an HxWx3 uint8 image at (cx, cy) with
+    % radius r and the given uint8 RGB color. Drop-in replacement for
+    % insertShape(...,'filledcircle',...) which lives in Computer
+    % Vision Toolbox (not available in this MATLAB instance).
+    [H, W, C] = size(img);
+    if C == 1; img = repmat(img, [1 1 3]); C = 3; end
+    cx = round(cx); cy = round(cy); r = round(r);
+    if ~isfinite(cx) || ~isfinite(cy) || r <= 0; return; end
+    x0 = max(1, cx - r); x1 = min(W, cx + r);
+    y0 = max(1, cy - r); y1 = min(H, cy + r);
+    if x0 > x1 || y0 > y1; return; end
+    [xg, yg] = meshgrid(x0:x1, y0:y1);
+    inside = (xg - cx).^2 + (yg - cy).^2 <= r^2;
+    sub = img(y0:y1, x0:x1, :);
+    for c = 1:C
+        slice = sub(:, :, c);
+        slice(inside) = color(c);
+        sub(:, :, c) = slice;
+    end
+    img(y0:y1, x0:x1, :) = sub;
 end
 
 function out = blendZoneMask(frame, mask)
