@@ -902,20 +902,36 @@ classdef DefineActsTabController < handle
                 bool = logical(result.Acts(rIdx).ActArrayRefine);
                 fps  = result.Options.FrameRate;
                 nWin = max(1, round(durSec * fps));
-                idx0 = find(bool, 1, 'first');
-                if isempty(idx0)
+
+                % --- 2b. Pick the longest active run, center the window
+                %        on its midpoint. Picking the *first* active
+                %        frame puts the start of a session-long rest
+                %        right at frame 1, which is uninformative.
+                [runs, lengths] = findActiveRuns(bool);
+                if isempty(runs)
                     obj.applog('warn', ...
                         'Act "%s" has zero active frames in this session', sel);
                     return;
                 end
-                startF = idx0;
+                [bestLen, kBest] = max(lengths);
+                midF = round(mean(runs(kBest, :)));
+                startF = max(1, midF - floor(nWin/2));
                 endF   = min(numel(bool), startF + nWin - 1);
+
+                % Video frame index = DLC index + StartFrame offset.
+                % By default cfg.range.startFrame = 1 → offset = 0.
+                videoOffset = 0;
+                try
+                    videoOffset = result.config.range.startFrame - 1;
+                catch
+                end
 
                 % --- 3. Render BA-style into a 4D uint8 stack ---------
                 dlg.Indeterminate = 'off';
                 dlg.Message = 'Rendering frames...';
                 frames = obj.renderActFramesInMemory( ...
-                    videoPath, result, actIdx, startF, endF, dlg);
+                    videoPath, result, actIdx, startF, endF, ...
+                    videoOffset, dlg);
                 if isempty(frames)
                     obj.applog('warn', 'No frames rendered'); return;
                 end
@@ -924,23 +940,30 @@ classdef DefineActsTabController < handle
                 hPlay = implay(frames, fps);
                 try
                     set(hPlay.Parent, 'Name', sprintf( ...
-                        'Act: %s — frames %d..%d (%.1fs @ %.1f fps)', ...
-                        sel, startF, endF, size(frames,4)/fps, fps));
+                        'Act: %s — DLC frames %d..%d (longest run: %d frames, %.1fs)', ...
+                        sel, startF, endF, bestLen, bestLen/fps));
+                    set(hPlay.Parent, 'Position', [80 80 1280 960]);
+                    if isprop(hPlay, 'Visual') && isprop(hPlay.Visual, 'ScaleFactor')
+                        hPlay.Visual.ScaleFactor = 0.5;
+                    end
                 catch
                 end
                 obj.applog('info', ...
-                    'Made video (in memory): %s, frames %d..%d (%.1fs)', ...
-                    sel, startF, endF, size(frames,4)/fps);
+                    'Made video (in memory): %s, DLC frames %d..%d (longest run %d, %.1fs)', ...
+                    sel, startF, endF, bestLen, bestLen/fps);
             catch ME
                 obj.applog('error', 'Make-video failed: %s', ME.message);
             end
         end
 
         function frames = renderActFramesInMemory(obj, videoPath, ...
-                result, actIdx, startF, endF, dlg)
+                result, actIdx, startF, endF, videoOffset, dlg)
             % BA-style overlay: optional zone tint (50/50 blend) +
             % per-bodypart dots; the act's bodypart drawn larger and
             % in red so it stands out from the others.
+            % `videoOffset` shifts video reads — DLC index f maps to
+            % video frame f + videoOffset (0 when cfg.range.startFrame=1).
+            if nargin < 7 || isempty(videoOffset); videoOffset = 0; end
             reader = VideoReader(videoPath);
             cleaner = onCleanup(@() delete(reader)); %#ok<NASGU>
             H = reader.Height; W = reader.Width;
@@ -970,9 +993,10 @@ classdef DefineActsTabController < handle
             frames = zeros(H, W, 3, nFrames, 'uint8');
             markSize = 5;
             for i = 1:nFrames
-                f = startF + i - 1;
+                f = startF + i - 1;          % DLC index for traces
+                vF = f + videoOffset;         % absolute video frame
                 try
-                    img = read(reader, f);
+                    img = read(reader, vF);
                 catch
                     continue;
                 end
@@ -1183,6 +1207,18 @@ function newName = uniqueName(base, taken)
         if ~ismember(candidate, taken); newName = candidate; return; end
         n = n + 1;
     end
+end
+
+function [runs, lengths] = findActiveRuns(bool)
+    % Run-length encode a 1xN logical. `runs` is Mx2: each row is
+    % [startIdx endIdx] of a contiguous true-run. `lengths` is Mx1.
+    bool = bool(:)';
+    if isempty(bool); runs = zeros(0,2); lengths = zeros(0,1); return; end
+    d = diff([false, bool, false]);
+    starts = find(d == 1);
+    ends   = find(d == -1) - 1;
+    runs = [starts(:), ends(:)];
+    lengths = ends(:) - starts(:) + 1;
 end
 
 function img = stampCircle(img, cx, cy, r, color)
