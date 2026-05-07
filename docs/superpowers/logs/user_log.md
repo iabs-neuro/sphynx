@@ -480,3 +480,168 @@ Batch analysis — задать пути, настроить визуализа�
 - Preprocess Video — список файлов с метаданными.
 
 Открыть как раньше: `startup; sphynx.app.CreatePresetApp;`. 7 вкладок.
+
+---
+
+## 2026-05-02 — Define Acts UI: 5 правок
+
+Что сделал в Define Acts:
+
+1. **Zones listbox шире** — теперь занимает всю ширину constructor-панели и три row высоты. Гораздо комфортнее когда зон много.
+2. **Авто-имя акта по зоне** — выбираешь зону → её имя автозаполняется в поле Name (если ты ничего не ввёл вручную).
+3. **Стандартные акты слева** — это `rest` (bodycenter < 1 cm/s), `walk` (1-5), `locomotion` (>5), `freezing` (head+center velocity ниже rest threshold одновременно — HeadAndCenter mode), `rears` (расстояние tailbase-paws < 3.6 cm — TailbasePaws mode). Загружаются кнопкой `Load defaults`.
+4. **«Без зоны»** — в списке зон теперь сверху строка `<any zone>`. Выбор означает «не ограничивать акт зоной». Скорость `SpeedMax = Inf` означает то же для скорости.
+5. **Zone op убрал** — из simple act дропдаун AND/OR/EXCLUDE убран. Multi-select зон = OR (любая из выбранных). Если нужны AND/EXCLUDE — делай через complex act из простых.
+
+Файл: `+sphynx/+app/DefineActsTabController.m`. Тесты: `tests/smoke/testAnyZoneSentinel.m` PASS.
+
+
+---
+
+## Что делают кнопки в Define Acts (ответ + правка Load defaults)
+
+**Save** — сохраняет **всю** библиотеку слева в один .mat-файл (поле `LibraryPathField`). Один файл = один набор. Так и задумано.
+
+**Load library** — грузит **всю** библиотеку из .mat одним вызовом, заменяя текущую.
+
+**В Analyze Session / Batch** — путь к библиотеке передаётся через `cfg.acts.libraryPath`, и `analyzeSession` грузит её целиком одной операцией (`sphynx.io.loadActsSet`). Никакой загрузки по одному акту нет нигде.
+
+**Load defaults** — раньше молча затирал библиотеку. Теперь:
+- если библиотека пустая → грузит дефолты молча;
+- если есть свои акты → диалог **Append / Replace / Cancel** (default = Append, добавляет дефолты пропуская совпадения по имени).
+
+Файл: `+sphynx/+app/DefineActsTabController.m`. Класс парсится OK.
+
+
+---
+
+## Define Acts: Multi-library load + multi-select delete + Clear all
+
+**Стратегия конфликтов имён** — выбрал bulk-choice (один диалог на всё).
+Когда жмёшь **Load** и в файле есть акт с именем как у уже существующего:
+- **Rename** (default, твоя идея с индексом) — incoming-копия становится `rest_2`, `walk_3` и т.д.
+- **Skip** — incoming-дубликаты выбрасываются, существующие не трогаются.
+- **Replace** — существующие с конфликтным именем перезаписываются incoming.
+- **Cancel** — ничего не загружается.
+
+Если конфликтов нет — Load добавляет молча, без диалога.
+
+**Дефолтная библиотека** уже = 5 актов (rest, walk, locomotion, freezing, rears). Менять не пришлось.
+
+**Multi-select удаление** — ActsListBox теперь поддерживает выделение нескольких актов (Ctrl/Shift-click). Кнопка **Delete** удаляет всё выделенное (при >1 — спрашивает подтверждение).
+
+**Clear all** — новая кнопка справа от Delete, стирает всю библиотеку с подтверждением.
+
+**Load button** — добавил рядом с Save (раньше её не было в UI вообще, library грузилась только при ручном вводе пути и каком-то побочном пути).
+
+Файл: `+sphynx/+app/DefineActsTabController.m`. Тест: `tests/smoke/testMergeStrategies.m` PASS.
+
+
+---
+
+## Define Acts: фикс кнопок (uiconfirm + Save/Load диалоги)
+
+**Что было сломано:** Clear all / Delete с >1 / Load defaults со списком — все падали потому что я писал `ParentApp.UIFigure`, а в `CreatePresetApp` поле называется `Figure`. Поправил — теперь все диалоги показываются.
+
+**Save/Load переделал по твоему запросу:**
+- Browse убрал.
+- В строке внизу осталось: read-only поле с путём + **Load** + **Save**.
+- **Load** сама открывает file dialog (uigetfile), читает .mat, мерджит с текущей библиотекой.
+- **Save** сама открывает file dialog (uiputfile), default-имя = последний использованный путь или `acts_library.mat`.
+- После любой операции в поле слева отображается выбранный путь.
+
+Стартовая папка диалога = последняя использованная → projectRoot пресета → pwd.
+
+Файл: `+sphynx/+app/DefineActsTabController.m`. Класс парсится OK (48 методов).
+
+
+---
+
+## Define Acts: глобальная перестройка
+
+**Loader column (слева)** — теперь ряд загрузок:
+- Load preset / Load video / Load preprocess settings (каждая со своим path-полем).
+- Дальше как было: defaults/delete/clear / ActsListBox / save+load library / info.
+
+**Simple act constructor (справа)** — 2×2:
+- **Top-left**: компактная форма name / body part / speed min / speed max / Add to library.
+- **Top-right**: большое окно Zones listbox с заголовком «Zones (multi-select = OR)».
+- **Bottom** (на всю ширину): preview axes (frame из preset с overlay выбранной зоны bwboundaries) + строка Make video (поле duration в сек + кнопка).
+
+**Preview** обновляется при выборе зоны: показывает кадр пресета, выбранные зоны обводит цветными линиями.
+
+**Make video** — пока stub. Проверяет что есть preset/video/выбранный акт, но не рендерит — нужна твоя ясность по двум вопросам:
+1. **DLC csv** — брать из preprocess settings (если там сохранён путь) или добавить ещё одно поле «Load DLC csv»?
+2. **Окно видео** — duration сек это: непрерывный сегмент где акт активен? Или склейка всех сегментов до достижения N сек? Или окно вокруг первой активации?
+
+Скажи как — допишу полную реализацию.
+
+Файл: `+sphynx/+app/DefineActsTabController.m`. Парсится OK (53 методов, 26 props).
+
+
+---
+
+## Define Acts: фикс focus + preview + Zones height + Make-video
+
+**1. Окно неактивное после загрузки** — известный баг R2020a: `uigetfile` забирает focus и не возвращает в uifigure. Добавил `restoreFocus()` после каждого диалога — `figure(parentFig); drawnow`. Должно работать.
+
+**2. GoodVideoFrame / GoodVideoFrameGray** — теперь приоритетные имена полей в превью. Перебор: `GoodVideoFrame → GoodVideoFrameGray → Frame → frame → PresetFrame → image`.
+
+**3. Zones listbox** — высота уменьшена в 2 раза (top row = 180px, bottom = 1x).
+
+**4. Make-video** — полная реализация:
+- Ищет DLC csv рядом с preset (или с видео) по pattern `*DLC*.csv`.
+- Сохраняет выбранный акт в temp файл.
+- Запускает `analyzeSession` с этой однократной библиотекой → получает per-frame активность акта.
+- Находит первый активный кадр.
+- Окно видео: `[start, start + duration*fps]`.
+- Прогресс-бар: сначала «Preprocessing tracks» (indeterminate), потом «Rendering frames» с покадровым прогрессом.
+- Если активных кадров нет — лог "zero active frames", без рендера.
+
+Окно = первый сегмент активности длительностью N сек (вариант c из ответа выше). Если хочешь склейку — скажи.
+
+Если DLC не найдётся — в логе будет «No DLC csv found». Для overrides потом могу добавить «Load DLC csv» в loader column.
+
+Файл: `+sphynx/+app/DefineActsTabController.m`. Парсится OK (55 методов).
+
+
+---
+
+## Define Acts: 4 загрузки горизонтально + DLC явно
+
+**Loader column** теперь:
+- Сверху один горизонтальный ряд из 4 равных кнопок: **Load preset** / **Load video** / **Load DLC** / **Load preproc**.
+- Под ними — defaults/delete/clear, листбокс актов, save+load library, info.
+
+**Path-display** — пути показываются в tooltip каждой кнопки (наведи мышку — увидишь полный путь). Без отдельных text-полей в UI.
+
+**Make-video** теперь ищет DLC в порядке:
+1. Загруженный через **Load DLC** (явный приоритет).
+2. Auto-search `*DLC*.csv` рядом с preset, потом рядом с видео.
+3. Если ничего — лог «load via Load DLC».
+
+Файл: `+sphynx/+app/DefineActsTabController.m`. Класс парсится OK (55 методов, 31 props).
+
+
+---
+
+## Define Acts: editable path-fields + Root + preview-fix + in-memory video (2026-05-07)
+
+**Loader-ряд** теперь:
+- Сверху 5 кнопок: **Root | Preset | Video | DLC | Preproc**.
+- Под каждой кнопкой — отдельный editable text-бокс с путём. Можно вписать руками. Для Preset и Preproc редактирование триггерит re-load (если файл существует).
+- **Root** при первом открытии вкладки подтягивается из `app.State.projectRoot` (который ставится Project root кнопкой на CreatePreset / Preprocess tabs). Если ты уже выбрал root раньше — он подставится. Manual edit в этом поле не перетирается.
+- Все Load-кнопки используют Root как стартовую папку диалога (вместо последнего пути библиотеки).
+
+**Preview** теперь корректный:
+- Раньше тянул `pd.GoodVideoFrame` — а readPreset кладёт frame в `pd.Options.GoodVideoFrame`. Поэтому превью было пустое. Поправил.
+- Теперь: GoodVideoFrame + полупрозрачная заливка (50/50 blend) выбранных зон + boundary line поверх.
+
+**Make-video**:
+- На диск **больше не сохраняет**. Рендерит кадры в память (`uint8 HxWx3xN`) и открывает в `implay` окошком.
+- Стиль — как BehaviorAnalyzer: если у акта есть зона → 50/50 blend zoneMask с кадром. Поверх — точки на каждой bodypart (lines colormap). Bodypart, по которому строился акт — **красным**, диаметр чуть больше остальных.
+- Без legend, без timeline, без подписей — только зона + точки.
+- Прогресс-бар как раньше: «Preprocessing tracks» (indeterminate), потом «Rendering N/M» с процентом.
+
+Файл: `+sphynx/+app/DefineActsTabController.m`. Класс парсится OK (66 методов, 33 props). Smoke + UI build тесты PASS.
+

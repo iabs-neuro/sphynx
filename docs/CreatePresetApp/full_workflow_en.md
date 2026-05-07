@@ -68,10 +68,11 @@ A *behavioral act* is a per-frame boolean signal. The library contains
 two kinds:
 
 **Simple act** — true on a frame iff:
-  - the chosen body part is inside the chosen zone(s), combined via
-    `AND` / `OR` / `EXCLUDE` (e.g., "in corners but not in object
-    neighborhood"),
-  - **and** that body part's velocity is in `[speedMin, speedMax]`.
+  - the chosen body part is inside one of the chosen zones
+    (multi-select = OR; for AND/EXCLUDE use a complex act);
+    selecting `<any zone>` means "no zone gate at all",
+  - **and** that body part's velocity is in `[speedMin, speedMax]`
+    (`SpeedMax = Inf` means "no upper limit").
 
 **Complex act** — combine N already-defined acts with a logical
 operation:

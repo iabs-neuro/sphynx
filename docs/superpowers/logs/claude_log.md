@@ -693,3 +693,194 @@ nearestStripMap: для каждого strip k вычисляю bwdist(strip(k).
 - log-Y критично для слабо размеченных частей, где >99% likelihood около 1.0 — на linear scale левая часть не видна вообще. На log сразу виден «провал» между двумя модами.
 - После Slice 4 надо будет добавить вертикальную линию на гистограмме на текущем threshold per-part.
 - При Slice 4 вспомнить про disable Smoothing dropdown когда Kalman ON (или показать «(disabled by Kalman)»).
+
+---
+
+## 2026-05-02 — Define Acts UI refinements (round-7)
+
+Юзер дал 5 правок Define Acts:
+1. Zones listbox шире — переписал `buildSimpleConstructor` с 7-row 2-col на 9-row layout, listbox теперь занимает row [6 8] full-width.
+2. Авто-имя по выбранной зоне — добавил `onZoneSelectionChanged(src)` callback на SimpleZoneListBox; заполняет SimpleNameField если он пустой и выбор не `<any zone>`.
+3. Объяснил стандартные акты в чате: rest/walk/locomotion (bodycenter velocity bins), freezing (HeadAndCenter mode, head+center velocity < restThr), rears (TailbasePaws mode, tailbase-paws < 3.6 cm).
+4. `<any zone>` sentinel — в `loadPreset` и `refreshZoneAndBodypartFromPreset` prepend в Items, дефолтный Value тоже `<any zone>`. В `addSimpleAct` фильтрую: `zones = zones(~strcmp(zones, '<any zone>'))`. Пустой zones → applyAct line 57-59 уже корректно возвращает `true(1, nFrames)` (no zone gate). Ничего трогать в applyAct не пришлось.
+5. Убрал zone op dropdown из simple act constructor — оставил поле `SimpleZoneOpDropDown` скрытым (Visible='off') для back-compat; `addSimpleAct` всегда передаёт `'OR'`. Multi-select зон = OR (default). Для AND/EXCLUDE юзер делает complex act из простых.
+
+Также `SpeedMax` теперь дефолтом Inf (вместо 1000), tooltip «Inf = no upper limit».
+
+Тесты:
+- `tests/smoke/testAnyZoneSentinel.m` — `<any zone>` фильтруется, applyAct с пустым zones даёт all-true. PASS.
+- `?sphynx.app.DefineActsTabController` парсится, 45 методов.
+
+Docs: `full_workflow_{ru,en}.md` — Simple act описание упрощено (multi-select=OR, `<any zone>` для no zone gate, `SpeedMax=Inf` для no upper limit).
+
+
+### Load defaults — защита от затирания
+Юзер уточнил: Save/Load уже работают целым набором (вся `State.acts` в один .mat) — это правильно. Но Load defaults молча перезаписывал библиотеку, что опасно.
+
+Поправил `loadDefaults`:
+- если `State.acts` пуст → грузим дефолты молча.
+- если есть акты → `uiconfirm` с тремя опциями: **Append** (default — добавляет дефолты, пропуская совпадения по имени), **Replace** (затирает всё), **Cancel**.
+
+Append-режим полезен потому что юзер часто хочет иметь и стандартные `rest/walk/locomotion/freezing/rears`, и свои визиты-к-объектам в одной библиотеке.
+
+
+### Round-7b — Multi-library load + multi-select delete + clear all
+Юзер уточнил workflow: дефолт = 5 актов (уже так), Load кнопка должна добавлять library поверх существующих с разрешением конфликтов; multi-select удаление; идея копировать с индексом при конфликтах.
+
+**Решения:**
+1. **Конфликт-стратегия** — bulk-choice диалог (один раз для всех конфликтов, не per-act): `Rename / Skip / Replace / Cancel`. Default `Rename`. Если конфликтов 0 — silent append. Метод `mergeIntoLibrary(incoming, sourceLabel)` инкапсулирует логику.
+2. **Rename**: helper `uniqueName(base, taken)` добавляет суффикс `_2`, `_3`, ... пока не уникально. Растущий pool учитывает только что добавленные имена.
+3. **Skip**: incoming(~conflicts) добавляются.
+4. **Replace**: existing с конфликтным именем удаляются, incoming целиком приклеивается.
+5. **Add Load button** в Save-row рядом с Save (раньше была только Save и Browse — Load работал только через `Settings.acts` подгрузку из `LibraryPathField`, но кнопки UI не было).
+6. **Multi-select Delete**: ActsListBox теперь `Multiselect='on'`. `deleteSelectedAct` принимает cell, при >1 спрашивает confirm. Использует `ismember` для batch-фильтра.
+7. **Clear all** — новая кнопка с подтверждением.
+
+`actsLibraryDefaults()` уже возвращает 5 актов (rest/walk/locomotion/freezing/rears) — менять не пришлось.
+
+Тест `tests/smoke/testMergeStrategies.m` PASS. Класс парсится (47 методов).
+
+
+### Round-7c — Багфиксы: UIFigure → Figure, Save/Load с собственными диалогами
+Юзер: «Clear all не работает. Delete не удаляет несколько. Load defaults не работает когда есть акты. Убери Browse, Save/Load пусть открывают свои окна.»
+
+**Root cause** для (1)/(2)/(3): `obj.ParentApp.UIFigure` — поле в `CreatePresetApp` называется `Figure`, не `UIFigure`. Все 4 `uiconfirm` вызова падали без видимой ошибки (uiconfirm с невалидным parent просто бросает исключение, а callback его проглатывал). Replace-all `ParentApp.UIFigure` → `ParentApp.Figure`.
+
+**Save/Load workflow** перестроил:
+- Browse-кнопку убрал.
+- LibraryPathField теперь read-only, показывает «последний использованный путь».
+- `loadLibrary()` сама дёргает `uigetfile`.
+- `saveLibrary()` сама дёргает `uiputfile` (default name = текущий путь или `acts_library.mat`).
+- Helper `libraryStartDir()` подбирает стартовую папку: текущий путь → projectRoot → pwd.
+
+`pickLibraryPath` метод осиротел (только Browse его дёргала) — оставил на месте, не мешает (~5 строк, стоимость удаления выше).
+
+Класс парсится (48 методов, +1 за `libraryStartDir`).
+
+
+### Round-7d — Define Acts global restructure
+Юзер: «зону наверх справа, имя/часть тела/скорость слева в окне актов, внизу превью с кадром из пресета и кнопка make video с длиной. Добавь Load video и Load preprocess settings в loader column.»
+
+**Изменения:**
+
+1. **Loader column (глобально слева)** — теперь 7 рядов вместо 5:
+   - Row 1-3: Load preset / Load video / Load preprocess settings (через helper `buildResourceRow(parent, row, label, loadFcn)` — генерик строка с label / read-only path / Load button).
+   - Row 4: defaults / delete / clear
+   - Row 5: ActsListBox
+   - Row 6: save / load library
+   - Row 7: info text area
+
+2. **Simple act constructor (глобально справа)** — переделал в 2x2 outer grid:
+   - top-left: компактная форма (name / bodypart / speed min / speed max / Add) — 6×2 sub-grid, ColumnWidth {90, '1x'}
+   - top-right: большой Zones listbox с label сверху
+   - bottom (span 2 col): `PreviewAxes` (uiaxes) + строка make-video controls (duration field + Make video button)
+
+3. **Preview** (`refreshZonePreview`):
+   - Достаёт frame из `LoadedPresetData` (пробует поля `Frame`/`frame`/`PresetFrame`/`image`).
+   - imshow + bwboundaries(zoneMask) для каждой выбранной зоны цветной линией (lines colormap).
+   - Триггерится из `onZoneSelectionChanged` и в конце `loadPreset`.
+
+4. **Make-video — stub**:
+   - Проверяет наличие preset / video / выбранного акта.
+   - Логирует «полный pipeline в Analyze Session, используй его». Полная реализация = 200+ строк (нужен DLC csv поле, evalActs prefab, окно вокруг найденных активных кадров). Не стал кодить наугад — подожду уточнение от юзера: брать DLC из preprocess settings? Из соседнего файла? Окно = непрерывный сегмент акта или склейка сегментов?
+
+5. **Новые properties**: `VideoPathField`, `PreprocessPathField`, `LoadedPreprocessSettings`, `PreviewAxes`, `MakeVideoDurationField`, `MakeVideoButton`.
+
+`buildResourceRow` — DRY helper для трёх loader-rows. Каждый ряд: 64-px label / 1x path field / fit Load-button.
+
+Класс парсится: 53 метода, 26 properties.
+
+
+### Round-7e — Define Acts: 4 фикса (focus/preview/zones/make-video)
+
+**1. Focus-баг после диалогов** (uifigure теряет интерактивность после uigetfile/uiputfile в R2020a). Helper `restoreFocus()` дёргает `figure(obj.ParentApp.Figure); drawnow;` после каждого диалога. Добавлено в `loadPreset/loadVideo/loadPreprocessSettings/saveLibrary/loadLibrary`.
+
+**2. GoodVideoFrame в превью** — добавил `'GoodVideoFrame', 'GoodVideoFrameGray'` в начало списка fields у `refreshZonePreview` (приоритет выше чем generic Frame/frame/PresetFrame/image).
+
+**3. Zones listbox в 2x меньше** — outer RowHeight в `buildSimpleConstructor` поменял с `{'1x','1x'}` на `{180, '1x'}`. Top row фиксирован, bottom (preview) растягивается.
+
+**4. Make-video — полная реализация** через analyzeSession + renderActsVideo:
+- `findDLCPath(presetPath, videoPath)` — ищет `*DLC*.csv` рядом с пресетом, потом рядом с видео.
+- Сохраняет выбранный акт в temp .mat (`saveActsSet(tmpLib, single act)`).
+- Дёргает `analyzeSession(cfg)` с `cfg.acts.libraryPath = tmpLib`, `headless=true`, `saveWorkspace=false`.
+- Прогресс-бар `uiprogressdlg(obj.ParentApp.Figure, ..., 'Indeterminate', 'on')` пока препроцессинг.
+- Находит первый активный кадр акта в `result.Acts(idx).ActArrayRefine`.
+- Окно: `[startF, startF + duration*fps - 1]`.
+- Переключает прогресс на `Indeterminate='off'` и вызывает `renderActsVideo` с `Range` + `ProgressFcn` → бар обновляется покадрово.
+- Cleanup: temp lib удаляется через `onCleanup(@() deleteIfExists(tmpLib))`.
+
+File-scope helpers: `updateMakeVideoDlg`, `closeIfValid`, `deleteIfExists`.
+
+Класс парсится: 55 методов. Не тестировал в живом MATLAB UI (требует реального DLC + видео + preset на машине юзера) — пайплайн собран по существующим API без fakes.
+
+
+### Round-7f — Loader: 4 кнопки горизонтально + DLC явно
+Юзер: «dlc нужен явно через кнопку. И сделай горизонтально, не вертикально».
+
+**Изменения:**
+1. **DLCPathField** + `loadDLC()` метод (uigetfile фильтр `*.csv`).
+2. **Horizontal load row** — заменил 3 вертикальных ряда (preset/video/preproc через `buildResourceRow`) одним горизонтальным `uigridlayout([1, 4])` с 4 кнопками равной ширины: `Load preset / Load video / Load DLC / Load preproc`.
+3. **Tooltip как path display** — каждая кнопка хранит current path в своём `Tooltip` (`'Loaded: <path>'`). Это компактнее чем path-fields в UI, но юзер видит путь при наведении мыши.
+4. **Hidden uieditfields** — `*PathField` props созданы как orphan uieditfield(obj.Tab) с `Visible='off'` чтобы не менять API доступа `.Value` во всех местах кода.
+5. **Удалил** `buildResourceRow` helper (больше не нужен).
+6. **`findDLCPath`** теперь приоритет: explicit DLCPathField → auto-search `*DLC*.csv` рядом с preset/video. Если ничего нет → лог «load via Load DLC».
+7. **Left grid** сократился с 7 до 5 рядов (loadRow / defaults-row / ActsListBox / save-load / info).
+
+Новые properties: `DLCPathField`, `PresetButton`, `VideoButton`, `DLCButton`, `PreprocessButton`.
+
+Класс парсится: 55 методов, 31 properties.
+
+
+### Round-7g — 2026-05-07 — editable path-fields + Root + preview-fix + in-memory video
+
+Юзер дал 4 правки:
+1. Над кнопками загрузки — editable path-боксы как в Preprocess Tab (можно вручную менять).
+2. Кнопка Root + auto-pull из ParentApp.State.projectRoot.
+3. Видео не на диск — в памяти, открывать окошком (как BehaviorAnalyzer); без легенд; зона + body points + хайлайт акт-bodypart другим цветом.
+4. Превью неправильное — должен быть `GoodVideoFrame` + выбранная зона.
+
+**Что сделано:**
+
+1. **Loader rewrite** — buildLeftLibraryColumn 5→6 рядов:
+   - Row 1: 5 кнопок `Root | Preset | Video | DLC | Preproc` (равная ширина, '1x' каждая).
+   - Row 2 (NEW): 5 editable `uieditfield` под кнопками. ValueChangedFcn у Preset/Preproc → `applyPresetPath/applyPreprocessPath` (re-load если path resolves). Root field валидирует isfolder в `onRootPathEdited`. Video/DLC fields — просто хранилище.
+   - Rows 3-6: defaults/delete/clear, ActsListBox, save/load library, info (как было, +1 row index).
+
+2. **`loadRoot()`** — uigetdir, пишет в RootPathField + Tooltip + applog.
+
+3. **`inheritRootFromParentApp()`** — копия логики из PreprocessTabController. Дёргается из конструктора **после** buildUI. Заполняет RootPathField если ParentApp.State.projectRoot валиден И поле пустое (manual edit не перетирается).
+
+4. **`resourceStartDir()`** — новый helper: prefer Root field → ParentApp.State.projectRoot → cwd. Используется во всех Load кнопках (preset/video/dlc/preproc/root). `libraryStartDir` теперь делегирует ему как fallback.
+
+5. **`applyPresetPath(path)` / `applyPreprocessPath(path)`** — выделил из loadX логику «прочитать файл, обновить state, подсветить tooltip». Это позволяет manual-edit reload через ValueChangedFcn без дублирования кода.
+
+6. **Preview fix (`refreshZonePreview` + `extractPresetFrame`)** — root cause: legacy preset кладёт frame в `pd.Options.GoodVideoFrame`, не в `pd.GoodVideoFrame` (readPreset возвращает `out.Options = ...`). Helper `extractPresetFrame` сначала смотрит в `pd.Options.GoodVideoFrame/Gray`, потом в top-level fallback. Также теперь рендер: union mask выбранных зон → blend 50/50 с frame (BA-style) → boundary line поверх. Раньше был только boundary без заливки.
+
+7. **`makeActVideo` rewrite** — больше не пишет файл:
+   - analyzeSession как раньше (cfg.paths.outDir = tempdir, cfg.io.saveWorkspace=false).
+   - Локально: `renderActFramesInMemory(videoPath, result, actIdx, startF, endF, dlg)` строит 4D `uint8(H, W, 3, N)` стек.
+   - На каждый кадр: optional zone tint (50/50 blend mask с frame), потом insertShape filledcircle на каждой bodypart-точке.
+   - Highlight: `act.bodyPart` → `find(strcmpi({bps.BodyPartName}, ...))` → красный circle радиус +2px вместо bpColors(b,:) lines-colormap.
+   - В конце: `implay(frames, fps)` с переименованным окном `Act: %s — frames %d..%d (...)`.
+   - `renderActsVideo` (на диск) больше не дёргается отсюда.
+
+8. **`actZoneMaskFromPreset(act)` helper** — union всех act.zones из LoadedPresetData; defensive вокруг отсутствия поля `zones` (complex acts).
+
+9. **`blendZoneMask(frame, mask)` file-scope helper** — 50/50 blend tint=255 на месте mask=true, для grayscale промоутит в RGB. Используется в preview.
+
+**Решения по ходу:**
+- Manual edit Video/DLC paths намеренно НЕ триггерит reload — там нет heavy state, путь подхватится при следующем Make-video. Preset/Preproc — да, потому что они держат cached data (LoadedPresetData / LoadedPreprocessSettings) которые надо обновить.
+- Highlight цвет — фикс red `[255 0 0]`. Альтернатива: lines(nBP+1)(end,:) или контрастный цвет относительно lines(b). Решил: red — однозначно «этот bodypart про акт», без когнитивной нагрузки.
+- Zone tint без bw boundaries в видео — в BA там тоже только blend, без линии. Чище и меньше шума.
+- implay vs custom uifigure-плеер — implay built-in, бесплатные controls. Альтернатива (custom timer + imshow) — больше кода, не нужно.
+- Не передаю preprocess settings в analyzeSession — defaultConfig всё равно пересчитывает; preprocess settings нужны были бы только если хотим ровно то же что в Preprocess Tab. Юзер не указал, оставил default.
+
+**Тесты + парсинг:**
+- `?sphynx.app.DefineActsTabController` — 66 методов (+11), 33 props (+2: RootPathField, RootButton).
+- `tests/smoke/testAnyZoneSentinel.m` — 3/3 PASS.
+- `tests/smoke/testMergeStrategies.m` — 3/3 PASS.
+- `tests/unit/createPresetAppSmokeTest.m` — 2/2 PASS (полная сборка UI tree, включая мою вкладку).
+
+**Не тестировал:**
+- Live в MATLAB GUI (требует preset+video+DLC реальные на машине юзера). Сам makeActVideo через analyzeSession→insertShape→implay — путь известный, риск минимальный. Если упадёт — скорее всего размер zoneMask vs reader.Width/Height (preset рисовался на одном кадре, видео может быть другого разрешения), уже защищено `if size(zoneMask,1)~=H ...; zoneMask=[]; end`.
+
