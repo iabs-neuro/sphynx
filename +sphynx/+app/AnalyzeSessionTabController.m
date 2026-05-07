@@ -16,6 +16,7 @@ classdef AnalyzeSessionTabController < handle
         % Loading
         DLCField
         PresetField
+        VideoField
         OutDirField
         ActsLibraryField
 
@@ -26,6 +27,7 @@ classdef AnalyzeSessionTabController < handle
 
         % Run + results
         RunButton
+        RenderVideoButton
         ResultTable
 
         % Plots
@@ -78,6 +80,29 @@ classdef AnalyzeSessionTabController < handle
                 obj.State.result.n_frames, numel(obj.State.result.Acts));
             obj.refreshResults();
         end
+
+        function renderActsVideo(obj)
+            if isempty(obj.State.result)
+                obj.applog('warn', 'Run analyze first'); return;
+            end
+            videoPath = obj.VideoField.Value;
+            if isempty(videoPath) || ~isfile(videoPath)
+                obj.applog('warn', 'Pick a video first'); return;
+            end
+            outDir = obj.OutDirField.Value;
+            if isempty(outDir); outDir = fileparts(videoPath); end
+            dlg = uiprogressdlg(obj.Figure, 'Title', 'Rendering acts video', ...
+                'Message', 'Starting...', 'Cancelable', 'off');
+            cleaner = onCleanup(@() closeIfValid(dlg));
+            try
+                outPath = sphynx.pipeline.renderActsVideo(obj.State.result, ...
+                    videoPath, outDir, ...
+                    'ProgressFcn', @(v, m) updateDlg(dlg, v, m));
+                obj.applog('info', 'Acts video saved: %s', outPath);
+            catch ME
+                obj.applog('error', 'Render failed: %s', ME.message);
+            end
+        end
     end
 
     methods (Access = private)
@@ -93,9 +118,9 @@ classdef AnalyzeSessionTabController < handle
         end
 
         function buildLeftConfig(obj, parent)
-            left = uigridlayout(parent, [14, 2]);
+            left = uigridlayout(parent, [16, 2]);
             left.Layout.Column = 1;
-            left.RowHeight = repmat({30}, 1, 14);
+            left.RowHeight = repmat({30}, 1, 16);
             left.ColumnWidth = {110, '1x'};
             left.RowSpacing = 4;
             left.Padding = [0 0 0 0];
@@ -104,23 +129,28 @@ classdef AnalyzeSessionTabController < handle
             obj.DLCField = uieditfield(left, 'text', 'Value', '');
             uilabel(left, 'Text', 'Preset:');
             obj.PresetField = uieditfield(left, 'text', 'Value', '');
+            uilabel(left, 'Text', 'Video:');
+            obj.VideoField = uieditfield(left, 'text', 'Value', '', ...
+                'Tooltip', 'optional — needed only for Render acts video');
             uilabel(left, 'Text', 'Output dir:');
             obj.OutDirField = uieditfield(left, 'text', 'Value', '');
             uilabel(left, 'Text', 'Acts library:');
             obj.ActsLibraryField = uieditfield(left, 'text', 'Value', '', ...
                 'Tooltip', 'optional .mat from Define Acts; built-in defaults if empty');
 
-            % Browse row 1: DLC / Preset / Out dir
+            % Browse row 1: DLC / Preset / Video / Out dir
             uilabel(left, 'Text', '');
-            br = uigridlayout(left, [1, 3]);
+            br = uigridlayout(left, [1, 4]);
             br.RowHeight = {28};
-            br.ColumnWidth = {'1x', '1x', '1x'};
+            br.ColumnWidth = {'1x', '1x', '1x', '1x'};
             br.Padding = [0 0 0 0];
             br.ColumnSpacing = 4;
             uibutton(br, 'Text', 'DLC...', 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('DLC'));
             uibutton(br, 'Text', 'Preset...', 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('Preset'));
+            uibutton(br, 'Text', 'Video...', 'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.pickPath('Video'));
             uibutton(br, 'Text', 'Out dir...', 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('OutDir'));
 
@@ -143,6 +173,12 @@ classdef AnalyzeSessionTabController < handle
             obj.RunButton = uibutton(left, 'Text', 'Run analyze', ...
                 'BackgroundColor', [1.00 0.55 0.55], 'FontWeight', 'bold', ...
                 'ButtonPushedFcn', @(~,~) obj.runAnalyze());
+
+            uilabel(left, 'Text', '');
+            obj.RenderVideoButton = uibutton(left, 'Text', 'Render acts video', ...
+                'BackgroundColor', [0.55 0.85 1.00], 'FontWeight', 'bold', ...
+                'Tooltip', 'After Run — render mp4 with body parts and active acts overlay', ...
+                'ButtonPushedFcn', @(~,~) obj.renderActsVideo());
 
             % Log area
             uilabel(left, 'Text', '');
@@ -196,6 +232,9 @@ classdef AnalyzeSessionTabController < handle
                 case 'Preset'
                     [f, p] = uigetfile({'*.mat'}, 'Pick preset', startDir);
                     if ~isequal(f, 0); obj.PresetField.Value = fullfile(p, f); end
+                case 'Video'
+                    [f, p] = uigetfile({'*.mp4;*.avi;*.mov'}, 'Pick video', startDir);
+                    if ~isequal(f, 0); obj.VideoField.Value = fullfile(p, f); end
                 case 'OutDir'
                     d = uigetdir(startDir, 'Output dir');
                     if ~isequal(d, 0); obj.OutDirField.Value = d; end
@@ -286,4 +325,15 @@ end
 
 function v = getOr(s, name, fallback)
     if isfield(s, name); v = s.(name); else; v = fallback; end
+end
+
+function updateDlg(dlg, frac, msg)
+    if isvalid(dlg)
+        dlg.Value = max(0, min(1, frac));
+        dlg.Message = msg;
+    end
+end
+
+function closeIfValid(h)
+    if ~isempty(h) && isvalid(h); try; close(h); catch; end; end
 end

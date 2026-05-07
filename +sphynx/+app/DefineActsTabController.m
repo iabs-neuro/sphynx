@@ -41,6 +41,10 @@ classdef DefineActsTabController < handle
         % Library save/load
         LibraryPathField
 
+        % Preset (for zones + body parts)
+        PresetPathField
+        LoadedPresetData
+
         % State
         State
     end
@@ -65,6 +69,35 @@ classdef DefineActsTabController < handle
             % rears, mirroring the legacy BehaviorAnalyzer thresholds.
             obj.State.acts = sphynx.acts.actsLibraryDefaults();
             obj.refreshActsListBox();
+        end
+
+        function loadPreset(obj)
+            % Read a preset .mat and pull its zone names + a sensible
+            % bodyparts list into the simple-act constructor.
+            path = obj.PresetPathField.Value;
+            if isempty(path) || ~isfile(path)
+                obj.applog('warn', 'Preset not found: %s', path); return;
+            end
+            try
+                pd = sphynx.io.readPreset(path);
+            catch ME
+                obj.applog('error', 'readPreset failed: %s', ME.message); return;
+            end
+            obj.LoadedPresetData = pd;
+            % Zones
+            if isfield(pd, 'Zones') && ~isempty(pd.Zones)
+                names = {pd.Zones.name};
+                obj.SimpleZoneListBox.Items = names;
+                obj.applog('info', 'Loaded %d zones from preset', numel(names));
+            else
+                obj.SimpleZoneListBox.Items = {};
+                obj.applog('warn', 'Preset has no Zones');
+            end
+            % Body parts — derive from common DLC defaults; can be edited.
+            obj.SimpleBodyPartDropDown.Items = ...
+                {'bodycenter', 'tailbase', 'nose', 'headcenter', ...
+                 'leftear', 'rightear', 'leftforelimb', 'righforelimb', ...
+                 'leftbody', 'rightbody', 'lefthindlimb', 'righthindlimb'};
         end
 
         function addSimpleAct(obj)
@@ -158,15 +191,31 @@ classdef DefineActsTabController < handle
         end
 
         function buildLeftLibraryColumn(obj)
-            left = uigridlayout(obj.OuterGrid, [4, 1]);
+            left = uigridlayout(obj.OuterGrid, [5, 1]);
             left.Layout.Column = 1;
-            left.RowHeight = {28, '1x', 32, 100};
+            left.RowHeight = {32, 28, '1x', 32, 100};
             left.RowSpacing = 4;
             left.Padding = [0 0 0 0];
 
-            % Top toolbar: load defaults / delete selected
+            % Row 1: preset path + browse + load
+            pr = uigridlayout(left, [1, 4]);
+            pr.Layout.Row = 1;
+            pr.RowHeight = {28};
+            pr.ColumnWidth = {'fit', '1x', 'fit', 'fit'};
+            pr.Padding = [0 0 0 0];
+            pr.ColumnSpacing = 4;
+            uilabel(pr, 'Text', 'Preset:');
+            obj.PresetPathField = uieditfield(pr, 'text', 'Value', '');
+            uibutton(pr, 'Text', 'Browse', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.pickPresetPath());
+            uibutton(pr, 'Text', 'Load preset', ...
+                'BackgroundColor', [1.00 0.55 0.55], 'FontWeight', 'bold', ...
+                'ButtonPushedFcn', @(~,~) obj.loadPreset());
+
+            % Row 2: load defaults / delete selected
             tb = uigridlayout(left, [1, 2]);
-            tb.Layout.Row = 1;
+            tb.Layout.Row = 2;
             tb.RowHeight = {28};
             tb.ColumnWidth = {'1x', 'fit'};
             tb.Padding = [0 0 0 0];
@@ -181,11 +230,11 @@ classdef DefineActsTabController < handle
             % Acts library listbox
             obj.ActsListBox = uilistbox(left, 'Items', {}, ...
                 'ValueChangedFcn', @(~,~) obj.refreshInfoForSelected());
-            obj.ActsListBox.Layout.Row = 2;
+            obj.ActsListBox.Layout.Row = 3;
 
             % Save/load row
             srow = uigridlayout(left, [1, 3]);
-            srow.Layout.Row = 3;
+            srow.Layout.Row = 4;
             srow.RowHeight = {28};
             srow.ColumnWidth = {'fit', '1x', 'fit'};
             srow.Padding = [0 0 0 0];
@@ -204,7 +253,17 @@ classdef DefineActsTabController < handle
 
             % Info / log
             obj.InfoTextArea = uitextarea(left, 'Editable', 'off', 'Value', {''});
-            obj.InfoTextArea.Layout.Row = 4;
+            obj.InfoTextArea.Layout.Row = 5;
+        end
+
+        function pickPresetPath(obj)
+            startDir = '';
+            if ~isempty(obj.ParentApp) && ~isempty(obj.ParentApp.State.projectRoot)
+                startDir = obj.ParentApp.State.projectRoot;
+            end
+            [f, p] = uigetfile({'*.mat', 'Preset .mat'}, 'Pick preset', startDir);
+            if isequal(f, 0); return; end
+            obj.PresetPathField.Value = fullfile(p, f);
         end
 
         function buildRightConstructorColumn(obj)
