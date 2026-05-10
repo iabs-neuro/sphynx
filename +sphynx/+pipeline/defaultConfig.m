@@ -46,7 +46,16 @@ function cfg = defaultConfig()
     cfg.acts.freezingMode      = 'HeadAndCenter';     % | 'NoseAndCenter' | 'AllBodyParts'
     cfg.acts.rearMode          = 'TailbasePaws';      % | 'AllBodyParts'
     cfg.acts.rearThresholdAllBodyPartsPxl = 170;
-    cfg.acts.rearThresholdTailbasePawsCm  = 3.6;
+    % Default tightened from 3.6 cm to 2.8 cm — the legacy 3.6 cm cut
+    % through the main mode of the (tailbase -> hindlimb) sum
+    % distribution and flagged 11-20% of frames as rear on real
+    % sessions. 2.8 cm sits in the lower tail. Used when the
+    % auto-threshold below is off OR fails.
+    cfg.acts.rearThresholdTailbasePawsCm  = 2.8;
+    % When true, override the cm threshold per-session via
+    % sphynx.acts.autoRearThresholdCm — a robust statistic on the
+    % sumDist distribution that adapts to each animal's posture.
+    cfg.acts.rearAutoThreshold            = true;
 
     cfg.io.saveWorkspace = true;
     cfg.io.sessionName   = '';

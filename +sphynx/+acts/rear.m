@@ -28,7 +28,8 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
     p = inputParser;
     addParameter(p, 'PixelsPerCm', [], @(v) isempty(v) || (isnumeric(v) && v > 0));
     addParameter(p, 'AllBodyPartsThresholdPxl', 170);
-    addParameter(p, 'TailbasePawsThresholdCm', 3.6);
+    addParameter(p, 'TailbasePawsThresholdCm', 2.8);
+    addParameter(p, 'AutoThreshold', false, @islogical);
     addParameter(p, 'SmoothWindowFrames', [], @(v) isempty(v) || (isnumeric(v) && v >= 3 && mod(v,2)==1));
     addParameter(p, 'MinRunFrames', 5);
     addParameter(p, 'FrameRate', 30);
@@ -73,7 +74,19 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
             end
             window = orDefault(p.Results.SmoothWindowFrames, makeOdd(ceil(p.Results.FrameRate / 2)));
             smoothed = sphynx.preprocess.smoothTrace(sumDist(:), window);
-            thresholdPxl = p.Results.TailbasePawsThresholdCm * p.Results.PixelsPerCm;
+            % Decide threshold: explicit cm value, or auto from
+            % distribution of smoothed sumDist (cm). Auto wins when
+            % the AutoThreshold flag is set.
+            if p.Results.AutoThreshold
+                smoothedCm = smoothed(:)' / p.Results.PixelsPerCm;
+                thrCm = sphynx.acts.autoRearThresholdCm(smoothedCm);
+                if ~isfinite(thrCm)
+                    thrCm = p.Results.TailbasePawsThresholdCm;
+                end
+            else
+                thrCm = p.Results.TailbasePawsThresholdCm;
+            end
+            thresholdPxl = thrCm * p.Results.PixelsPerCm;
             raw = smoothed' < thresholdPxl;
     end
 
