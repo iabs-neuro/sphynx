@@ -706,16 +706,17 @@ classdef DefineActsTabController < handle
                             'still count as part of the act (filled ' ...
                             'before the duration check). 0 = never fill.']);
 
-            % Hidden — back-compat, always 'OR'
-            obj.SimpleZoneOpDropDown = uidropdown(form, ...
-                'Items', {'OR'}, 'Value', 'OR', 'Visible', 'off');
-            uilabel(form, 'Text', '', 'Visible', 'off');
-
             uilabel(form, 'Text', '');
             uibutton(form, 'Text', 'Add to library', ...
                 'BackgroundColor', [1.00 0.55 0.55], ...
                 'FontWeight', 'bold', ...
                 'ButtonPushedFcn', @(~,~) obj.addSimpleAct());
+
+            % Hidden — back-compat, always 'OR'. Parked off-grid in
+            % obj.Tab (Visible='off') so .Value still resolves but it
+            % no longer eats a row from the form's 7-row layout.
+            obj.SimpleZoneOpDropDown = uidropdown(obj.Tab, ...
+                'Items', {'OR'}, 'Value', 'OR', 'Visible', 'off');
 
             % --- TOP-RIGHT: Zones listbox --------------------------------
             zoneGrid = uigridlayout(outer, [2, 1]);
