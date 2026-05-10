@@ -146,8 +146,11 @@ function result = analyzeSession(config)
             'SmoothWindow', win);
         BodyPartsTraces(part).Velocity = v;            %#ok<AGROW>
         BodyPartsTraces(part).VelocitySmoothed = v;    % already smoothed in computeVelocity
-        BodyPartsTraces(part).AverageSpeed = round(mean(v), 2);
-        BodyPartsTraces(part).AverageDistance = round(BodyPartsTraces(part).AverageSpeed * nFrames / frameRate / 100, 2);
+        BodyPartsTraces(part).AverageSpeed = round(mean(v, 'omitnan'), 2);
+        % Total distance travelled in cm: sum of per-frame
+        % displacements = sum(v) / frameRate.
+        BodyPartsTraces(part).AverageDistance = round( ...
+            sum(v, 'omitnan') / frameRate, 2);
     end
 
     % Choose the velocity used for speed acts (legacy uses Options.BodyPart.Velocity)

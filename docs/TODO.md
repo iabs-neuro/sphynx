@@ -40,7 +40,7 @@ P4 = macro-decisions / re-architecture.
 - [ ] **P2** Multi-bodypart trajectory: dropdown to choose which parts overlay on `GoodVideoFrame`.
 - [ ] **P2** Split the bodyparts-trajectory plot into two separate files per bodypart: `trajectory_<bp>.{png,fig}` for just the 2D trajectory over `GoodVideoFrame`, and `timeseries_<bp>.{png,fig}` for the X(t) / Y(t) / likelihood(t) panel. Saves both kinds inside `<sessionDir>/bodyparts_trajectory/`.
 - [ ] **P2** Settings load — drop the hard "Analysis settings .mat" filename pattern so any `.mat` is acceptable. The `applySettings` defensive `isfield` checks already tolerate missing fields, so the file-dialog filter is the only gate. `'*.mat'` instead of the named pattern, or no filter at all.
-- [ ] **P3** Session-wide bodycenter stats — `BodyPartsTraces(bc).AverageSpeed` and `AverageDistance` are computed in `analyzeSession` but never surfaced in the GUI. Add a small two-line summary above (or below) the result table: «Session: avg speed X cm/s, total distance Y cm». Bonus: fix `AverageDistance`'s legacy `/100` factor — the field is currently in meters, not cm.
+- [x] **DONE 2026-05-10** Session-wide bodycenter stats now show in a header label above the result table: «Session (bodycenter): avg speed X.XX cm/s | total distance Y.Y cm | duration T s | N frames». The legacy `AverageDistance` `/100` factor was removed; the field is now correctly in cm.
 - [ ] **P2** Etogram rows grouped by category headers (built-in / custom / zone) with cluster spacing.
 - [ ] **P3** Customizable speed-vs-time plot: act-bands as background patches (rest/walk/locomotion).
 - [ ] **P3** Egocentric trajectory + heading-angle trace for direction-aware acts.

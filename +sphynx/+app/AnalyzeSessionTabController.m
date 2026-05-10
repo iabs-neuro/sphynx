@@ -31,6 +31,7 @@ classdef AnalyzeSessionTabController < handle
         % live in defaultConfig.m; the etogram bucket order is
         % computed from act-name patterns, no UI toggle.)
         RunButton
+        SessionStatsLabel
         ResultTable
 
         % Plots
@@ -667,55 +668,64 @@ classdef AnalyzeSessionTabController < handle
         end
 
         function buildRightResults(obj, parent)
-            % 4 rows: results table | trajectory + heatmap | etogram |
-            % speed histogram + speed trace.
-            right = uigridlayout(parent, [4, 2]);
+            % 5 rows: session summary | results table | trajectory +
+            % heatmap | etogram | speed histogram + speed trace.
+            right = uigridlayout(parent, [5, 2]);
             right.Layout.Column = 2;
-            right.RowHeight = {160, '1x', 180, 180};
+            right.RowHeight = {24, 160, '1x', 180, 180};
             right.ColumnWidth = {'1x', '1x'};
             right.RowSpacing = 4;
             right.ColumnSpacing = 6;
             right.Padding = [0 0 0 0];
 
-            % Row 1: results table spanning both cols
+            % Row 1: session-wide bodycenter summary (filled by
+            % refreshResults; placeholder before the first run).
+            obj.SessionStatsLabel = uilabel(right, ...
+                'Text', 'Session: run analyze to see avg speed / distance', ...
+                'FontWeight', 'bold', 'FontSize', 13, ...
+                'HorizontalAlignment', 'left');
+            obj.SessionStatsLabel.Layout.Row = 1;
+            obj.SessionStatsLabel.Layout.Column = [1 2];
+
+            % Row 2: per-act results table.
             obj.ResultTable = uitable(right, 'ColumnName', ...
                 {'Act', '%', 'dur, s', 'count', 'mean dur, s', ...
                  'mean v, cm/s', 'distance, cm', ...
                  'first start, s', 'first end, s'});
-            obj.ResultTable.Layout.Row = 1;
+            obj.ResultTable.Layout.Row = 2;
             obj.ResultTable.Layout.Column = [1 2];
 
-            % Row 2: trajectory (over GoodVideoFrame, axes in cm) + heatmap
+            % Row 3: trajectory (over GoodVideoFrame, axes in cm) + heatmap
             obj.TrajAxes = uiaxes(right);
-            obj.TrajAxes.Layout.Row = 2; obj.TrajAxes.Layout.Column = 1;
+            obj.TrajAxes.Layout.Row = 3; obj.TrajAxes.Layout.Column = 1;
             title(obj.TrajAxes, 'Trajectory');
             obj.TrajAxes.DataAspectRatio = [1 1 1];
             obj.TrajAxes.YDir = 'reverse';
             obj.TrajAxes.Box = 'on';
 
             obj.HeatmapAxes = uiaxes(right);
-            obj.HeatmapAxes.Layout.Row = 2; obj.HeatmapAxes.Layout.Column = 2;
+            obj.HeatmapAxes.Layout.Row = 3; obj.HeatmapAxes.Layout.Column = 2;
             title(obj.HeatmapAxes, 'Occupancy heatmap');
             obj.HeatmapAxes.DataAspectRatio = [1 1 1];
             obj.HeatmapAxes.YDir = 'reverse';
             obj.HeatmapAxes.Box = 'on';
 
-            % Row 3: etogram (full width)
+            % Row 4: etogram (full width)
             obj.TimelineAxes = uiaxes(right);
-            obj.TimelineAxes.Layout.Row = 3;
+            obj.TimelineAxes.Layout.Row = 4;
             obj.TimelineAxes.Layout.Column = [1 2];
             title(obj.TimelineAxes, 'Acts etogram');
             obj.TimelineAxes.Box = 'on';
 
-            % Row 4: speed histogram + speed-vs-time trace
+            % Row 5: speed histogram + speed-vs-time trace
             obj.SpeedHistAxes = uiaxes(right);
-            obj.SpeedHistAxes.Layout.Row = 4;
+            obj.SpeedHistAxes.Layout.Row = 5;
             obj.SpeedHistAxes.Layout.Column = 1;
             title(obj.SpeedHistAxes, 'Speed histogram');
             obj.SpeedHistAxes.Box = 'on';
 
             obj.SpeedTraceAxes = uiaxes(right);
-            obj.SpeedTraceAxes.Layout.Row = 4;
+            obj.SpeedTraceAxes.Layout.Row = 5;
             obj.SpeedTraceAxes.Layout.Column = 2;
             title(obj.SpeedTraceAxes, 'Speed vs time');
             obj.SpeedTraceAxes.Box = 'on';
@@ -771,6 +781,23 @@ classdef AnalyzeSessionTabController < handle
             bps = r.BodyPartsTraces;
             idx = find(strcmpi({bps.BodyPartName}, 'bodycenter'), 1);
             if isempty(idx); idx = 1; end
+
+            % --- Session-wide bodycenter summary -----------------------
+            avgSpeed = NaN; totalDist = NaN;
+            if isfield(bps(idx), 'AverageSpeed')
+                avgSpeed = bps(idx).AverageSpeed;
+            end
+            if isfield(bps(idx), 'AverageDistance')
+                totalDist = bps(idx).AverageDistance;
+            end
+            sessSec = NaN;
+            if isfield(r, 'n_frames') && isfield(r, 'Options') ...
+                    && isfield(r.Options, 'FrameRate')
+                sessSec = r.n_frames / r.Options.FrameRate;
+            end
+            obj.SessionStatsLabel.Text = sprintf( ...
+                'Session (bodycenter): avg speed %.2f cm/s   |   total distance %.1f cm   |   duration %.1f s   |   %d frames', ...
+                avgSpeed, totalDist, sessSec, r.n_frames);
             pxlPerCm = 1;
             if isfield(r, 'Options') && isfield(r.Options, 'pxl2sm')
                 pxlPerCm = r.Options.pxl2sm;
