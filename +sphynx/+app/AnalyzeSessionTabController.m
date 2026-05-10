@@ -62,6 +62,9 @@ classdef AnalyzeSessionTabController < handle
         % Output options — trajectory PNG+FIG plots
         PlotBodypartsCheckbox
 
+        % Heatmap bin size (cm)
+        HeatmapBinField
+
         % Save/Load analysis settings
         RenderMainVideoButton
         RenderActsVideosButton
@@ -141,11 +144,13 @@ classdef AnalyzeSessionTabController < handle
                 'Message', 'Starting...', 'Cancelable', 'off');
             cleaner = onCleanup(@() closeIfValid(dlg));
             feat = obj.collectMainVideoFeatures();
+            [~, stem] = fileparts(videoPath);
             try
                 outPath = sphynx.pipeline.renderActsVideo(obj.State.result, ...
                     videoPath, outDir, ...
                     'Range', [startF endF], ...
                     'Features', feat, ...
+                    'OutputName', [stem '_main.mp4'], ...
                     'ProgressFcn', @(v, m) updateDlg(dlg, v, m));
                 obj.applog('info', 'Main video saved: %s', outPath);
             catch ME
@@ -202,16 +207,16 @@ classdef AnalyzeSessionTabController < handle
                 nTake = min(numel(activeFrames), nWin);
                 first = activeFrames(1);
                 last  = activeFrames(min(nTake, numel(activeFrames)));
-                outPath = fullfile(actsDir, sprintf('%s_%s.mp4', ...
-                    sessionStem, matlab.lang.makeValidName(actName)));
+                safeName = matlab.lang.makeValidName(actName);
+                outName = sprintf('%s_%s.mp4', sessionStem, safeName);
                 try
-                    sphynx.pipeline.renderActsVideo(r, videoPath, actsDir, ...
+                    outPath = sphynx.pipeline.renderActsVideo(r, videoPath, actsDir, ...
                         'Range', [first last], ...
-                        'Overlay', 'full', ...
+                        'Features', obj.collectMainVideoFeatures(), ...
+                        'OutputName', outName, ...
                         'ProgressFcn', @(v, m) updateDlg(dlg, v, m));
                     saved = saved + 1;
-                    obj.applog('info', '"%s" rendered (frames %d..%d)', ...
-                        actName, first, last);
+                    obj.applog('info', '"%s" -> %s', actName, outPath);
                 catch ME
                     obj.applog('warn', '"%s" failed: %s', actName, ME.message);
                 end
@@ -231,15 +236,57 @@ classdef AnalyzeSessionTabController < handle
             outDir = obj.OutDirPathField.Value;
             if isempty(outDir); outDir = fileparts(obj.VideoPathField.Value); end
             if isempty(outDir); obj.applog('warn', 'Pick output dir'); return; end
-            plotsDir = fullfile(outDir, 'plots');
+            plotsDir = fullfile(outDir, 'bodyparts_trajectory');
             if ~isfolder(plotsDir); mkdir(plotsDir); end
-            try
-                sphynx.preprocess.exportTracks(obj.State.result.BodyPartsTraces, ...
-                    struct('plotsDir', plotsDir));
-                obj.applog('info', 'Bodyparts trajectory plots saved -> %s', plotsDir);
-            catch ME
-                obj.applog('error', 'Plot save failed: %s', ME.message);
+            r = obj.State.result;
+            bps = r.BodyPartsTraces;
+            pxlPerCm = 1;
+            if isfield(r, 'Options') && isfield(r.Options, 'pxl2sm')
+                pxlPerCm = r.Options.pxl2sm;
             end
+            frame = [];
+            if isfield(r, 'Options')
+                for fld = {'GoodVideoFrame', 'GoodVideoFrameGray'}
+                    if isfield(r.Options, fld{1}) && ~isempty(r.Options.(fld{1}))
+                        frame = r.Options.(fld{1}); break;
+                    end
+                end
+            end
+            saved = 0;
+            for i = 1:numel(bps)
+                bp = bps(i);
+                if ~isfield(bp, 'TraceSmoothed') || isempty(bp.TraceSmoothed); continue; end
+                X = bp.TraceSmoothed.X(:);
+                Y = bp.TraceSmoothed.Y(:);
+                if isempty(X); continue; end
+                fig = figure('Visible', 'off', 'Position', [100 100 800 600]);
+                ax = axes('Parent', fig);
+                if ~isempty(frame)
+                    imshow(frame, 'Parent', ax, ...
+                        'XData', [0 size(frame,2)/pxlPerCm], ...
+                        'YData', [0 size(frame,1)/pxlPerCm]);
+                    hold(ax, 'on');
+                end
+                plot(ax, X/pxlPerCm, Y/pxlPerCm, '-', ...
+                    'Color', [0.10 0.50 0.90], 'LineWidth', 1.2);
+                ax.DataAspectRatio = [1 1 1];
+                ax.YDir = 'reverse';
+                xlabel(ax, 'X, cm', 'FontSize', 13);
+                ylabel(ax, 'Y, cm', 'FontSize', 13);
+                ax.FontSize = 12;
+                title(ax, sprintf('Trajectory — %s', bp.BodyPartName), ...
+                    'Interpreter', 'none', 'FontSize', 14);
+                base = fullfile(plotsDir, sprintf('trajectory_%s', bp.BodyPartName));
+                try
+                    saveas(fig, [base '.png']);
+                    saveas(fig, [base '.fig']);
+                    saved = saved + 1;
+                catch ME
+                    obj.applog('warn', 'Skip %s: %s', bp.BodyPartName, ME.message);
+                end
+                close(fig);
+            end
+            obj.applog('info', 'Bodyparts trajectory: %d plots -> %s', saved, plotsDir);
         end
 
         function saveSettings(obj)
@@ -287,6 +334,7 @@ classdef AnalyzeSessionTabController < handle
                 'selected',    {v}, ...
                 'durationSec', obj.ActsVideoDurationField.Value);
             s.plotBodyparts = obj.PlotBodypartsCheckbox.Value;
+            s.heatmapBinCm  = obj.HeatmapBinField.Value;
         end
 
         function applySettings(obj, s)
@@ -312,6 +360,7 @@ classdef AnalyzeSessionTabController < handle
                 end
             end
             if isfield(s, 'plotBodyparts'); obj.PlotBodypartsCheckbox.Value = s.plotBodyparts; end
+            if isfield(s, 'heatmapBinCm');  obj.HeatmapBinField.Value      = s.heatmapBinCm;  end
         end
     end
 
@@ -483,12 +532,22 @@ classdef AnalyzeSessionTabController < handle
             obj.ActsVideoDurationField = uieditfield(durRow, 'numeric', ...
                 'Value', 5, 'Limits', [0.1 600]);
 
-            % --- Trajectory plots ------------------------------------
-            obj.PlotBodypartsCheckbox = uicheckbox(opts, ...
+            % --- Trajectory plots + heatmap bin ----------------------
+            tail = uigridlayout(opts, [1, 3]);
+            tail.Layout.Row = 3;
+            tail.RowHeight = {28};
+            tail.ColumnWidth = {'1x', 110, 70};
+            tail.ColumnSpacing = 4;
+            tail.Padding = [0 0 0 0];
+            obj.PlotBodypartsCheckbox = uicheckbox(tail, ...
                 'Text', 'Save bodyparts trajectory (PNG + FIG)', ...
                 'Value', false, ...
-                'Tooltip', 'Same per-bodypart panels as Preprocess Tracking');
-            obj.PlotBodypartsCheckbox.Layout.Row = 3;
+                'Tooltip', 'One plot per body part, saved to bodyparts_trajectory/');
+            uilabel(tail, 'Text', 'Heatmap bin, cm:');
+            obj.HeatmapBinField = uieditfield(tail, 'numeric', ...
+                'Value', 4, 'Limits', [0.1 100], ...
+                'Tooltip', 'Bin size for the occupancy heatmap (cm).', ...
+                'ValueChangedFcn', @(~,~) obj.refreshResults());
         end
 
         function buildSettingsRow(obj, parent)
@@ -752,9 +811,13 @@ classdef AnalyzeSessionTabController < handle
                 extentX = r.Options.Width / r.Options.pxl2sm;
                 extentY = r.Options.Height / r.Options.pxl2sm;
             end
-            % 1 cm bins
-            edgesX = 0:1:max(extentX, 1);
-            edgesY = 0:1:max(extentY, 1);
+            % User-controlled bin size (Options panel; default 4 cm).
+            binCm = 4;
+            if ~isempty(obj.HeatmapBinField) && isvalid(obj.HeatmapBinField)
+                binCm = max(0.1, obj.HeatmapBinField.Value);
+            end
+            edgesX = 0:binCm:max(extentX, binCm);
+            edgesY = 0:binCm:max(extentY, binCm);
             valid = isfinite(xCm) & isfinite(yCm);
             counts = histcounts2(xCm(valid), yCm(valid), edgesX, edgesY);
             % imagesc expects rows=Y, cols=X
@@ -769,7 +832,8 @@ classdef AnalyzeSessionTabController < handle
             xlabel(ax, 'X, cm', 'FontSize', 12);
             ylabel(ax, 'Y, cm', 'FontSize', 12);
             ax.FontSize = 11;
-            title(ax, 'Occupancy heatmap (1 cm bins)', 'FontSize', 13);
+            title(ax, sprintf('Occupancy heatmap (%g cm bins)', binCm), ...
+                'FontSize', 13);
         end
 
         function drawSpeed(obj, v, frameRate)

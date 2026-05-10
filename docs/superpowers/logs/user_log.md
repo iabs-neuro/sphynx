@@ -909,3 +909,51 @@ Built-in акты (rest/walk/locomotion/freezing/rear) уже имеют сво�
 
 Файлы: `+sphynx/+acts/{emptyAct,buildSimpleAct,buildComplexAct,applyAct,refineActArray}.m`, `+sphynx/+app/DefineActsTabController.m`.
 
+
+---
+
+## Analyze Session — 7 правок (2026-05-10)
+
+**1. Per-act videos в РАЗНЫЕ файлы.** Раньше `renderActsVideo` всегда писал `<stem>_acts.mp4`, поэтому per-act рендер в Analyze перезаписывал один файл. Добавил параметр `OutputName` и проброс из Analyze. Теперь каждый акт — отдельный mp4 в `<outDir>/Acts_video/<stem>_<actName>.mp4`.
+
+**2. Main video → `<stem>_main.mp4`** (был `_acts.mp4`).
+
+**3. Heatmap bins — конфигурируемые.** Default 4 cm. Новое поле `Heatmap bin, cm` в Options panel рядом с «Save bodyparts trajectory». Меняешь значение → heatmap мгновенно перерисовывается. Также сохраняется в analysis_settings.mat.
+
+**4-5-6. Откуда `center_custom`, `rear` vs `rears`, `Object1` vs `object1`.** Все три — следствия двух багов:
+
+- **Старая dedup логика** при collision custom акта переименовывала его в `<name>_custom` → мусор в этограмме. Заменил на: case-insensitive `strcmpi`, **custom REPLACES** existing. Теперь `Object1` (custom) заменяет zone-acts `object1`. Один акт на имя.
+- **`rears` vs `rear`** — default library содержал `rears` (plural), builtin pipeline считает `rear` (singular). Разные имена → оба в этограмме. Переименовал в `actsLibraryDefaults.m`: `rears` → `rear`. Теперь после dedup один rear-row.
+
+После этих правок: одно `Object1` (твоё), одно `rear`, никаких `_custom`. Чисто.
+
+**7. Save plot ошибка `opts.outputDir is required`.** Я звал `sphynx.preprocess.exportTracks` неправильным интерфейсом (он ждёт state-struct из Preprocess tab). Заменил на собственный inline plotter: per-bodypart `figure + GoodVideoFrame подложка + plot trajectory в cm + saveas` PNG/FIG. Сохраняет в `<outDir>/bodyparts_trajectory/trajectory_<bodypart>.{png,fig}`. Должен работать.
+
+**8. Render main — info-блок слева, без таймлайна.** Старый bottom timeline закрывал нижнюю часть видео и был громоздким — удалил полностью. Теперь СЛЕВА вертикальный info-блок с большим шрифтом, как ты просил:
+```
+Speed: 12.3 cm/s         (18pt bold)
+Speed_act: locomotion    (16pt bold)
+Zone: walls, corners     (16pt bold)
+Acts:                    (16pt bold)
+   freezing              (15pt, цветом по этограмме)
+   object1
+   rear
+```
+Все строки на полупрозрачном чёрном фоне для читаемости поверх любого видео.
+
+**Под капотом:**
+- `speed_act` определяется per-frame: смотрит в Acts массив на rest/walk/locomotion и берёт активный.
+- `Zone` — bodycenter координаты per-frame в каждой mask из preset; собирает имена.
+- Pre-computes оба массива один раз перед циклом render — чтобы не считать заново на каждом frame.
+
+**Тесты:** 17/17 PASS (обновил `testMergeStrategies` под `rear` вместо `rears`).
+
+**Не тестировано live:** реальный рендер main video с новым info-блоком, per-act videos в отдельные файлы, heatmap c 4 cm бинами. Запусти и проверь — должно быть гораздо чище.
+
+Файлы:
+- `+sphynx/+pipeline/renderActsVideo.m` (OutputName, info-блок, удалён timeline).
+- `+sphynx/+pipeline/analyzeSession.m` (case-insensitive dedup).
+- `+sphynx/+acts/actsLibraryDefaults.m` (rears → rear).
+- `+sphynx/+app/AnalyzeSessionTabController.m` (savePlots fix, Heatmap bin field, OutputName проброс).
+- `tests/smoke/testMergeStrategies.m` (rears → rear).
+

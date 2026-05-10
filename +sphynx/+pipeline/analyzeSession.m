@@ -256,15 +256,15 @@ function result = analyzeSession(config)
                 names = keys(results);
                 for k = 1:numel(names)
                     nm = names{k};
-                    finalName = nm;
-                    while any(strcmp({Acts.ActName}, finalName))
-                        finalName = [nm, '_custom'];
-                        if any(strcmp({Acts.ActName}, finalName))
-                            finalName = sprintf('%s_custom%d', nm, k);
-                            break;
-                        end
+                    % Custom acts REPLACE built-in / zone acts that
+                    % share the same name (case-insensitive). Old
+                    % behaviour renamed customs to <name>_custom which
+                    % cluttered the etogram with duplicates.
+                    dupIdx = find(strcmpi({Acts.ActName}, nm));
+                    if ~isempty(dupIdx)
+                        Acts(dupIdx) = []; %#ok<AGROW>
                     end
-                    Acts(end+1).ActName = finalName; %#ok<AGROW>
+                    Acts(end+1).ActName = nm; %#ok<AGROW>
                     Acts(end).ActArrayRefine = double(results(nm));
                     Acts(end).Category = 'custom';
                 end

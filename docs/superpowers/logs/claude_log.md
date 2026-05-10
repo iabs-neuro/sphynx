@@ -1165,3 +1165,54 @@ G. **`+sphynx/+pipeline/renderActsVideo.m` extension** — новый парам
 **Не переписываю:**
 - Historical log entries (claude_log/user_log) с упоминанием `minGapSec` — это исторический контекст, не текущий код.
 
+
+### 2026-05-10 — Round 9e: Analyze Session — 7 правок batch
+
+Юзер серия:
+1. Per-act videos в РАЗНЫЕ файлы (не в один). 
+2. Main video → `<stem>_main.mp4` (был `<stem>_acts.mp4`).
+3. Heatmap bins 4×4 cm + поле в UI.
+4. Этограмма: откуда `center_custom` и т.д. — case-insensitive дубликаты + кастом-rename мусор.
+5. `rear` vs `rears` — должен быть только `rear`.
+6. `Object1` vs `object1` — case-sensitive дубликаты.
+7. Save plot ошибка `opts.outputDir is required`.
+8. Render main: этограмма-таймлайн закрывает видео, скорость должна быть слева и больше, info-блок: Speed/Speed_act/Zone/Acts.
+
+**Что сделано:**
+
+A. **`renderActsVideo` принимает `OutputName`** — раньше всегда писал `<base>_acts.mp4`, поэтому per-act рендеры в Analyze перезаписывали один файл. Теперь caller контролирует имя. Default `<base>_acts.mp4` для backward-compat.
+
+B. **`renderMainVideo`** в Analyze: `OutputName = '<stem>_main.mp4'`.
+
+C. **`renderActsVideos`** в Analyze: per-act `OutputName = '<stem>_<safeActName>.mp4'`. Теперь каждый акт — отдельный mp4 в `Acts_video/`.
+
+D. **`actsLibraryDefaults`** — `'rears'` → `'rear'` (singular, matches builtin name `rear`). Теперь после dedup только один rear-row в этограмме. `testMergeStrategies` обновлён под новое имя.
+
+E. **Dedup в `analyzeSession`** — раньше при collision custom акт переименовывался в `<name>_custom`. Теперь: case-insensitive `strcmpi` lookup, **custom REPLACES** existing. Старая логика создавала `rest_custom`, `walk_custom`, `center_custom` etc. — мусор в этограмме. После: один акт на имя, custom побеждает builtin/zone.
+
+F. **`savePlots` починен** — раньше дёргал `sphynx.preprocess.exportTracks(BodyPartsTraces, struct('plotsDir', ...))`, но exportTracks ожидает state-struct и `opts.outputDir`. Заменил на inline plotter: per-bodypart `figure + imshow(GoodVideoFrame XData/YData в cm) + plot(X/Y/pxlPerCm) + saveas` PNG/FIG. Сохраняет в `<outDir>/bodyparts_trajectory/trajectory_<bodypart>.{png,fig}`.
+
+G. **Heatmap bin size** — новое поле `HeatmapBinField` в Options panel (default 4 cm), tooltip объясняет смысл, `ValueChangedFcn → refreshResults`. `drawHeatmap` читает `binCm = obj.HeatmapBinField.Value`, использует его для `edgesX = 0:binCm:extentX`. Title динамически показывает `(%g cm bins)`. Также сохраняется в analysis_settings.
+
+H. **`renderActsVideo` overlay rebuild** — структурный info-блок СЛЕВА:
+   - `Speed: 12.3 cm/s` (FontSize=18, bold, white on translucent black bg).
+   - `Speed_act: locomotion` (FontSize=16). Pre-resolved per frame через `actMat` для rest/walk/locomotion.
+   - `Zone: walls, corners` (FontSize=16). Pre-resolved per frame: какие zones содержат bodycenter сейчас.
+   - `Acts:` header + индентированный vertical list active acts (по 1 на строку, цвет = actColors).
+   - Старый bottom timeline (барс с playhead) — **удалён**. Он закрывал низ видео и не давал особой ценности.
+   - Velocity больше не в top-right corner; теперь в info-блоке слева (по запросу юзера «скорость пусть будет побольше и слева»).
+
+I. **Pre-resolve speed_act / zones per frame** — в начале `renderActsVideo` строится `speedActMap{f}` (cellstr длиной nFrames с rest/walk/locomotion) и `zoneNamesByFrame{f}` (joined names of zones containing bodycenter). Это дёшево — один проход по всем кадрам диапазона.
+
+**Тесты:** 17/17 PASS после обновления `testMergeStrategies` под новое имя `rear`.
+
+**Decisions:**
+- Dedup CUSTOM > BUILTIN/ZONE — потому что user-defined intent побеждает auto-generated. Если юзер не хочет какой-то auto-zone act — пусть в Define Acts создаст свой с тем же именем (или пустой); легче чем вырубать через config.
+- Bottom timeline удалил полностью — был визуальным шумом. Если кто-то хочет timeline — есть отдельная этограмма на Analyze tab (большой axes).
+- Speed_act = категория (rest/walk/locomotion) видна только если builtin acts есть в result. Если custom replaced builtin `rest` → используется replaced версия.
+
+**Не тестировал live:**
+- Render main video с новым info-блоком и без timeline — юзер должен запустить.
+- Per-act videos сохраняются в разные файлы — нужна реальная сессия.
+- Heatmap с 4cm bins на реальных данных.
+

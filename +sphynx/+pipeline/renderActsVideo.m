@@ -31,6 +31,7 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
     p.addParameter('Quality', 75, @(v) isnumeric(v) && v > 0 && v <= 100);
     p.addParameter('Overlay', 'full', @(s) any(strcmp(s, {'minimal', 'full'})));
     p.addParameter('Features', [], @(s) isempty(s) || isstruct(s));
+    p.addParameter('OutputName', '', @(s) ischar(s) || isstring(s));
     p.addParameter('ProgressFcn', [], @(f) isempty(f) || isa(f, 'function_handle'));
     parse(p, result, videoPath, outDir, varargin{:});
 
@@ -47,7 +48,10 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
     end
     if ~isfolder(outDir); mkdir(outDir); end
     [~, base, ~] = fileparts(videoPath);
-    outPath = fullfile(outDir, [base '_acts.mp4']);
+    outName = char(p.Results.OutputName);
+    if isempty(outName); outName = [base '_acts.mp4']; end
+    if ~endsWith(lower(outName), '.mp4'); outName = [outName '.mp4']; end
+    outPath = fullfile(outDir, outName);
 
     reader = VideoReader(videoPath);
     fps = reader.FrameRate;
@@ -96,6 +100,45 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
     zones = [];
     if isfield(result, 'Zones'); zones = result.Zones; end
 
+    % Pre-resolve per-frame "speed_act" (rest / walk / locomotion) and
+    % per-frame zone names for the structured info block. Both are
+    % derived from the existing Acts struct so they reflect the same
+    % thresholds the rest of the pipeline used.
+    speedActMap = repmat({''}, 1, nFrames);
+    speedNames = {'rest', 'walk', 'locomotion'};
+    for sn = 1:numel(speedNames)
+        idx = find(strcmpi(actNames, speedNames{sn}), 1);
+        if isempty(idx); continue; end
+        on = logical(actMat(idx, :));
+        speedActMap(on) = speedNames(sn);
+    end
+    zoneNamesByFrame = repmat({''}, 1, nFrames);
+    if ~isempty(zones) && ~isempty(centerX)
+        zoneCacheNames = {};
+        zoneCacheMasks = {};
+        for zk = 1:numel(zones)
+            if isfield(zones(zk), 'maskfilled') && ~isempty(zones(zk).maskfilled)
+                zoneCacheNames{end+1} = zones(zk).name; %#ok<AGROW>
+                zoneCacheMasks{end+1} = logical(zones(zk).maskfilled); %#ok<AGROW>
+            end
+        end
+        for f = range(1):range(2)
+            if f > numel(centerX); break; end
+            cx = round(centerX(f)); cy = round(centerY(f));
+            if ~isfinite(cx) || ~isfinite(cy); continue; end
+            here = {};
+            for zk = 1:numel(zoneCacheMasks)
+                m = zoneCacheMasks{zk};
+                if cy >= 1 && cx >= 1 && cy <= size(m,1) && cx <= size(m,2)
+                    if m(cy, cx); here{end+1} = zoneCacheNames{zk}; end %#ok<AGROW>
+                end
+            end
+            if ~isempty(here)
+                zoneNamesByFrame{f} = strjoin(here, ', ');
+            end
+        end
+    end
+
     % Off-screen render via figure
     fig = figure('Visible', 'off', 'Position', [100 100 reader.Width reader.Height]);
     cleanerFig = onCleanup(@() closeIfValid(fig));
@@ -140,7 +183,7 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
                 'Color', [0.10 0.50 0.90], 'LineWidth', 1.2);
         end
 
-        % Body part dots (always — gives the BA-style overlay).
+        % Body part dots — always (BA-style).
         for b = 1:nBP
             if isfield(bps(b), 'TraceSmoothed') && ~isempty(bps(b).TraceSmoothed)
                 x = bps(b).TraceSmoothed.X(min(f, end));
@@ -153,42 +196,56 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
             end
         end
 
-        % Active acts as labels stacked top-left.
+        % Structured info block on the LEFT side, big font:
+        %   Speed: 12.3 cm/s
+        %   Speed_act: locomotion
+        %   Zone: walls, corners
+        %   Acts:
+        %     freezing
+        %     object1
+        %     ...
+        x0 = 12;       % left margin
+        y0 = 28;       % first baseline
+        dy = 26;       % line height
+        if feat.velocity && ~isempty(centerVel) && f <= numel(centerVel) ...
+                && isfinite(centerVel(f))
+            text(ax, x0, y0, sprintf('Speed: %.1f cm/s', centerVel(f)), ...
+                'Color', 'w', 'FontSize', 18, 'FontWeight', 'bold', ...
+                'BackgroundColor', [0 0 0 0.55]);
+            y0 = y0 + dy;
+            spAct = '';
+            if f <= numel(speedActMap); spAct = speedActMap{f}; end
+            if isempty(spAct); spAct = '—'; end
+            text(ax, x0, y0, sprintf('Speed_act: %s', spAct), ...
+                'Color', 'w', 'FontSize', 16, 'FontWeight', 'bold', ...
+                'Interpreter', 'none', ...
+                'BackgroundColor', [0 0 0 0.55]);
+            y0 = y0 + dy;
+        end
+        if feat.zones
+            zname = '';
+            if f <= numel(zoneNamesByFrame); zname = zoneNamesByFrame{f}; end
+            if isempty(zname); zname = '—'; end
+            text(ax, x0, y0, sprintf('Zone: %s', zname), ...
+                'Color', 'w', 'FontSize', 16, 'FontWeight', 'bold', ...
+                'Interpreter', 'none', ...
+                'BackgroundColor', [0 0 0 0.55]);
+            y0 = y0 + dy;
+        end
         if feat.actsList
+            text(ax, x0, y0, 'Acts:', ...
+                'Color', 'w', 'FontSize', 16, 'FontWeight', 'bold', ...
+                'BackgroundColor', [0 0 0 0.55]);
+            y0 = y0 + dy;
             active = find(actMat(:, f));
             for j = 1:numel(active)
                 k = active(j);
-                text(ax, 10, 20 + (j-1) * 22, actNames{k}, ...
-                    'Color', actColors(k, :), 'FontSize', 14, ...
+                text(ax, x0 + 18, y0, actNames{k}, ...
+                    'Color', actColors(k, :), 'FontSize', 15, ...
                     'FontWeight', 'bold', 'Interpreter', 'none', ...
-                    'BackgroundColor', [0 0 0 0.5]);
+                    'BackgroundColor', [0 0 0 0.55]);
+                y0 = y0 + dy - 4;
             end
-        end
-
-        % Velocity readout — top-right.
-        if feat.velocity && ~isempty(centerVel) && f <= numel(centerVel) ...
-                && isfinite(centerVel(f))
-            text(ax, reader.Width - 10, 22, ...
-                sprintf('%.1f cm/s', centerVel(f)), ...
-                'Color', 'w', 'FontSize', 14, 'FontWeight', 'bold', ...
-                'HorizontalAlignment', 'right', ...
-                'BackgroundColor', [0 0 0 0.5]);
-        end
-
-        % Thin acts timeline + playhead — kept on by default; tied to
-        % actsList so 'minimal' suppresses both.
-        if feat.actsList
-            barH = max(1, round(reader.Height * 0.04));
-            barY0 = reader.Height - barH * (nActs + 1);
-            for k = 1:nActs
-                yT = barY0 + (k-1) * barH;
-                if actMat(k, f)
-                    rectangle(ax, 'Position', [0, yT, reader.Width, barH-1], ...
-                        'FaceColor', actColors(k, :), 'EdgeColor', 'none');
-                end
-            end
-            xp = reader.Width * (f - range(1)) / max(1, nOut);
-            line(ax, [xp xp], [barY0, reader.Height], 'Color', 'w', 'LineWidth', 1.5);
         end
 
         frame = getframe(ax);

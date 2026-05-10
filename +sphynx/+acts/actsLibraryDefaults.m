@@ -32,9 +32,11 @@ function acts = actsLibraryDefaults()
     a.speedMax = rest;
     acts(end+1) = a;
 
-    % Rears (tailbase-paws mode by default)
+    % Rear (tailbase-paws mode by default). Singular to match the
+    % built-in act name produced by analyzeSession; the case-insensitive
+    % dedup then collapses both into one row in the etogram.
     a = sphynx.acts.emptyAct();
-    a.name = 'rears';
+    a.name = 'rear';
     a.type = 'special';
     a.specialKind = 'rears';
     a.rearMode = 'TailbasePaws';

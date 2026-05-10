@@ -2,11 +2,11 @@
 addpath(pwd);
 clear functions;
 
-% Defaults: 5 acts (rest/walk/locomotion/freezing/rears)
+% Defaults: 5 acts (rest/walk/locomotion/freezing/rear)
 defaults = sphynx.acts.actsLibraryDefaults();
 assert(numel(defaults) == 5, 'defaults must have exactly 5 acts');
 names = {defaults.name};
-expected = {'rest', 'walk', 'locomotion', 'freezing', 'rears'};
+expected = {'rest', 'walk', 'locomotion', 'freezing', 'rear'};
 for k = 1:numel(expected)
     assert(any(strcmp(names, expected{k})), 'missing default: %s', expected{k});
 end
