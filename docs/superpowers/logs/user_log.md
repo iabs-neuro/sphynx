@@ -889,3 +889,23 @@ Built-in акты (rest/walk/locomotion/freezing/rear) уже имеют сво�
 
 Файлы: `+sphynx/+acts/refineActArray.m`, `+sphynx/+acts/applyAct.m`, `tests/unit/refineActArrayTest.m`.
 
+
+---
+
+## Терминология: «bridge» и переименование `minGapSec` → `maxGapSec` (2026-05-10)
+
+**Что значит «bridge» (мост):** закрыть дыру нулей единицами. Если внутри акта DLC моргнул и получился короткий промежуток `0`, мы заполняем его `1`-ками — считаем что акт продолжался. Дыра «забриджена», как мост через провал.
+
+**Параметр был назван неправильно.** Я писал `minGapSec` — но семантика: «дыры **короче** этого значения заполняются». Значит это **максимум**, при котором дыра ещё считается частью акта, а не минимум. Извини, переименовал везде:
+
+- `minGapSec` → **`maxGapSec`** (поле в struct акта).
+- `MinGapSec` → **`MaxGapSec`** (name-value в `buildSimpleAct` / `buildComplexAct`).
+- UI: «Min gap, s:» → **«Max gap, s:»**, tooltip переписан: «Holes inside the act shorter than this still count as part of the act».
+- Внутренние переменные в `refineActArray` тоже переименованы (`minGapFrames` → `maxBridgeFrames`).
+
+**Backward-compat:** в `applyAct` оставил fallback — если в загруженной .mat библиотеке всё ещё лежит старое поле `minGapSec`, оно будет прочитано (как будто это `maxGapSec`). Так что твои сохранённые библиотеки (если такие есть) не сломаются.
+
+Тесты: 17/17 PASS.
+
+Файлы: `+sphynx/+acts/{emptyAct,buildSimpleAct,buildComplexAct,applyAct,refineActArray}.m`, `+sphynx/+app/DefineActsTabController.m`.
+

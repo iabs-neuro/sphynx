@@ -9,7 +9,7 @@ function a = buildSimpleAct(varargin)
     p.addParameter('SpeedMin', 0, @isnumeric);
     p.addParameter('SpeedMax', Inf, @isnumeric);
     p.addParameter('MinDurationSec', 0.25, @(v) isnumeric(v) && v >= 0);
-    p.addParameter('MinGapSec', 0, @(v) isnumeric(v) && v >= 0);
+    p.addParameter('MaxGapSec', 0, @(v) isnumeric(v) && v >= 0);
     parse(p, varargin{:});
 
     a = sphynx.acts.emptyAct();
@@ -23,5 +23,5 @@ function a = buildSimpleAct(varargin)
     a.speedMin = p.Results.SpeedMin;
     a.speedMax = p.Results.SpeedMax;
     a.minDurationSec = p.Results.MinDurationSec;
-    a.minGapSec      = p.Results.MinGapSec;
+    a.maxGapSec      = p.Results.MaxGapSec;
 end

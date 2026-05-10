@@ -35,31 +35,35 @@ function bool = applyAct(act, ctx)
                 'Unknown act type "%s" for "%s"', act.type, act.name);
     end
 
-    % Post-processing: bridge short gaps inside the act, then drop
-    % runs that are still too short. Mirrors legacy
-    % functions/RefineLine.m (now ported to refineActArray) but in the
-    % bridge-then-drop order — a fragment plus a tiny hole plus another
-    % fragment should consolidate into one event, not get erased.
+    % Post-processing: fill short gaps inside the act, then drop runs
+    % that are still too short. Bridge-then-drop order — a fragment
+    % plus a tiny hole plus another fragment should consolidate into
+    % one event, not get erased. Mirrors legacy functions/RefineLine.m
+    % (now ported to refineActArray) but with the corrected ordering.
     %
     % Backfill: legacy libraries saved before the schema gained
-    % minDurationSec / minGapSec come back without those fields. Treat
+    % minDurationSec / maxGapSec come back without those fields. Treat
     % a missing minDurationSec as 0.25 s so existing libraries inherit
     % the same default new acts get from emptyAct.m. To opt out for a
-    % specific custom act, set minDurationSec = 0 explicitly.
+    % specific custom act, set minDurationSec = 0 explicitly. The old
+    % `minGapSec` field name (pre-rename) is also accepted as a
+    % fallback when reading legacy libraries.
     if isfield(act, 'minDurationSec')
         durSec = max(0, act.minDurationSec);
     else
         durSec = 0.25;
     end
-    if isfield(act, 'minGapSec')
+    if isfield(act, 'maxGapSec')
+        gapSec = max(0, act.maxGapSec);
+    elseif isfield(act, 'minGapSec')
         gapSec = max(0, act.minGapSec);
     else
         gapSec = 0;
     end
-    minDurFrames = round(durSec * ctx.frameRate);
-    minGapFrames = round(gapSec * ctx.frameRate);
-    if minDurFrames > 0 || minGapFrames > 0
-        bool = sphynx.acts.refineActArray(bool, minDurFrames, minGapFrames);
+    minRunFrames     = round(durSec * ctx.frameRate);
+    maxBridgeFrames  = round(gapSec * ctx.frameRate);
+    if minRunFrames > 0 || maxBridgeFrames > 0
+        bool = sphynx.acts.refineActArray(bool, minRunFrames, maxBridgeFrames);
     end
 end
 

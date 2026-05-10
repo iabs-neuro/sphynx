@@ -18,10 +18,13 @@ function a = emptyAct()
     a.thresholdCm  = NaN;
     a.thresholdPxl = NaN;
     % Post-processing applied after the boolean is computed:
-    %   minDurationSec — drop runs of 1s shorter than this (legacy
-    %     RefineLine min_frame1 / frameRate). 0 disables.
-    %   minGapSec — bridge gaps of 0s shorter than this between
-    %     surviving runs (legacy minframe0 / frameRate). 0 disables.
+    %   minDurationSec — minimum length of a run of 1s to keep. Runs
+    %     shorter than this are dropped (the act "didn't last long
+    %     enough to count"). 0 disables.
+    %   maxGapSec — maximum length of a gap of 0s that still counts
+    %     as part of the act. Gaps shorter than this get filled with
+    %     1s before the duration check, so a fragmented event
+    %     consolidates into one run. 0 disables.
     a.minDurationSec = 0.25;
-    a.minGapSec      = 0;
+    a.maxGapSec      = 0;
 end

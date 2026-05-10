@@ -1,43 +1,44 @@
-function out = refineActArray(bool, minRunFrames, minGapFrames)
+function out = refineActArray(bool, minRunFrames, maxBridgeFrames)
 % REFINEACTARRAY  Two-pass cleanup of a 0/1 act timeseries.
 %
-%   out = sphynx.acts.refineActArray(bool, minRunFrames, minGapFrames)
+%   out = sphynx.acts.refineActArray(bool, minRunFrames, maxBridgeFrames)
 %
-%   Pass 1 — bridge gaps of 0s shorter than minGapFrames between
-%            adjacent runs. Conceptually: "if a hole inside an act is
-%            short, that hole is still part of the act."
-%   Pass 2 — drop runs of 1s shorter than minRunFrames. Conceptually:
-%            "after consolidating fragments, kill anything that is
-%            still too short to be a real event."
+%   Pass 1 — fill in short holes (runs of 0s) shorter than
+%            maxBridgeFrames between adjacent runs of 1s.
+%            Conceptually: "if a hole inside an act is shorter than
+%            this threshold, it counts as part of the act."
+%   Pass 2 — drop runs of 1s shorter than minRunFrames.
+%            Conceptually: "after consolidating fragments, kill any
+%            run that is still too short to be a real event."
 %
-%   Order matters. Bridging first lets a fragmented near-event
-%   consolidate into a single long run that then survives the drop
-%   pass; dropping first would erase those fragments before they get a
+%   Order matters. Filling holes first lets a fragmented near-event
+%   consolidate into one long run that then survives the drop pass;
+%   dropping first would erase those fragments before they get the
 %   chance to merge.
 %
 %   Both arguments are integer frame counts. 0 (or negative) disables
 %   the corresponding pass.
 %
-%   Edge handling: leading and trailing gaps (those that touch index 1
-%   or index n) are NOT bridged — they're session boundaries, not
-%   inter-event gaps. A run that touches the last frame IS still
-%   eligible for the drop pass.
+%   Edge handling: leading and trailing zero-runs (those that touch
+%   index 1 or index n) are NEVER filled — they're session boundaries,
+%   not inter-event holes. A 1-run that touches the last frame IS
+%   still eligible for the drop pass.
 
     bool = logical(bool(:)');
     n = numel(bool);
     if n == 0; out = bool; return; end
 
     if nargin < 2 || isempty(minRunFrames); minRunFrames = 0; end
-    if nargin < 3 || isempty(minGapFrames); minGapFrames = 0; end
+    if nargin < 3 || isempty(maxBridgeFrames); maxBridgeFrames = 0; end
 
-    % --- Pass 1: bridge short gaps of 0s ------------------------------------
-    if minGapFrames > 0
+    % --- Pass 1: fill holes (zero-runs shorter than maxBridgeFrames) -------
+    if maxBridgeFrames > 0
         [runs1, lengths1] = rle(bool);
         for k = 1:size(runs1, 1)
-            isGap      = ~bool(runs1(k, 1));
+            isHole     = ~bool(runs1(k, 1));
             isLeading  = runs1(k, 1) == 1;
             isTrailing = runs1(k, 2) == n;
-            if isGap && ~isLeading && ~isTrailing && lengths1(k) < minGapFrames
+            if isHole && ~isLeading && ~isTrailing && lengths1(k) < maxBridgeFrames
                 bool(runs1(k, 1):runs1(k, 2)) = true;
             end
         end

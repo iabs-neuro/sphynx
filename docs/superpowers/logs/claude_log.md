@@ -1142,5 +1142,26 @@ G. **`+sphynx/+pipeline/renderActsVideo.m` extension** — новый парам
 **Эффект для юзера:**
 - Для новых актов (созданных после 7339a52): default minDurationSec=0.25 уже был, теперь применяется в правильном порядке.
 - Для существующих библиотек без поля: backfill применит default 0.25, акты будут refine-нуты.
-- Object1 акт юзера должен теперь не содержать «соседних» 1-2-кадровых вспышек, и фрагменты соседних активаций (если разделены < 0 сек, default minGapSec) — не бриджатся (нужно явно поставить minGapSec). Если юзер хочет агрессивную консолидацию — выставит minGapSec=0.5 в Define Acts UI.
+- Object1 акт юзера должен теперь не содержать «соседних» 1-2-кадровых вспышек, и фрагменты соседних активаций (если разделены < 0 сек, default minGapSec) — не бриджатся (нужно явно поставить maxGapSec). Если юзер хочет агрессивную консолидацию — выставит maxGapSec=0.5 в Define Acts UI.
+
+
+### 2026-05-10 — Round 9d: rename minGapSec → maxGapSec (semantic correctness)
+
+Юзер: «почему ты говоришь min_gap когда по факту это максимально разрешённый gap?». Ровно в точку — параметр был назван неправильно. Семантика: «gaps **короче** этого значения заполняются единицами», то есть это **максимум**, при котором gap ещё считается частью акта, а не минимум.
+
+Также пожаловался на жаргон «бриджит». В user_log объяснил по-русски: «закрыть дыру нулей единицами как мост через провал».
+
+**Rename across schema:**
+- `+sphynx/+acts/emptyAct.m` — `a.maxGapSec = 0` (было `minGapSec`).
+- `+sphynx/+acts/buildSimpleAct.m` — `'MaxGapSec'` name-value (было `'MinGapSec'`), `a.maxGapSec = ...`.
+- `+sphynx/+acts/buildComplexAct.m` — то же.
+- `+sphynx/+acts/refineActArray.m` — параметр `maxBridgeFrames` (был `minGapFrames`); doc-strings и переменные обновлены, edge handling сохранён. Переименовал «bridge» → «fill holes» в комментариях для понятности.
+- `+sphynx/+acts/applyAct.m` — читает `act.maxGapSec`, **но fallback на `act.minGapSec`** для legacy library файлов уже сохранённых со старым именем. Чистый rename без потери совместимости.
+- `+sphynx/+app/DefineActsTabController.m` — prop `SimpleMaxGapField`, label «Max gap, s», tooltip переписан под новую семантику.
+- `addSimpleAct` передаёт `'MaxGapSec'`.
+
+**Тесты:** 17/17 PASS — позиционные args в refineActArray не сломались, имя только во внутренних переменных и docstring.
+
+**Не переписываю:**
+- Historical log entries (claude_log/user_log) с упоминанием `minGapSec` — это исторический контекст, не текущий код.
 
