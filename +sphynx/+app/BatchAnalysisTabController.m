@@ -60,7 +60,8 @@ classdef BatchAnalysisTabController < handle
         ActsVideoListBox
         ActsVideoDurationField
 
-        % Options — bodyparts trajectory plots + heatmap bin
+        % Options — session/bodyparts plots + heatmap bin
+        PlotSessionCheckbox
         PlotBodypartsCheckbox
         HeatmapBinField
 
@@ -182,13 +183,16 @@ classdef BatchAnalysisTabController < handle
                 cfg0.acts.libraryPath = obj.ActsLibraryField.Value;
             end
 
-            saveMat   = obj.SaveMatChk.Value;
-            aggregate = obj.AggregateChk.Value;
-            saveMain  = obj.MainVideoEnableCheckbox.Value;
-            actsSel   = obj.ActsVideoListBox.Value;
+            saveMat       = obj.SaveMatChk.Value;
+            aggregate     = obj.AggregateChk.Value;
+            saveMain      = obj.MainVideoEnableCheckbox.Value;
+            actsSel       = obj.ActsVideoListBox.Value;
             if ischar(actsSel); actsSel = {actsSel}; end
-            saveActs  = ~isempty(actsSel);
-            savePlots = obj.PlotBodypartsCheckbox.Value;
+            % Filter out the placeholder when no acts library was loaded.
+            actsSel = actsSel(~startsWith(actsSel, '('));
+            saveActs      = ~isempty(actsSel);
+            savePlotsBP   = obj.PlotBodypartsCheckbox.Value;
+            savePlotsSes  = obj.PlotSessionCheckbox.Value;
 
             dlg = uiprogressdlg(obj.Figure, 'Title', 'Batch analyze', ...
                 'Message', sprintf('0 / %d', n), 'Cancelable', 'on');
@@ -230,7 +234,16 @@ classdef BatchAnalysisTabController < handle
                 if saveActs
                     obj.renderActsForSession(res, s, sessDir, actsSel);
                 end
-                if savePlots
+                if savePlotsSes
+                    try
+                        sphynx.pipeline.saveSessionPlots(res, sessDir, ...
+                            'HeatmapBinCm', obj.HeatmapBinField.Value);
+                        obj.applog('info', '  session plots saved');
+                    catch ME
+                        obj.applog('warn', '  session plots failed: %s', ME.message);
+                    end
+                end
+                if savePlotsBP
                     obj.savePlotsForSession(res, sessDir);
                 end
             end
@@ -279,6 +292,7 @@ classdef BatchAnalysisTabController < handle
                 'selected',    {v}, ...
                 'durationSec', obj.ActsVideoDurationField.Value);
             s.plotBodyparts = obj.PlotBodypartsCheckbox.Value;
+            s.plotSession   = obj.PlotSessionCheckbox.Value;
             s.heatmapBinCm  = obj.HeatmapBinField.Value;
         end
 
@@ -306,6 +320,7 @@ classdef BatchAnalysisTabController < handle
                 end
             end
             if isfield(s,'plotBodyparts'); obj.PlotBodypartsCheckbox.Value = s.plotBodyparts; end
+            if isfield(s,'plotSession');   obj.PlotSessionCheckbox.Value   = s.plotSession;   end
             if isfield(s,'heatmapBinCm');  obj.HeatmapBinField.Value      = s.heatmapBinCm;  end
         end
 
@@ -502,11 +517,12 @@ classdef BatchAnalysisTabController < handle
             avGrid.RowSpacing = 4;
             avGrid.Padding = [4 4 4 4];
             obj.ActsVideoListBox = uilistbox(avGrid, ...
-                'Items', {'(refresh sessions first)'}, ...
+                'Items', {'(load Acts library to populate)'}, ...
                 'Multiselect', 'on', ...
-                'Tooltip', ['Acts to render in each session. Pre-populated ' ...
-                            'from the loaded acts library; edit names by ' ...
-                            'hand if needed.']);
+                'Tooltip', ['Acts to render per session. Click "Acts ' ...
+                            'library" in loader row 2 first; this list ' ...
+                            'will fill with act names. Then Ctrl/Shift-' ...
+                            'click to pick which acts to render.']);
             durRow = uigridlayout(avGrid, [1, 2]);
             durRow.Layout.Row = 2;
             durRow.RowHeight = {28};
@@ -516,19 +532,30 @@ classdef BatchAnalysisTabController < handle
             obj.ActsVideoDurationField = uieditfield(durRow, 'numeric', ...
                 'Value', 5, 'Limits', [0.1 600]);
 
-            % Tail row: bodyparts plots + heatmap bin
-            tail = uigridlayout(opts, [1, 3]);
+            % Tail rows: session + bodyparts plot toggles + heatmap bin
+            tail = uigridlayout(opts, [2, 3]);
             tail.Layout.Row = 3;
-            tail.RowHeight = {28};
+            tail.RowHeight = {26, 26};
             tail.ColumnWidth = {'1x', 110, 70};
+            tail.RowSpacing = 2;
             tail.ColumnSpacing = 4;
             tail.Padding = [0 0 0 0];
+            obj.PlotSessionCheckbox = uicheckbox(tail, ...
+                'Text', 'Save session plots (trajectory, heatmap, speed)', ...
+                'Value', true);
+            obj.PlotSessionCheckbox.Layout.Row = 1;
+            obj.PlotSessionCheckbox.Layout.Column = [1 3];
             obj.PlotBodypartsCheckbox = uicheckbox(tail, ...
                 'Text', 'Save bodyparts trajectory (PNG + FIG)', ...
                 'Value', false);
-            uilabel(tail, 'Text', 'Heatmap bin, cm:');
+            obj.PlotBodypartsCheckbox.Layout.Row = 2;
+            obj.PlotBodypartsCheckbox.Layout.Column = 1;
+            lb = uilabel(tail, 'Text', 'Heatmap bin, cm:');
+            lb.Layout.Row = 2; lb.Layout.Column = 2;
             obj.HeatmapBinField = uieditfield(tail, 'numeric', ...
                 'Value', 4, 'Limits', [0.1 100]);
+            obj.HeatmapBinField.Layout.Row = 2;
+            obj.HeatmapBinField.Layout.Column = 3;
         end
 
         function buildSettingsRow(obj, parent)

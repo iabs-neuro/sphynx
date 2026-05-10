@@ -56,6 +56,7 @@ classdef AnalyzeSessionTabController < handle
 
         % Output options — trajectory PNG+FIG plots
         PlotBodypartsCheckbox
+        PlotSessionCheckbox
 
         % Heatmap bin size (cm)
         HeatmapBinField
@@ -230,11 +231,27 @@ classdef AnalyzeSessionTabController < handle
             if isempty(obj.State.result)
                 obj.applog('warn', 'Run analyze first'); return;
             end
-            if ~obj.PlotBodypartsCheckbox.Value
-                obj.applog('warn', 'Bodyparts trajectory is disabled in Options');
+            saveSession   = obj.PlotSessionCheckbox.Value;
+            saveBodyparts = obj.PlotBodypartsCheckbox.Value;
+            if ~saveSession && ~saveBodyparts
+                obj.applog('warn', 'Both plot options are disabled');
                 return;
             end
             sessRoot = obj.sessionDir();
+
+            if saveSession
+                try
+                    sphynx.pipeline.saveSessionPlots(obj.State.result, ...
+                        sessRoot, ...
+                        'HeatmapBinCm', obj.HeatmapBinField.Value);
+                    obj.applog('info', ...
+                        'Session plots: trajectory/heatmap/speed PNG+FIG -> %s', sessRoot);
+                catch ME
+                    obj.applog('error', 'Session plots failed: %s', ME.message);
+                end
+            end
+
+            if ~saveBodyparts; return; end
             plotsDir = fullfile(sessRoot, 'bodyparts_trajectory');
             if ~isfolder(plotsDir); mkdir(plotsDir); end
             r = obj.State.result;
@@ -373,6 +390,7 @@ classdef AnalyzeSessionTabController < handle
                 'selected',    {v}, ...
                 'durationSec', obj.ActsVideoDurationField.Value);
             s.plotBodyparts = obj.PlotBodypartsCheckbox.Value;
+            s.plotSession   = obj.PlotSessionCheckbox.Value;
             s.heatmapBinCm  = obj.HeatmapBinField.Value;
         end
 
@@ -397,6 +415,7 @@ classdef AnalyzeSessionTabController < handle
                 end
             end
             if isfield(s, 'plotBodyparts'); obj.PlotBodypartsCheckbox.Value = s.plotBodyparts; end
+            if isfield(s, 'plotSession');   obj.PlotSessionCheckbox.Value   = s.plotSession;   end
             if isfield(s, 'heatmapBinCm');  obj.HeatmapBinField.Value      = s.heatmapBinCm;  end
         end
     end
@@ -481,7 +500,7 @@ classdef AnalyzeSessionTabController < handle
             % so the same setup can be reused in Batch.
             opts = uigridlayout(parent, [3, 1]);
             opts.Layout.Row = 2;
-            opts.RowHeight = {180, '1x', 30};
+            opts.RowHeight = {180, '1x', 56};
             opts.RowSpacing = 4;
             opts.Padding = [0 0 0 0];
 
@@ -542,22 +561,34 @@ classdef AnalyzeSessionTabController < handle
             obj.ActsVideoDurationField = uieditfield(durRow, 'numeric', ...
                 'Value', 5, 'Limits', [0.1 600]);
 
-            % --- Trajectory plots + heatmap bin ----------------------
-            tail = uigridlayout(opts, [1, 3]);
+            % --- Plot save options + heatmap bin ---------------------
+            tail = uigridlayout(opts, [2, 3]);
             tail.Layout.Row = 3;
-            tail.RowHeight = {28};
+            tail.RowHeight = {26, 26};
             tail.ColumnWidth = {'1x', 110, 70};
+            tail.RowSpacing = 2;
             tail.ColumnSpacing = 4;
             tail.Padding = [0 0 0 0];
+            obj.PlotSessionCheckbox = uicheckbox(tail, ...
+                'Text', 'Save session plots (trajectory, heatmap, speed)', ...
+                'Value', true, ...
+                'Tooltip', 'Saves the right-pane plots as PNG+FIG into the session dir');
+            obj.PlotSessionCheckbox.Layout.Row = 1;
+            obj.PlotSessionCheckbox.Layout.Column = [1 3];
             obj.PlotBodypartsCheckbox = uicheckbox(tail, ...
                 'Text', 'Save bodyparts trajectory (PNG + FIG)', ...
                 'Value', false, ...
-                'Tooltip', 'One plot per body part, saved to bodyparts_trajectory/');
-            uilabel(tail, 'Text', 'Heatmap bin, cm:');
+                'Tooltip', 'One 4-tile plot per body part in bodyparts_trajectory/');
+            obj.PlotBodypartsCheckbox.Layout.Row = 2;
+            obj.PlotBodypartsCheckbox.Layout.Column = 1;
+            lb = uilabel(tail, 'Text', 'Heatmap bin, cm:');
+            lb.Layout.Row = 2; lb.Layout.Column = 2;
             obj.HeatmapBinField = uieditfield(tail, 'numeric', ...
                 'Value', 4, 'Limits', [0.1 100], ...
                 'Tooltip', 'Bin size for the occupancy heatmap (cm).', ...
                 'ValueChangedFcn', @(~,~) obj.refreshResults());
+            obj.HeatmapBinField.Layout.Row = 2;
+            obj.HeatmapBinField.Layout.Column = 3;
         end
 
         function buildSettingsRow(obj, parent)
