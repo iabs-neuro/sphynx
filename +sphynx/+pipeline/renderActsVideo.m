@@ -100,43 +100,71 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
     zones = [];
     if isfield(result, 'Zones'); zones = result.Zones; end
 
-    % Pre-resolve per-frame "speed_act" (rest / walk / locomotion) and
-    % per-frame zone names for the structured info block. Both are
-    % derived from the existing Acts struct so they reflect the same
-    % thresholds the rest of the pipeline used.
-    speedActMap = repmat({''}, 1, nFrames);
-    speedNames = {'rest', 'walk', 'locomotion'};
-    for sn = 1:numel(speedNames)
-        idx = find(strcmpi(actNames, speedNames{sn}), 1);
-        if isempty(idx); continue; end
-        on = logical(actMat(idx, :));
-        speedActMap(on) = speedNames(sn);
+    % Bucket each act by name into speed / spatial / posture /
+    % composite. The overlay treats the buckets differently:
+    %   speed   -> "Speed_act:" line, NOT shown in Acts list.
+    %   spatial -> "Zone:" line, NOT shown in Acts list.
+    %   rest    -> stacked under "Acts:".
+    actBuckets = cell(1, nActs);
+    for k = 1:nActs
+        actBuckets{k} = actBucketLocal(actNames{k});
     end
-    zoneNamesByFrame = repmat({''}, 1, nFrames);
-    if ~isempty(zones) && ~isempty(centerX)
-        zoneCacheNames = {};
-        zoneCacheMasks = {};
-        for zk = 1:numel(zones)
-            if isfield(zones(zk), 'maskfilled') && ~isempty(zones(zk).maskfilled)
-                zoneCacheNames{end+1} = zones(zk).name; %#ok<AGROW>
-                zoneCacheMasks{end+1} = logical(zones(zk).maskfilled); %#ok<AGROW>
-            end
-        end
-        for f = range(1):range(2)
-            if f > numel(centerX); break; end
-            cx = round(centerX(f)); cy = round(centerY(f));
-            if ~isfinite(cx) || ~isfinite(cy); continue; end
-            here = {};
-            for zk = 1:numel(zoneCacheMasks)
-                m = zoneCacheMasks{zk};
-                if cy >= 1 && cx >= 1 && cy <= size(m,1) && cx <= size(m,2)
-                    if m(cy, cx); here{end+1} = zoneCacheNames{zk}; end %#ok<AGROW>
+
+    % Pre-resolve per-frame: which speed-act is active, which spatial
+    % acts are active, and the union of zone masks for currently
+    % active acts (used for the on-frame zone tint).
+    speedActMap     = repmat({''}, 1, nFrames);
+    spatialActsMap  = cell(1, nFrames);
+    spatialActsMap(:) = {{}};
+    activeZoneMaskByFrame = cell(1, nFrames);
+
+    % Build per-act zone-mask union once. result.Acts(k).Definition.zones
+    % is a cellstr of zone names; resolve via the preset zones list.
+    actZoneMasks = cell(1, nActs);
+    if ~isempty(zones)
+        for k = 1:nActs
+            actZones = {};
+            try
+                if isfield(result.Acts(k), 'Definition') ...
+                        && isfield(result.Acts(k).Definition, 'zones')
+                    actZones = result.Acts(k).Definition.zones;
+                end
+            catch; end
+            if isempty(actZones); continue; end
+            if ischar(actZones); actZones = {actZones}; end
+            mask = [];
+            for zi = 1:numel(actZones)
+                zIdx = find(strcmp({zones.name}, actZones{zi}), 1);
+                if isempty(zIdx); continue; end
+                if isfield(zones(zIdx), 'maskfilled') ...
+                        && ~isempty(zones(zIdx).maskfilled)
+                    m = logical(zones(zIdx).maskfilled);
+                    if isempty(mask); mask = m; else; mask = mask | m; end
                 end
             end
-            if ~isempty(here)
-                zoneNamesByFrame{f} = strjoin(here, ', ');
+            actZoneMasks{k} = mask;
+        end
+    end
+
+    for f = range(1):range(2)
+        if f > nFrames; break; end
+        active = find(actMat(:, f));
+        unionMask = [];
+        for jj = 1:numel(active)
+            k = active(jj);
+            switch actBuckets{k}
+                case 'speed'
+                    speedActMap{f} = actNames{k};
+                case 'spatial'
+                    spatialActsMap{f} = [spatialActsMap{f}, actNames(k)];
+            end
+            m = actZoneMasks{k};
+            if ~isempty(m)
+                if isempty(unionMask); unionMask = m;
+                else; unionMask = unionMask | m; end
             end
         end
+        activeZoneMaskByFrame{f} = unionMask;
     end
 
     % Off-screen render via figure
@@ -156,23 +184,16 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
         cla(ax);
         imshow(img, 'Parent', ax); hold(ax, 'on');
 
-        % Optional zone tint — half-transparent fill of zones the
-        % bodycenter sits in right now.
-        if feat.zones && ~isempty(zones) && ~isempty(centerX) && f <= numel(centerX)
-            cx = round(centerX(f)); cy = round(centerY(f));
-            for zk = 1:numel(zones)
-                if ~isfield(zones(zk), 'maskfilled') ...
-                        || isempty(zones(zk).maskfilled); continue; end
-                m = logical(zones(zk).maskfilled);
-                [Hm, Wm] = size(m);
-                if cx<1||cy<1||cx>Wm||cy>Hm; continue; end
-                if ~m(cy, cx); continue; end
-                B = bwboundaries(m);
-                for bb = 1:numel(B)
-                    fill(ax, B{bb}(:,2), B{bb}(:,1), [1 0.7 0], ...
-                        'FaceAlpha', 0.20, 'EdgeColor', [1 0.5 0], ...
-                        'LineWidth', 1.2);
-                end
+        % Zone tint — fill ONLY the zones referenced by currently
+        % active acts (act.Definition.zones). Preset zones that
+        % aren't tied to any active act are not drawn.
+        if feat.zones && f <= numel(activeZoneMaskByFrame) ...
+                && ~isempty(activeZoneMaskByFrame{f})
+            B = bwboundaries(activeZoneMaskByFrame{f});
+            for bb = 1:numel(B)
+                fill(ax, B{bb}(:,2), B{bb}(:,1), [1 0.7 0], ...
+                    'FaceAlpha', 0.20, 'EdgeColor', [1 0.5 0], ...
+                    'LineWidth', 1.2);
             end
         end
 
@@ -222,10 +243,11 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
                 'BackgroundColor', [0 0 0 0.55]);
             y0 = y0 + dy;
         end
+        spatialList = {};
+        if f <= numel(spatialActsMap); spatialList = spatialActsMap{f}; end
         if feat.zones
-            zname = '';
-            if f <= numel(zoneNamesByFrame); zname = zoneNamesByFrame{f}; end
-            if isempty(zname); zname = '—'; end
+            zname = '—';
+            if ~isempty(spatialList); zname = strjoin(spatialList, ', '); end
             text(ax, x0, y0, sprintf('Zone: %s', zname), ...
                 'Color', 'w', 'FontSize', 16, 'FontWeight', 'bold', ...
                 'Interpreter', 'none', ...
@@ -237,9 +259,13 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
                 'Color', 'w', 'FontSize', 16, 'FontWeight', 'bold', ...
                 'BackgroundColor', [0 0 0 0.55]);
             y0 = y0 + dy;
+            % Skip acts that already appear under Speed_act / Zone.
+            shownInfo = [{speedActMap{f}}, spatialList];
+            shownInfo = shownInfo(~cellfun(@isempty, shownInfo));
             active = find(actMat(:, f));
             for j = 1:numel(active)
                 k = active(j);
+                if any(strcmp(actNames{k}, shownInfo)); continue; end
                 text(ax, x0 + 18, y0, actNames{k}, ...
                     'Color', actColors(k, :), 'FontSize', 15, ...
                     'FontWeight', 'bold', 'Interpreter', 'none', ...
@@ -267,5 +293,18 @@ function out = mergeStruct(defaults, override)
     fns = fieldnames(override);
     for k = 1:numel(fns)
         out.(fns{k}) = override.(fns{k});
+    end
+end
+
+function bk = actBucketLocal(name)
+    nm = lower(name);
+    if any(strcmp(nm, {'rest', 'walk', 'locomotion'}))
+        bk = 'speed';
+    elseif any(strcmp(nm, {'corners', 'walls', 'walls_and_corners', 'center', 'middle_zone'}))
+        bk = 'spatial';
+    elseif any(strcmp(nm, {'freezing', 'rear'}))
+        bk = 'posture';
+    else
+        bk = 'composite';
     end
 end

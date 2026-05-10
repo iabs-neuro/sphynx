@@ -27,12 +27,9 @@ classdef AnalyzeSessionTabController < handle
         OutDirButton
         ActsLibraryButton
 
-        % Threshold overrides (rest/loc kept on this tab; freezing/rear
-        % moved to defaults — see docs/TODO.md to relocate to Define Acts)
-        RestField
-        LocField
-
-        % Run + results
+        % Run + results (speed thresholds + freezing/rear modes
+        % live in defaultConfig.m; the etogram bucket order is
+        % computed from act-name patterns, no UI toggle.)
         RunButton
         ResultTable
 
@@ -42,9 +39,6 @@ classdef AnalyzeSessionTabController < handle
         TimelineAxes
         SpeedHistAxes
         SpeedTraceAxes
-
-        % Etogram filter
-        ShowZoneActsCheckbox
 
         % Output options — main video
         MainVideoEnableCheckbox
@@ -95,11 +89,17 @@ classdef AnalyzeSessionTabController < handle
             cfg = sphynx.pipeline.defaultConfig();
             cfg.paths.dlc    = obj.DLCPathField.Value;
             cfg.paths.preset = obj.PresetPathField.Value;
-            cfg.paths.outDir = obj.OutDirPathField.Value;
-            cfg.acts.restThresholdCmS = obj.RestField.Value;
-            cfg.acts.locThresholdCmS  = obj.LocField.Value;
-            % FreezingMode/RearMode use defaults from defaultConfig.m
-            % until per-experiment defaults land in Define Acts.
+            % Session subfolder: per-session outputs all go into one
+            % directory named after the video stem. Skip when there's
+            % no output dir (saveWorkspace stays disabled then).
+            if ~isempty(obj.OutDirPathField.Value)
+                cfg.paths.outDir = obj.sessionDir();
+            else
+                cfg.paths.outDir = '';
+            end
+            % Rest/Loc thresholds + FreezingMode/RearMode use defaults
+            % from defaultConfig.m. Per-experiment overrides will land
+            % in Define Acts (see docs/TODO.md).
             if ~isempty(obj.ActsLibraryPathField) ...
                     && ~isempty(obj.ActsLibraryPathField.Value)
                 cfg.acts.libraryPath = obj.ActsLibraryPathField.Value;
@@ -133,8 +133,7 @@ classdef AnalyzeSessionTabController < handle
             if isempty(videoPath) || ~isfile(videoPath)
                 obj.applog('warn', 'Pick a video first'); return;
             end
-            outDir = obj.OutDirPathField.Value;
-            if isempty(outDir); outDir = fileparts(videoPath); end
+            outDir = obj.sessionDir();
             startSec = obj.MainVideoStartField.Value;
             durSec   = obj.MainVideoDurationField.Value;
             fps = obj.State.result.Options.FrameRate;
@@ -167,6 +166,11 @@ classdef AnalyzeSessionTabController < handle
         end
 
         function renderActsVideos(obj)
+            % Per-act videos in the same BA-style as Define Acts'
+            % Make-video / "Render & save all": stitched active frames,
+            % stampCircle dots, hi-bodypart in red, event counter,
+            % velocity readout. Streams via VideoWriter through the
+            % shared sphynx.pipeline.renderActStitched.
             if isempty(obj.State.result)
                 obj.applog('warn', 'Run analyze first'); return;
             end
@@ -180,43 +184,39 @@ classdef AnalyzeSessionTabController < handle
             if isempty(videoPath) || ~isfile(videoPath)
                 obj.applog('warn', 'Pick a video first'); return;
             end
-            outDir = obj.OutDirPathField.Value;
-            if isempty(outDir); outDir = fileparts(videoPath); end
-            actsDir = fullfile(outDir, 'Acts_video');
+            actsDir = fullfile(obj.sessionDir(), 'Acts_video');
             if ~isfolder(actsDir); mkdir(actsDir); end
             durSec = obj.ActsVideoDurationField.Value;
             r = obj.State.result;
-            fps = r.Options.FrameRate;
-            nWin = max(1, round(double(durSec) * double(fps)));
-            [~, sessionStem] = fileparts(videoPath);
-            dlg = uiprogressdlg(obj.Figure, 'Title', 'Render acts videos', ...
-                'Indeterminate', 'on', 'Cancelable', 'on');
-            cleaner = onCleanup(@() closeIfValid(dlg));
+            presetData = [];
+            try; presetData = sphynx.io.readPreset(obj.PresetPathField.Value); catch; end
+            videoOffset = 0;
+            try; videoOffset = r.config.range.startFrame - 1; catch; end
+
+            dlg = uiprogressdlg(obj.Figure, ...
+                'Title', 'Render acts videos', ...
+                'Message', 'Starting...', 'Indeterminate', 'on', ...
+                'Cancelable', 'on');
+            cleaner = onCleanup(@() closeIfValid(dlg)); %#ok<NASGU>
             saved = 0;
             for k = 1:numel(sel)
                 if dlg.CancelRequested; break; end
                 actName = sel{k};
-                rIdx = find(strcmp({r.Acts.ActName}, actName), 1);
-                if isempty(rIdx); continue; end
-                bool = logical(r.Acts(rIdx).ActArrayRefine);
-                activeFrames = find(bool);
-                if isempty(activeFrames)
-                    obj.applog('info', '"%s" — 0 active frames, skip', actName);
-                    continue;
-                end
-                nTake = min(numel(activeFrames), nWin);
-                first = activeFrames(1);
-                last  = activeFrames(min(nTake, numel(activeFrames)));
-                safeName = matlab.lang.makeValidName(actName);
-                outName = sprintf('%s_%s.mp4', sessionStem, safeName);
+                dlg.Indeterminate = 'on';
+                dlg.Message = sprintf('Locating %d/%d: %s', k, numel(sel), actName);
                 try
-                    outPath = sphynx.pipeline.renderActsVideo(r, videoPath, actsDir, ...
-                        'Range', [first last], ...
-                        'Features', obj.collectMainVideoFeatures(), ...
-                        'OutputName', outName, ...
-                        'ProgressFcn', @(v, m) updateDlg(dlg, v, m));
-                    saved = saved + 1;
-                    obj.applog('info', '"%s" -> %s', actName, outPath);
+                    outPath = sphynx.pipeline.renderActStitched( ...
+                        r, videoPath, actsDir, actName, ...
+                        'DurationSec', durSec, ...
+                        'PresetData', presetData, ...
+                        'VideoOffset', videoOffset, ...
+                        'ProgressDlg', dlg);
+                    if isempty(outPath)
+                        obj.applog('info', '"%s" — 0 active frames, skip', actName);
+                    else
+                        saved = saved + 1;
+                        obj.applog('info', '"%s" -> %s', actName, outPath);
+                    end
                 catch ME
                     obj.applog('warn', '"%s" failed: %s', actName, ME.message);
                 end
@@ -233,10 +233,8 @@ classdef AnalyzeSessionTabController < handle
                 obj.applog('warn', 'Bodyparts trajectory is disabled in Options');
                 return;
             end
-            outDir = obj.OutDirPathField.Value;
-            if isempty(outDir); outDir = fileparts(obj.VideoPathField.Value); end
-            if isempty(outDir); obj.applog('warn', 'Pick output dir'); return; end
-            plotsDir = fullfile(outDir, 'bodyparts_trajectory');
+            sessRoot = obj.sessionDir();
+            plotsDir = fullfile(sessRoot, 'bodyparts_trajectory');
             if ~isfolder(plotsDir); mkdir(plotsDir); end
             r = obj.State.result;
             bps = r.BodyPartsTraces;
@@ -252,6 +250,10 @@ classdef AnalyzeSessionTabController < handle
                     end
                 end
             end
+            fps = 30;
+            if isfield(r, 'Options') && isfield(r.Options, 'FrameRate')
+                fps = r.Options.FrameRate;
+            end
             saved = 0;
             for i = 1:numel(bps)
                 bp = bps(i);
@@ -259,23 +261,61 @@ classdef AnalyzeSessionTabController < handle
                 X = bp.TraceSmoothed.X(:);
                 Y = bp.TraceSmoothed.Y(:);
                 if isempty(X); continue; end
-                fig = figure('Visible', 'off', 'Position', [100 100 800 600]);
-                ax = axes('Parent', fig);
+                t = (0:numel(X)-1)' / fps;
+                lk = [];
+                if isfield(bp, 'TraceLikelihood') && ~isempty(bp.TraceLikelihood)
+                    lk = bp.TraceLikelihood(:);
+                end
+
+                fig = figure('Visible', 'off', 'Position', [100 100 1000 1000]);
+                tl = tiledlayout(fig, 4, 1, 'Padding', 'compact', ...
+                    'TileSpacing', 'compact');
+
+                % Top tile: 2D trajectory over GoodVideoFrame in cm.
+                axT = nexttile(tl, 1);
                 if ~isempty(frame)
-                    imshow(frame, 'Parent', ax, ...
+                    imshow(frame, 'Parent', axT, ...
                         'XData', [0 size(frame,2)/pxlPerCm], ...
                         'YData', [0 size(frame,1)/pxlPerCm]);
-                    hold(ax, 'on');
+                    hold(axT, 'on');
                 end
-                plot(ax, X/pxlPerCm, Y/pxlPerCm, '-', ...
+                plot(axT, X/pxlPerCm, Y/pxlPerCm, '-', ...
                     'Color', [0.10 0.50 0.90], 'LineWidth', 1.2);
-                ax.DataAspectRatio = [1 1 1];
-                ax.YDir = 'reverse';
-                xlabel(ax, 'X, cm', 'FontSize', 13);
-                ylabel(ax, 'Y, cm', 'FontSize', 13);
-                ax.FontSize = 12;
-                title(ax, sprintf('Trajectory — %s', bp.BodyPartName), ...
+                axT.DataAspectRatio = [1 1 1];
+                axT.YDir = 'reverse';
+                xlabel(axT, 'X, cm', 'FontSize', 13);
+                ylabel(axT, 'Y, cm', 'FontSize', 13);
+                axT.FontSize = 12;
+                title(axT, sprintf('Trajectory — %s', bp.BodyPartName), ...
                     'Interpreter', 'none', 'FontSize', 14);
+
+                % Bottom three tiles: X(t), Y(t), likelihood(t).
+                axX = nexttile(tl, 2);
+                plot(axX, t, X/pxlPerCm, '-', 'Color', [0.85 0.40 0.20], ...
+                    'LineWidth', 0.9);
+                ylabel(axX, 'X, cm', 'FontSize', 13);
+                axX.FontSize = 12; box(axX, 'on');
+
+                axY = nexttile(tl, 3);
+                plot(axY, t, Y/pxlPerCm, '-', 'Color', [0.20 0.65 0.30], ...
+                    'LineWidth', 0.9);
+                ylabel(axY, 'Y, cm', 'FontSize', 13);
+                axY.FontSize = 12; box(axY, 'on');
+
+                axL = nexttile(tl, 4);
+                if ~isempty(lk)
+                    plot(axL, t(1:numel(lk)), lk, '-', ...
+                        'Color', [0.40 0.40 0.40], 'LineWidth', 0.9);
+                    ylim(axL, [0 1]);
+                else
+                    text(axL, 0.5, 0.5, 'no likelihood trace', ...
+                        'HorizontalAlignment', 'center', 'Units', 'normalized');
+                end
+                ylabel(axL, 'likelihood', 'FontSize', 13);
+                xlabel(axL, 'time, s', 'FontSize', 13);
+                axL.FontSize = 12; box(axL, 'on');
+
+                linkaxes([axX, axY, axL], 'x');
                 base = fullfile(plotsDir, sprintf('trajectory_%s', bp.BodyPartName));
                 try
                     saveas(fig, [base '.png']);
@@ -318,8 +358,6 @@ classdef AnalyzeSessionTabController < handle
         end
 
         function s = collectSettings(obj)
-            s.restThresholdCmS = obj.RestField.Value;
-            s.locThresholdCmS  = obj.LocField.Value;
             s.mainVideo = struct( ...
                 'enabled',    obj.MainVideoEnableCheckbox.Value, ...
                 'startSec',   obj.MainVideoStartField.Value, ...
@@ -338,8 +376,6 @@ classdef AnalyzeSessionTabController < handle
         end
 
         function applySettings(obj, s)
-            if isfield(s, 'restThresholdCmS'); obj.RestField.Value = s.restThresholdCmS; end
-            if isfield(s, 'locThresholdCmS');  obj.LocField.Value  = s.locThresholdCmS;  end
             if isfield(s, 'mainVideo')
                 m = s.mainVideo;
                 if isfield(m, 'enabled');    obj.MainVideoEnableCheckbox.Value     = m.enabled; end
@@ -377,23 +413,20 @@ classdef AnalyzeSessionTabController < handle
         end
 
         function buildLeftConfig(obj, parent)
-            left = uigridlayout(parent, [7, 1]);
+            left = uigridlayout(parent, [5, 1]);
             left.Layout.Column = 1;
-            % Row layout: loader strip / speed thresholds / etogram
-            % filter / Options panel / settings save-load / run+render
-            % buttons / log.
-            left.RowHeight = {64, 32, 28, '1x', 30, 36, 90};
+            % Row layout: loader strip / Options panel / settings
+            % save-load / run+render buttons / log.
+            left.RowHeight = {64, '1x', 30, 36, 90};
             left.RowSpacing = 4;
             left.Padding = [0 0 0 0];
 
             obj.buildLoaderStrip(left);
-            obj.buildSpeedThresholds(left);
-            obj.buildEtogramFilter(left);
             obj.buildOptionsPanel(left);
             obj.buildSettingsRow(left);
             obj.buildRunRow(left);
             obj.LogTextArea = uitextarea(left, 'Editable', 'off', 'Value', {''});
-            obj.LogTextArea.Layout.Row = 7;
+            obj.LogTextArea.Layout.Row = 5;
         end
 
         function buildLoaderStrip(obj, parent)
@@ -441,36 +474,12 @@ classdef AnalyzeSessionTabController < handle
             obj.inheritRootFromParentApp();
         end
 
-        function buildSpeedThresholds(obj, parent)
-            row = uigridlayout(parent, [1, 4]);
-            row.Layout.Row = 2;
-            row.RowHeight = {28};
-            row.ColumnWidth = {110, 70, 110, 70};
-            row.ColumnSpacing = 4;
-            row.Padding = [0 0 0 0];
-            uilabel(row, 'Text', 'Rest, cm/s:');
-            obj.RestField = uieditfield(row, 'numeric', 'Value', 1, 'Limits', [0 1000]);
-            uilabel(row, 'Text', 'Locomotion, cm/s:');
-            obj.LocField = uieditfield(row, 'numeric', 'Value', 5, 'Limits', [0 1000]);
-        end
-
-        function buildEtogramFilter(obj, parent)
-            obj.ShowZoneActsCheckbox = uicheckbox(parent, ...
-                'Text', 'Show zone acts in etogram', ...
-                'Value', false, ...
-                'Tooltip', ['Zone acts (corners/walls/center/etc.) are auto-' ...
-                            'derived from the preset. Hide them to keep the ' ...
-                            'etogram focused on built-ins + custom library.'], ...
-                'ValueChangedFcn', @(~,~) obj.refreshResults());
-            obj.ShowZoneActsCheckbox.Layout.Row = 3;
-        end
-
         function buildOptionsPanel(obj, parent)
             % Three sections inside one grid: Main video / Acts videos /
             % Trajectory plots. These knobs are saved/loaded as a struct
             % so the same setup can be reused in Batch.
             opts = uigridlayout(parent, [3, 1]);
-            opts.Layout.Row = 4;
+            opts.Layout.Row = 2;
             opts.RowHeight = {180, '1x', 30};
             opts.RowSpacing = 4;
             opts.Padding = [0 0 0 0];
@@ -552,7 +561,7 @@ classdef AnalyzeSessionTabController < handle
 
         function buildSettingsRow(obj, parent)
             row = uigridlayout(parent, [1, 2]);
-            row.Layout.Row = 5;
+            row.Layout.Row = 3;
             row.RowHeight = {28};
             row.ColumnWidth = {'1x', '1x'};
             row.ColumnSpacing = 4;
@@ -568,7 +577,7 @@ classdef AnalyzeSessionTabController < handle
 
         function buildRunRow(obj, parent)
             row = uigridlayout(parent, [1, 4]);
-            row.Layout.Row = 6;
+            row.Layout.Row = 4;
             row.RowHeight = {32};
             row.ColumnWidth = {'1x', '1x', '1x', '1x'};
             row.ColumnSpacing = 4;
@@ -614,6 +623,31 @@ classdef AnalyzeSessionTabController < handle
                 end
             catch
             end
+        end
+
+        function s = sessionStem(obj)
+            % Derive session name from the loaded video filename.
+            videoPath = obj.VideoPathField.Value;
+            s = '';
+            if ~isempty(videoPath); [~, s] = fileparts(videoPath); end
+            if isempty(s) && ~isempty(obj.DLCPathField.Value)
+                [~, s] = fileparts(obj.DLCPathField.Value);
+            end
+            if isempty(s); s = 'session'; end
+        end
+
+        function d = sessionDir(obj, parent)
+            % All saves for one Run go into <parent>/<sessionStem>/.
+            % `parent` is whatever the caller picked as the output root
+            % (typically obj.OutDirPathField.Value or a fallback).
+            if nargin < 2 || isempty(parent)
+                parent = obj.OutDirPathField.Value;
+                if isempty(parent) && ~isempty(obj.VideoPathField.Value)
+                    parent = fileparts(obj.VideoPathField.Value);
+                end
+            end
+            d = fullfile(parent, obj.sessionStem());
+            if ~isfolder(d); mkdir(d); end
         end
 
         function dir = resourceStartDir(obj)
@@ -804,14 +838,12 @@ classdef AnalyzeSessionTabController < handle
         function drawHeatmap(obj, xCm, yCm, r)
             ax = obj.HeatmapAxes;
             cla(ax);
-            % Frame extent in cm to bound the heatmap.
             extentX = max(xCm); extentY = max(yCm);
             if isfield(r, 'Options') && isfield(r.Options, 'pxl2sm') ...
                     && isfield(r.Options, 'Width') && isfield(r.Options, 'Height')
                 extentX = r.Options.Width / r.Options.pxl2sm;
                 extentY = r.Options.Height / r.Options.pxl2sm;
             end
-            % User-controlled bin size (Options panel; default 4 cm).
             binCm = 4;
             if ~isempty(obj.HeatmapBinField) && isvalid(obj.HeatmapBinField)
                 binCm = max(0.1, obj.HeatmapBinField.Value);
@@ -820,20 +852,29 @@ classdef AnalyzeSessionTabController < handle
             edgesY = 0:binCm:max(extentY, binCm);
             valid = isfinite(xCm) & isfinite(yCm);
             counts = histcounts2(xCm(valid), yCm(valid), edgesX, edgesY);
-            % imagesc expects rows=Y, cols=X
-            imagesc(ax, edgesX, edgesY, counts');
+            % Frames -> seconds via the analyzed FrameRate.
+            fps = 30;
+            if isfield(r, 'Options') && isfield(r.Options, 'FrameRate')
+                fps = r.Options.FrameRate;
+            end
+            secs = counts / fps;
+            % Gaussian smooth in cm units. Sigma = bin (one bin width) so
+            % the smoothing scale matches the user's chosen resolution.
+            secsSmooth = imgaussfilt(secs, 1);
+            imagesc(ax, edgesX, edgesY, secsSmooth');
             ax.YDir = 'reverse';
             colormap(ax, 'parula');
             cb = colorbar(ax);
-            cb.Label.String = 'frames';
-            cb.Label.FontSize = 11;
+            cb.Label.String = 'time, s';
+            cb.Label.FontSize = 14;
+            cb.FontSize = 12;
             ax.DataAspectRatio = [1 1 1];
             ax.XLim = [0 extentX]; ax.YLim = [0 extentY];
-            xlabel(ax, 'X, cm', 'FontSize', 12);
-            ylabel(ax, 'Y, cm', 'FontSize', 12);
-            ax.FontSize = 11;
-            title(ax, sprintf('Occupancy heatmap (%g cm bins)', binCm), ...
-                'FontSize', 13);
+            xlabel(ax, 'X, cm', 'FontSize', 14);
+            ylabel(ax, 'Y, cm', 'FontSize', 14);
+            ax.FontSize = 13;
+            title(ax, sprintf('Occupancy (%g cm bins, gaussian σ=1 bin)', binCm), ...
+                'FontSize', 14);
         end
 
         function drawSpeed(obj, v, frameRate)
@@ -870,41 +911,28 @@ classdef AnalyzeSessionTabController < handle
             ax = obj.TimelineAxes;
             cla(ax); hold(ax, 'on');
 
-            % Filter zone acts unless checkbox is on. Always show
-            % built-ins + custom-library acts.
-            showZone = ~isempty(obj.ShowZoneActsCheckbox) ...
-                && obj.ShowZoneActsCheckbox.Value;
-            keep = false(1, numel(r.Acts));
-            for k = 1:numel(r.Acts)
-                cat = '';
-                if isfield(r.Acts(k), 'Category')
-                    cat = r.Acts(k).Category;
-                end
-                if isempty(cat); cat = 'builtin'; end  % defensive
-                keep(k) = strcmp(cat, 'builtin') ...
-                    || strcmp(cat, 'custom') ...
-                    || (showZone && strcmp(cat, 'zone'));
-            end
-            actsToPlot = r.Acts(keep);
-            n = numel(actsToPlot);
-            if n == 0
-                title(ax, 'Acts etogram — no acts to show');
+            % Bucket acts by name pattern: speed → spatial → posture →
+            % composite. Within a bucket, sort by name.
+            n0 = numel(r.Acts);
+            if n0 == 0
+                title(ax, 'Acts etogram — no acts');
                 hold(ax, 'off'); return;
             end
+            names0 = {r.Acts.ActName};
+            buckets = cellfun(@(nm) actBucket(nm), names0, 'UniformOutput', false);
+            [~, sortIdx] = sortActs(buckets, names0);
+            actsToPlot = r.Acts(sortIdx);
+            n = numel(actsToPlot);
 
-            % Color palette: built-ins use lines(.), custom acts use
-            % a contrasting palette so they stand out.
-            builtinPal = lines(7);
-            customPal  = [hsv(7) * 0.6 + 0.3];  % softened HSV, distinct
+            % Colors per bucket so the visual grouping is obvious.
+            bucketColors = struct('speed', [0.20 0.55 0.90], ...
+                                  'spatial', [0.85 0.55 0.20], ...
+                                  'posture', [0.20 0.70 0.30], ...
+                                  'composite', [0.55 0.30 0.75]);
             for k = 1:n
                 a = actsToPlot(k).ActArrayRefine;
-                cat = '';
-                if isfield(actsToPlot(k), 'Category'); cat = actsToPlot(k).Category; end
-                switch cat
-                    case 'custom'; col = customPal(mod(k-1,7)+1, :);
-                    case 'zone';   col = [0.5 0.5 0.5];
-                    otherwise;     col = builtinPal(mod(k-1,7)+1, :);
-                end
+                bk = actBucket(actsToPlot(k).ActName);
+                col = bucketColors.(bk);
                 yLine = ones(size(a)) * (n - k + 1);
                 yLine(~a) = NaN;
                 plot(ax, 1:numel(a), yLine, '-', 'LineWidth', 5, 'Color', col);
@@ -914,8 +942,7 @@ classdef AnalyzeSessionTabController < handle
             xlabel(ax, 'frame', 'FontSize', 12);
             ax.FontSize = 11;
             ax.YLim = [0.5 n + 0.5];
-            title(ax, sprintf('Acts etogram (%d acts shown%s)', n, ...
-                ternary(showZone, '', '; zone acts hidden')), ...
+            title(ax, sprintf('Acts etogram (%d acts, ordered: speed → spatial → posture → composite)', n), ...
                 'Interpreter', 'none', 'FontSize', 13);
             hold(ax, 'off');
         end
@@ -958,4 +985,39 @@ end
 
 function out = ternary(cond, a, b)
     if cond; out = a; else; out = b; end
+end
+
+function bk = actBucket(name)
+    % Bucket an act by its name into one of: speed / spatial / posture
+    % / composite. Used to order the etogram and to pick what shows up
+    % under the Speed_act and Zone sections of the main-video overlay.
+    nm = lower(name);
+    if any(strcmp(nm, {'rest', 'walk', 'locomotion'}))
+        bk = 'speed';
+    elseif any(strcmp(nm, {'corners', 'walls', 'walls_and_corners', 'center', 'middle_zone'}))
+        bk = 'spatial';
+    elseif any(strcmp(nm, {'freezing', 'rear'}))
+        bk = 'posture';
+    else
+        bk = 'composite';
+    end
+end
+
+function [sortedBuckets, idx] = sortActs(buckets, names)
+    order = struct('speed', 1, 'spatial', 2, 'posture', 3, 'composite', 4);
+    n = numel(buckets);
+    keys = zeros(n, 1);
+    for k = 1:n; keys(k) = order.(buckets{k}); end
+    [~, idx] = sortrows([keys, (1:n)'], [1 2]);
+    % Re-sort within each bucket alphabetically (case-insensitive).
+    out = idx;
+    for tier = 1:4
+        sl = keys(idx) == tier;
+        sub = idx(sl);
+        if numel(sub) <= 1; continue; end
+        [~, oo] = sort(lower(names(sub)));
+        out(find(sl, 1):find(sl, 1)+numel(sub)-1) = sub(oo);
+    end
+    idx = out;
+    sortedBuckets = buckets(idx);
 end

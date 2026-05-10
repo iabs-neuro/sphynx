@@ -172,16 +172,20 @@ function result = analyzeSession(config)
         getOpt(Options, 'velocity_locomotion', config.acts.locThresholdCmS), ...
         minRunFrames);
 
-    Acts = struct('ActName', {}, 'ActArrayRefine', {}, 'Category', {});
+    Acts = struct('ActName', {}, 'ActArrayRefine', {}, ...
+        'Category', {}, 'Definition', {});
     Acts(end+1).ActName = 'rest';
     Acts(end).ActArrayRefine = double(speed.rest(:)');
     Acts(end).Category = 'builtin';
+    Acts(end).Definition = struct('zones', {{}});
     Acts(end+1).ActName = 'walk';
     Acts(end).ActArrayRefine = double(speed.walk(:)');
     Acts(end).Category = 'builtin';
+    Acts(end).Definition = struct('zones', {{}});
     Acts(end+1).ActName = 'locomotion';
     Acts(end).ActArrayRefine = double(speed.locomotion(:)');
     Acts(end).Category = 'builtin';
+    Acts(end).Definition = struct('zones', {{}});
 
     % --- 7. Freezing ---------------------------------------------------------
     BPV = zeros(nKept, nFrames);
@@ -193,6 +197,7 @@ function result = analyzeSession(config)
     Acts(end+1).ActName = 'freezing';
     Acts(end).ActArrayRefine = double(freeze(:)');
     Acts(end).Category = 'builtin';
+    Acts(end).Definition = struct('zones', {{}});
 
     % --- 8. Rear -------------------------------------------------------------
     rearOk = ~isempty(Point.Tailbase) && ~isempty(Point.LeftHindLimb) && ~isempty(Point.RightHindLimb);
@@ -212,6 +217,7 @@ function result = analyzeSession(config)
             Acts(end+1).ActName = 'rear';
             Acts(end).ActArrayRefine = double(r(:)');
             Acts(end).Category = 'builtin';
+            Acts(end).Definition = struct('zones', {{}});
         catch ME
             log('warn', 'Rear detection failed: %s', ME.message);
         end
@@ -232,6 +238,8 @@ function result = analyzeSession(config)
             Acts(end+1).ActName = actName; %#ok<AGROW>
             Acts(end).ActArrayRefine = double(mask(:)');
             Acts(end).Category = 'zone';
+            Acts(end).Definition = struct('zones', {{zoneName}}, ...
+                'bodyPart', partName);
         end
     end
 
@@ -267,6 +275,12 @@ function result = analyzeSession(config)
                     Acts(end+1).ActName = nm; %#ok<AGROW>
                     Acts(end).ActArrayRefine = double(results(nm));
                     Acts(end).Category = 'custom';
+                    actDefIdx = find(strcmp({customActs.name}, nm), 1);
+                    if ~isempty(actDefIdx)
+                        Acts(end).Definition = customActs(actDefIdx);
+                    else
+                        Acts(end).Definition = struct('zones', {{}});
+                    end
                 end
                 log('info', 'Custom acts library: %d acts from %s', ...
                     numel(names), config.acts.libraryPath);

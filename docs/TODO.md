@@ -34,6 +34,7 @@ P4 = macro-decisions / re-architecture.
 ## Analyze Session
 
 - [ ] **P2** «Min run, s» field on the Analyze config panel — currently hardcoded to `cfg.acts.minRunSeconds = 0.25` in `+sphynx/+pipeline/defaultConfig.m:45` and only changeable by editing the config file. Wire as `cfg.acts.minRunSeconds = obj.MinRunField.Value` in `runAnalyze()`.
+- [ ] **P2** Speed acts (rest / walk / locomotion) must be mutually exclusive after refine. Currently each is computed and refined independently, so a frame can satisfy refine for both rest and walk after bridge-then-drop. Discuss strategies: (a) compute on the same velocity trace with strict thresholds + pick the highest tier per frame; (b) refine all three together as a categorical 3-way assignment; (c) keep independent but enforce priority post-refine (locomotion > walk > rest). May need to expose the policy as a config knob.
 - [ ] **P2** Move `FreezingMode` / `RearMode` pickers to Define Acts (or to per-experiment defaults). They were on Analyze for convenience but conceptually they describe the act library. Defaults stay `'HeadAndCenter'` / `'TailbasePaws'` from `defaultConfig.m`.
 - [ ] **P2** Multi-bodypart trajectory: dropdown to choose which parts overlay on `GoodVideoFrame`.
 - [ ] **P2** Etogram rows grouped by category headers (built-in / custom / zone) with cluster spacing.

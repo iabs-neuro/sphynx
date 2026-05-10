@@ -969,3 +969,66 @@ Acts:                    (16pt bold)
 
 Файлы: `+sphynx/+acts/{emptyAct,buildSimpleAct,buildComplexAct}.m`, `+sphynx/+app/DefineActsTabController.m`.
 
+
+---
+
+## Analyze Session: большой batch (loader/heatmap/etogram/session/plots/overlay) (2026-05-10)
+
+**1. Loader.** Убрал Rest/Loc thresholds и `Show zone acts in etogram` чекбокс. Speed thresholds → defaults из config (1 / 5 cm/s). Чекбокс заменён на bucket order (см. ниже).
+
+**2. Heatmap.** Bins 1cm → user-controlled (default 4cm), gaussian σ=1 bin smooth, colorbar **в секундах** (frames/fps), шрифты крупнее (title 14, labels 14, ticks 13).
+
+**3. Этограмма order.** Acts сортируются:
+1. Speed: rest / walk / locomotion (синий).
+2. Spatial: corners / walls / walls_and_corners / center / middle_zone (оранжевый).
+3. Posture: freezing / rear (зелёный).
+4. Composite: всё остальное — object1/object2/.../objects + custom (фиолетовый).
+
+Внутри bucket — по имени.
+
+**4. TODO записал: speed акты должны быть взаимоисключающие после refine.**
+
+**5. Session subfolder.** Run analyze + все Render/Save теперь создают подпапку по имени видео:
+```
+<OutDir>/
+  <sessionStem>/                  (например WNOF_A30_4D)
+    <stem>_main.mp4               (Render main)
+    Acts_video/
+      <stem>_object1.mp4          (Render acts)
+      <stem>_freezing.mp4
+    bodyparts_trajectory/
+      trajectory_bodycenter.png
+      trajectory_bodycenter.fig
+    *_WorkSpace.mat               (analyzeSession если saveWorkspace)
+```
+
+**6. Bodyparts trajectory plots.** Каждый PNG/FIG теперь содержит 4 tile-а: сверху 2D траектория над GoodVideoFrame в cm, потом X(t), Y(t), likelihood(t). Все time-axes по X выровнены (linkaxes).
+
+**7. Main video — zones из активных актов.** Раньше overlay рисовал зоны preset, в которых сейчас bodycenter. Теперь: для каждого кадра берёт активные акты, ищет их `Definition.zones`, объединяет маски, отрисовывает только их. Если в кадре ни один акт с зонами не активен — никакой заливки.
+
+**8. Main video — dedup info-блок.** В Acts списке теперь нет дублирования с Speed_act / Zone:
+```
+Speed: 12.3 cm/s
+Speed_act: locomotion          ← rest/walk/locomotion из buckets
+Zone: walls, corners            ← spatial bucket активные акты
+Acts:                           ← posture + composite, без повторов
+   freezing
+   object1
+```
+
+**9. Render acts = Define Acts стиль.** Полностью идентичен Make-video preview из Define Acts: stitched active frames (только кадры где акт=1), stampCircle dots, hi-bodypart красным, event counter top-right, velocity bottom-right. Streaming через VideoWriter — без накопления в RAM.
+
+Под капотом — общий новый модуль `+sphynx/+pipeline/renderActStitched.m`. Define Acts «Render & save all videos» и Analyze «Render acts» теперь дёргают его одинаково.
+
+**Под капотом для (#7):** `analyzeSession` теперь сохраняет каждому акту поле `Definition` (zones, bodyPart). Это нужно для overlay чтобы знать какие зоны рисовать. Старые библиотеки актов работают как раньше (поле bодсаживается из defaults).
+
+**Тесты:** 12/12 PASS.
+
+**Что не тестировал live:**
+- Render main с new zone-from-acts overlay.
+- Render acts через новый streaming render (должно выглядеть как Define Acts).
+- Heatmap c colorbar в секундах + сглаживанием.
+- 4-tile bodyparts plots.
+
+Файлы: `+sphynx/+app/AnalyzeSessionTabController.m`, `+sphynx/+pipeline/{analyzeSession,renderActsVideo}.m`, `+sphynx/+pipeline/renderActStitched.m` (новый), `docs/TODO.md`.
+

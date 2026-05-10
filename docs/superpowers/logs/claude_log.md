@@ -1217,6 +1217,65 @@ I. **Pre-resolve speed_act / zones per frame** — в начале `renderActsVi
 - Heatmap с 4cm bins на реальных данных.
 
 
+### 2026-05-10 — Round 9f: Analyze Session — 9 правок batch (loader/heatmap/etogram/session/plots/overlay/refactor)
+
+После long-list юзера + 4 уточняющих вопросов запустил большой batch.
+
+**A. Loader: убраны Rest/Loc fields + ShowZoneActsCheckbox.** Speed thresholds дальше используют defaults из defaultConfig (1, 5 cm/s). Etogram filter не нужен — заменён на bucket order. Properties удалены, layout 7→5 строк.
+
+**B. Etogram bucket order.** Bucket помогает по name pattern:
+- speed: rest/walk/locomotion
+- spatial: corners/walls/walls_and_corners/center/middle_zone
+- posture: freezing/rear
+- composite: всё остальное (object1/object2/objects + custom)
+
+`sortActs(buckets, names)` сортирует акты сначала по bucket-priority (1..4), внутри bucket — по имени. Цвета per-bucket (синий/оранжевый/зелёный/фиолетовый). File-scope helpers `actBucket` и `sortActs`.
+
+**C. Heatmap polish.** Раньше было `counts` в frames + 1 cm bin без сглаживания. Теперь:
+- `secs = counts / fps` → colorbar в секундах.
+- `imgaussfilt(secs, 1)` — gaussian blur σ=1 (один bin).
+- Шрифты подняты: title 14, labels 14, ticks 13, colorbar 12+14.
+
+**D. Session subfolder.** Все save'ы идут в `<outDir>/<sessionStem>/`:
+- analyzeSession.cfg.paths.outDir (workspace .mat).
+- main video → `<sessionDir>/<stem>_main.mp4`.
+- acts videos → `<sessionDir>/Acts_video/<stem>_<actName>.mp4`.
+- bodyparts plots → `<sessionDir>/bodyparts_trajectory/`.
+
+Helpers: `obj.sessionStem()` (derive from VideoPathField), `obj.sessionDir(parent)` (mkdir if missing).
+
+**E. Bodyparts trajectory plots — полная панель.** 4 tile'а сверху вниз: 2D trajectory над GoodVideoFrame в cm, X(t), Y(t), likelihood(t). `linkaxes` для X/Y/likelihood по time. PNG + FIG, 1000×1000.
+
+**F. Main video overlay rebuild.**
+- **Zone overlay**: вместо «зоны preset, в которых сейчас bodycenter» теперь «зоны актов, активных сейчас». Pre-resolves per-frame `activeZoneMaskByFrame{f}` = union масок зон активных акт-definitions. analyzeSession теперь хранит `result.Acts(k).Definition` со всеми zones/bodyPart полями.
+- **Info-block** реструктурирован:
+  - Speed: 12.3 cm/s (18pt bold).
+  - Speed_act: rest/walk/locomotion (16pt).
+  - Zone: имена spatial-bucket акт-имён активных в кадре (16pt).
+  - Acts: posture+composite, без дублей с Speed_act/Zone (15pt).
+- Pre-compute `speedActMap{f}`, `spatialActsMap{f}` (массивы имён активных актов в каждом bucket per frame).
+
+**G. Refactor: shared streaming render.** Новый `+sphynx/+pipeline/renderActStitched.m` — standalone функция, BA-style overlay (zone tint + body dots + hi-bodypart красный + event counter + velocity), streaming через VideoWriter. Параметры: result, videoPath, outDir, actNameOrIdx + DurationSec / OutputName / PresetData / VideoOffset / ProgressDlg.
+
+File-scope helpers внутри renderActStitched (stampCircleLocal, stampNumberLocal, renderTextBitmapLocal) — копии из DefineActsTabController. Дубликат, но контейнерный.
+
+**H. Analyze Render acts → BA-style.** `renderActsVideos` теперь дёргает `sphynx.pipeline.renderActStitched` per-act (не old `renderActsVideo` с figure+text overlay). Идентичен Define Acts make-video визуально.
+
+**I. analyzeSession.m: Definition field.** Каждый Act теперь несёт `.Definition` со всеми relevant полями (zones, bodyPart). Builtin: `{'zones', {{}}}`. Zone: `{'zones', {{zoneName}}, 'bodyPart', partName}`. Custom: full act struct из loadActsSet.
+
+**Тесты:**
+- 12/12 PASS (refineActArray 7 + 3 базовых + 2 createPresetSmokeTest).
+- ?sphynx.app.AnalyzeSessionTabController parses (methods/props).
+
+**Не тестировал live:**
+- Render main video с новым zone-from-acts overlay + dedup info-block.
+- Render acts через renderActStitched.
+- Heatmap c imgaussfilt + colorbar в секундах.
+- Bodyparts plots с 4-tile panel.
+
+**TODO добавлен:** speed acts mutually exclusive after refine (P2, обсудить варианты).
+
+
 ### 2026-05-10 — Round 8e: tiny — defaults + form widening
 
 1. **`maxGapSec` default 0 → 0.25 s** (`emptyAct.m`, `buildSimpleAct.m`, `buildComplexAct.m`, `SimpleMaxGapField.Value`). Юзер сказал «дефолт для gap 0.25». Симметрично `minDurationSec=0.25`.
