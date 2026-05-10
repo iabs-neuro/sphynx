@@ -974,3 +974,46 @@ O(r²) per circle, 14 точек × N кадров — не bottleneck. Без �
 - 4/4 PASS (smoke + UI build).
 - Live в MATLAB GUI юзер должен запустить — должно открыться окошко с кадрами Object1, mouse nose в зоне Object1RealOut, без скучных простоев.
 
+
+### 2026-05-10 — Round 8c: counter overlay + velocity overlay + interpolateGaps fix
+
+Юзер дал 4 правки сразу:
+
+1. «Duration*fps может быть не целым» — формальная проверка типа. Уже было `nWin = max(1, round(durSec * fps))`, добавил явный `double(durSec) * double(fps)` каст и комментарий, чтобы было видно что мы об этом думали.
+
+2. «Счётчик актов на видео — одним числом, в углу.»
+   - В makeActVideo: после `activeFrames = find(bool)` строю `gaps = [true, diff(activeFrames(:)') > 1]; eventIds = cumsum(gaps);` — для каждого активного кадра ID непрерывного run-а.
+   - Передаю `selEventIds = eventIds(1:nTake)` в renderActFramesInMemory.
+   - В цикле рендера штампую `sprintf('%d', eventIds(i))` в top-right corner.
+   - Title implay теперь показывает «N events» в дополнение к frames/seconds.
+
+3. «Для скоростных актов — добавь скорость bodypart на видео.»
+   - В renderActFramesInMemory: `showVelocity = (act.speedMin > 0) || isfinite(act.speedMax)` && `~isempty(hiIdx)` && bps(hiIdx).VelocitySmoothed существует.
+   - Если showVelocity → штампую `sprintf('%.1f cm/s', velocityTrace(f))` в bottom-right corner.
+   - Не показываю если speed gate = (0, Inf), то есть «no speed gate» — там число бессмысленно.
+
+4. «Координаты bodyparts разлетаются по арене в начале трейса, потом сходятся к мыши.»
+   - Root cause: `interpolateGaps(...)` вызывался с дефолтом `'pchip', 'extrap'`. При leading NaNs (DLC ещё не сконвергил в первых N кадрах) pchip extrapolate-ит назад от первых good-samples с произвольным наклоном → значения улетают в очень большие/малые. Затем `analyzeSession.m:104` clamp-ит к `[1, Width]/[1, Height]` → разные части тела попадают в разные углы фрейма, что и выглядит как «scatter».
+   - Fix: переписал `+sphynx/+preprocess/interpolateGaps.m`. Старый параметр `'Extrap'` (default 'extrap') заменён на `'EdgeMode'` со значениями:
+     - `'hold'` (NEW DEFAULT): leading NaNs ← first valid value, trailing ← last valid value. Часть тела «стоит на месте» пока DLC не нашёл её.
+     - `'extrap'`: legacy поведение через interp1.
+     - `'nan'`: оставить NaN.
+   - Interior gaps всё ещё через interp1 с выбранным `'Method'` (pchip default).
+   - Все 5 unit-тестов interpolateGaps PASS (`testFillsLeadingAndTrailing` проверяет только `~any(isnan(out))` — мой fill-with-constant удовлетворяет).
+   - Никто во всём коде не передавал старый параметр `'Extrap'` — grep пустой, breaking change безопасный.
+
+**Новые file-scope helpers в DefineActsTabController.m:**
+- `stampNumberCorner(img, txt, corner)` — штампует короткий текст в один из 4 углов. Persistent cache по `(txt, fontSize)` чтобы не рендерить одно и то же дважды.
+- `renderTextBitmap(txt, fontSize)` — рисует text white-on-black через offscreen `figure('Visible','off') + text + print(fig, '-RGBImage')`, кропает по non-black bbox. Threshold > 90 для glyph mask. Без CVT-зависимостей.
+- Stamp работает по mask = sum(rgb,3)>90 → копирует только foreground пиксели в target image, фон не трогает.
+
+**Тесты:** 9/9 PASS:
+- `interpolateGapsTest` 5/5
+- `testAnyZoneSentinel` 3/3
+- `testMergeStrategies` 3/3
+- `createPresetAppSmokeTest` 2/2
+
+**Не тестировал:**
+- Live overlay в MATLAB GUI — юзер запустит. Печать через `print(fig, '-RGBImage')` в headless figure обычно работает в R2020a, но если что-то сломается, помечу в memory.
+- Поведение `'hold'` mode на реальном DLC с шумным началом — visual проверка юзером.
+

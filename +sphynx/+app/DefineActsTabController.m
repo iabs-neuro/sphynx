@@ -906,7 +906,9 @@ classdef DefineActsTabController < handle
                 end
                 bool = logical(result.Acts(rIdx).ActArrayRefine);
                 fps  = result.Options.FrameRate;
-                nWin = max(1, round(durSec * fps));
+                % durSec*fps is rarely integer (29.97 fps, fractional
+                % durations); cast explicitly to a positive integer.
+                nWin = max(1, round(double(durSec) * double(fps)));
 
                 % --- 2b. Stitch ONLY active frames (bool=1). The act is
                 %        a 0/1 timeseries over DLC frames; the player
@@ -922,6 +924,13 @@ classdef DefineActsTabController < handle
                 nTake = min(nActive, nWin);
                 selFrames = activeFrames(1:nTake);
 
+                % Event ID per active frame: 1,1,1, 2,2, 3, ... — increments
+                % each time we cross a gap between contiguous runs.
+                gaps = [true, diff(activeFrames(:)') > 1];
+                eventIds = cumsum(gaps);
+                selEventIds = eventIds(1:nTake);
+                nEvents = max(eventIds);
+
                 % Video frame index = DLC index + StartFrame offset.
                 % By default cfg.range.startFrame = 1 → offset = 0.
                 videoOffset = 0;
@@ -935,7 +944,7 @@ classdef DefineActsTabController < handle
                 dlg.Message = 'Rendering frames...';
                 frames = obj.renderActFramesInMemory( ...
                     videoPath, result, actIdx, selFrames, ...
-                    videoOffset, dlg);
+                    selEventIds, videoOffset, dlg);
                 if isempty(frames)
                     obj.applog('warn', 'No frames rendered'); return;
                 end
@@ -944,8 +953,8 @@ classdef DefineActsTabController < handle
                 hPlay = implay(frames, fps);
                 try
                     set(hPlay.Parent, 'Name', sprintf( ...
-                        'Act: %s — %d / %d active frames (%.1fs / %.1fs in session)', ...
-                        sel, nTake, nActive, nTake/fps, nActive/fps));
+                        'Act: %s — %d / %d active frames (%d events, %.1fs / %.1fs in session)', ...
+                        sel, nTake, nActive, nEvents, nTake/fps, nActive/fps));
                     set(hPlay.Parent, 'Position', [80 80 1280 960]);
                     if isprop(hPlay, 'Visual') && isprop(hPlay.Visual, 'ScaleFactor')
                         hPlay.Visual.ScaleFactor = 0.5;
@@ -953,24 +962,28 @@ classdef DefineActsTabController < handle
                 catch
                 end
                 obj.applog('info', ...
-                    'Made video (in memory): %s, stitched %d/%d active frames (%.1fs)', ...
-                    sel, nTake, nActive, nTake/fps);
+                    'Made video (in memory): %s, stitched %d/%d active frames, %d events (%.1fs)', ...
+                    sel, nTake, nActive, nEvents, nTake/fps);
             catch ME
                 obj.applog('error', 'Make-video failed: %s', ME.message);
             end
         end
 
         function frames = renderActFramesInMemory(obj, videoPath, ...
-                result, actIdx, dlcFrames, videoOffset, dlg)
+                result, actIdx, dlcFrames, eventIds, videoOffset, dlg)
             % BA-style overlay: optional zone tint (50/50 blend) +
             % per-bodypart dots; the act's bodypart drawn larger and
-            % in red so it stands out from the others.
+            % in red so it stands out from the others. The act-event
+            % counter is stamped in the bottom-right corner.
             %
             % `dlcFrames` is a vector of DLC frame indices to render
             % (typically every frame where act.bool == 1, stitched).
+            % `eventIds` is the same length — which contiguous run each
+            % rendered frame belongs to (1, 1, 1, 2, 2, 3, ...).
             % `videoOffset` shifts video reads — DLC index f maps to
             % video frame f + videoOffset (0 when cfg.range.startFrame=1).
-            if nargin < 6 || isempty(videoOffset); videoOffset = 0; end
+            if nargin < 6 || isempty(eventIds); eventIds = []; end
+            if nargin < 7 || isempty(videoOffset); videoOffset = 0; end
             reader = VideoReader(videoPath);
             cleaner = onCleanup(@() delete(reader)); %#ok<NASGU>
             H = reader.Height; W = reader.Width;
@@ -992,6 +1005,22 @@ classdef DefineActsTabController < handle
             if ~isempty(zoneMask) ...
                     && (size(zoneMask,1) ~= H || size(zoneMask,2) ~= W)
                 zoneMask = [];
+            end
+
+            % Velocity overlay: show only if the act has a real speed
+            % gate (not the default (0, Inf)) and we resolved its
+            % bodypart, so the number on screen actually corresponds to
+            % what gates the act.
+            showVelocity = false;
+            velocityTrace = [];
+            act = obj.State.acts(actIdx);
+            if ~isempty(hiIdx) && isfield(act, 'speedMin') && isfield(act, 'speedMax')
+                hasGate = (act.speedMin > 0) || isfinite(act.speedMax);
+                if hasGate && isfield(bps(hiIdx), 'VelocitySmoothed') ...
+                        && ~isempty(bps(hiIdx).VelocitySmoothed)
+                    showVelocity = true;
+                    velocityTrace = bps(hiIdx).VelocitySmoothed;
+                end
             end
 
             nFrames = numel(dlcFrames);
@@ -1028,6 +1057,22 @@ classdef DefineActsTabController < handle
                     end
                     img = stampCircle(img, xb, yb, rad, col);
                 end
+
+                % Event counter — single number, top-right corner.
+                if ~isempty(eventIds)
+                    img = stampNumberCorner(img, ...
+                        sprintf('%d', eventIds(i)), 'top-right');
+                end
+
+                % Velocity overlay for speed-gated simple acts.
+                if showVelocity && ~isempty(hiIdx) ...
+                        && f <= numel(velocityTrace) ...
+                        && isfinite(velocityTrace(f))
+                    img = stampNumberCorner(img, ...
+                        sprintf('%.1f cm/s', velocityTrace(f)), ...
+                        'bottom-right');
+                end
+
                 frames(:, :, :, i) = img;
                 if mod(i, 10) == 0 && ~isempty(dlg) && isvalid(dlg)
                     dlg.Value = i / nFrames;
@@ -1223,6 +1268,84 @@ function [runs, lengths] = findActiveRuns(bool)
     ends   = find(d == -1) - 1;
     runs = [starts(:), ends(:)];
     lengths = ends(:) - starts(:) + 1;
+end
+
+function img = stampNumberCorner(img, txt, corner)
+    % Stamp a short text label in one of the image corners.
+    % Uses a persistent cache so identical strings aren't re-rendered.
+    % Supports corners: 'top-right' (default), 'bottom-right',
+    % 'top-left', 'bottom-left'.
+    persistent cache
+    if isempty(cache); cache = containers.Map(); end
+    if nargin < 3 || isempty(corner); corner = 'top-right'; end
+    key = sprintf('%s|24', txt);
+    if isKey(cache, key)
+        bm = cache(key);
+    else
+        bm = renderTextBitmap(txt, 24);
+        cache(key) = bm;
+    end
+    if isempty(bm); return; end
+    [H, W, ~] = size(img);
+    [bh, bw, ~] = size(bm);
+    margin = 10;
+    switch corner
+        case 'bottom-right'
+            x0 = max(1, W - bw - margin);
+            y0 = max(1, H - bh - margin);
+        case 'top-left'
+            x0 = margin; y0 = margin;
+        case 'bottom-left'
+            x0 = margin; y0 = max(1, H - bh - margin);
+        otherwise % top-right
+            x0 = max(1, W - bw - margin);
+            y0 = margin;
+    end
+    x1 = min(W, x0 + bw - 1);
+    y1 = min(H, y0 + bh - 1);
+    sub = bm(1:(y1-y0+1), 1:(x1-x0+1), :);
+    % Stamp pixels brighter than threshold (text is rendered white on
+    % black, so the threshold isolates the glyph foreground).
+    gray = sum(single(sub), 3);
+    mask = gray > 90;
+    if ~any(mask(:)); return; end
+    region = img(y0:y1, x0:x1, :);
+    for c = 1:3
+        rc = region(:, :, c);
+        bc = sub(:, :, c);
+        rc(mask) = bc(mask);
+        region(:, :, c) = rc;
+    end
+    img(y0:y1, x0:x1, :) = region;
+end
+
+function bm = renderTextBitmap(txt, fontSize)
+    % Render `txt` to an RGB uint8 image via an off-screen figure and
+    % crop to the glyph bounding box. White-on-black so the caller can
+    % threshold cleanly when stamping.
+    bm = uint8([]);
+    try
+        fig = figure('Visible', 'off', 'Color', 'k', ...
+            'Units', 'pixels', 'Position', [0 0 200 max(40, fontSize+16)]);
+        ax = axes('Parent', fig, 'Position', [0 0 1 1], ...
+            'Color', 'k', 'XLim', [0 1], 'YLim', [0 1], ...
+            'XTick', [], 'YTick', [], 'Visible', 'off');
+        text(ax, 0.5, 0.5, txt, 'Color', 'w', ...
+            'FontSize', fontSize, 'FontWeight', 'bold', ...
+            'HorizontalAlignment', 'center', ...
+            'VerticalAlignment', 'middle');
+        drawnow;
+        cdata = print(fig, '-RGBImage');
+        close(fig);
+        gray = sum(single(cdata), 3);
+        rows = find(any(gray > 90, 2));
+        cols = find(any(gray > 90, 1));
+        if ~isempty(rows) && ~isempty(cols)
+            bm = cdata(min(rows):max(rows), min(cols):max(cols), :);
+        end
+    catch
+        bm = uint8([]);
+    end
 end
 
 function img = stampCircle(img, cx, cy, r, color)
