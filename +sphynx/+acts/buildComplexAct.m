@@ -8,7 +8,7 @@ function a = buildComplexAct(varargin)
         @(s) any(strcmpi(s, {'intersect', 'union', 'exclude', 'sequence'})));
     p.addParameter('SeqDelaySec', 0, @isnumeric);
     p.addParameter('MinDurationSec', 0.25, @(v) isnumeric(v) && v >= 0);
-    p.addParameter('MaxGapSec', 0, @(v) isnumeric(v) && v >= 0);
+    p.addParameter('MaxGapSec', 0.25, @(v) isnumeric(v) && v >= 0);
     parse(p, varargin{:});
 
     a = sphynx.acts.emptyAct();

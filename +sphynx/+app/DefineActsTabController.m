@@ -662,8 +662,8 @@ classdef DefineActsTabController < handle
             outer = uigridlayout(tab, [2, 2]);
             % Top row fixed shorter so Zones listbox is ~half height of
             % the bottom preview area.
-            outer.RowHeight = {210, '1x'};
-            outer.ColumnWidth = {280, '1x'};
+            outer.RowHeight = {230, '1x'};
+            outer.ColumnWidth = {360, '1x'};
             outer.RowSpacing = 6;
             outer.ColumnSpacing = 6;
             outer.Padding = [6 6 6 6];
@@ -671,10 +671,10 @@ classdef DefineActsTabController < handle
             % --- TOP-LEFT: compact form ----------------------------------
             form = uigridlayout(outer, [7, 2]);
             form.Layout.Row = 1; form.Layout.Column = 1;
-            form.RowHeight = repmat({26}, 1, 7);
-            form.ColumnWidth = {110, '1x'};
-            form.RowSpacing = 3;
-            form.ColumnSpacing = 4;
+            form.RowHeight = repmat({28}, 1, 7);
+            form.ColumnWidth = {130, '1x'};
+            form.RowSpacing = 4;
+            form.ColumnSpacing = 6;
             form.Padding = [0 0 0 0];
 
             uilabel(form, 'Text', 'Name:');
@@ -701,7 +701,7 @@ classdef DefineActsTabController < handle
 
             uilabel(form, 'Text', 'Max gap, s:');
             obj.SimpleMaxGapField = uieditfield(form, 'numeric', ...
-                'Value', 0, 'Limits', [0 600], ...
+                'Value', 0.25, 'Limits', [0 600], ...
                 'Tooltip', ['Holes inside the act shorter than this ' ...
                             'still count as part of the act (filled ' ...
                             'before the duration check). 0 = never fill.']);

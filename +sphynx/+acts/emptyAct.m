@@ -26,5 +26,5 @@ function a = emptyAct()
     %     1s before the duration check, so a fragmented event
     %     consolidates into one run. 0 disables.
     a.minDurationSec = 0.25;
-    a.maxGapSec      = 0;
+    a.maxGapSec      = 0.25;
 end

@@ -1216,3 +1216,11 @@ I. **Pre-resolve speed_act / zones per frame** — в начале `renderActsVi
 - Per-act videos сохраняются в разные файлы — нужна реальная сессия.
 - Heatmap с 4cm bins на реальных данных.
 
+
+### 2026-05-10 — Round 8e: tiny — defaults + form widening
+
+1. **`maxGapSec` default 0 → 0.25 s** (`emptyAct.m`, `buildSimpleAct.m`, `buildComplexAct.m`, `SimpleMaxGapField.Value`). Юзер сказал «дефолт для gap 0.25». Симметрично `minDurationSec=0.25`.
+2. **Simple-act form шире** — outer column 280→360px, label col 110→130, row height 26→28, spacing 3→4 / 4→6. Outer row 1 высота 210→230. «Add to library» кнопка теперь точно влезает с запасом.
+
+12/12 PASS (4 теста под this branch — interpolateGaps убран из быстрого прогона).
+

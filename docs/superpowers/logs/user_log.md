@@ -957,3 +957,15 @@ Acts:                    (16pt bold)
 - `+sphynx/+app/AnalyzeSessionTabController.m` (savePlots fix, Heatmap bin field, OutputName проброс).
 - `tests/smoke/testMergeStrategies.m` (rears → rear).
 
+
+---
+
+## Define Acts: maxGap default 0.25 + Simple-act form шире (2026-05-10)
+
+1. **`Max gap, s` default = 0.25** (как и `Min duration, s`). Раньше было 0 = не бриджит. Поправил во всех местах: `emptyAct.m`, `buildSimpleAct.m`, `buildComplexAct.m`, UI поле `SimpleMaxGapField`.
+2. **Simple-act форма шире.** Outer column 280→360 px, label-колонка 110→130 px, ряды 26→28 px высотой, spacing подняты 3→4/4→6. Кнопка «Add to library» теперь влезает с запасом.
+
+Тесты: 12/12 PASS (4 базовых).
+
+Файлы: `+sphynx/+acts/{emptyAct,buildSimpleAct,buildComplexAct}.m`, `+sphynx/+app/DefineActsTabController.m`.
+
