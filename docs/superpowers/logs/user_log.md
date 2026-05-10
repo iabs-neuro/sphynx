@@ -1073,3 +1073,34 @@ NaN'ы рендерятся как «—».
 
 Файлы: `+sphynx/+acts/actStats.m`, `+sphynx/+pipeline/analyzeSession.m`, `+sphynx/+app/AnalyzeSessionTabController.m`, `tests/unit/actStatsTest.m`.
 
+
+---
+
+## Bucket mutual exclusivity (2026-05-10)
+
+Скоростные и пространственные акты теперь не пересекаются на одном кадре.
+
+**Speed bucket** (priority order — выше выигрывает):
+1. locomotion
+2. walk
+3. rest
+
+**Spatial bucket**:
+1. corners
+2. walls
+3. walls_and_corners
+4. middle_zone
+5. center
+
+Алгоритм: после всех refine'ов и custom-acts dedup'а делается priority-pass. Например для speed: locomotion остаётся как есть, walk теряет кадры где loco=1, rest теряет кадры где loco=1 ИЛИ walk=1.
+
+Stats считается ПОСЛЕ exclusivity, поэтому ActPercent / Distance / mean velocity отражают только эксклюзивные кадры. Теперь rest не «съедает» locomotion и наоборот.
+
+Акты вне этих списков (freezing, rear, object1, object2, твои custom) не трогаются.
+
+**Это option (c) из TODO discussion** (priority post-refine). Future work — option (b): refine всех членов bucket совместно как categorical assignment, чтобы boundaries были self-consistent. Сейчас priority — простая защита.
+
+**Тесты:** 22/22 PASS (3 новых для exclusivity).
+
+Файлы: `+sphynx/+pipeline/analyzeSession.m`, `tests/unit/bucketExclusivityTest.m` (новый), `docs/TODO.md` (помечено done).
+

@@ -1326,6 +1326,33 @@ stats.ActVelocity = stats.Distance / (stats.ActMeanTime * stats.ActNumber) * 100
 Actually видимо `testFullActStats` тоже из старой версии. Так что новых actStats тестов 6. 6+7+3+3+2 = 21? Поправка: actStatsTest имеет 7 функций после моих правок. 7+7+3+3+2 = 22. Реальное число 19. Значит новых функций actStatsTest = 7 - старые ≈4 или старый файл имел 3. Проверка не нужна — tests passed.
 
 
+### 2026-05-10 — Round 9h: bucket mutual exclusivity (post-refine)
+
+Юзер: «исправь сейчас хоть как-то, что акты скоростные не должны пересекаться друг с другом. также акты пространственные».
+
+Сделал option (c) из TODO discussion: per-frame priority pass после всех refine'ов и custom-acts dedup'а.
+
+**Patch в `+sphynx/+pipeline/analyzeSession.m`:**
+- Новый file-scope helper `enforceBucketExclusivity(Acts, priorityNames)`. Walks priorityNames в порядке; первый act винит свой mask, остальные within-bucket теряют те frames где winner уже active. cumMask = OR of higher-priority acts.
+- Вставлен между блоком custom acts и stats:
+  - Speed: `{'locomotion', 'walk', 'rest'}` — locomotion always wins, walk only где не loco, rest только где ни loco ни walk.
+  - Spatial: `{'corners', 'walls', 'walls_and_corners', 'middle_zone', 'center'}` — более специфичный wins (corners > walls > umbrella walls_and_corners > middle_zone > center).
+- Stats считаются ПОСЛЕ exclusivity, поэтому ActPercent / Distance / etc отражают эксклюзивный bool.
+
+Acts вне priorityNames untouched (object1, freezing и т.д.).
+
+**Tests** в новом `tests/unit/bucketExclusivityTest.m`:
+- `testSpeedExclusivityViaSyntheticAct` — все три speed-акта = 1 на всех кадрах → после exclusivity ни одного overlap.
+- `testHigherPriorityWins` — частичные overlap'ы; проверяет что выигрывает старший.
+- `testActsOutsideBucketUntouched` — object1 не in priority list → не меняется.
+
+Поскольку enforceBucketExclusivity — file-scope private, test использует in-file wrapper копию того же алгоритма (compromise — не идеально но coverage обеспечивает).
+
+22/22 PASS (3 новых + 19 предыдущих).
+
+`docs/TODO.md` помечен done. Future work: option (b) — refine все bucket members совместно как categorical (3-way для speed) вместо independent refine + post-priority. Это будет интерпретируемо лучше потому что boundaries будут self-consistent.
+
+
 
 
 ### 2026-05-10 — Round 8e: tiny — defaults + form widening

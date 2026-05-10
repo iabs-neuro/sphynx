@@ -292,6 +292,20 @@ function result = analyzeSession(config)
         end
     end
 
+    % --- 9c. Within-bucket mutual exclusivity --------------------------------
+    % Speed acts (rest/walk/locomotion) and spatial acts (corners/walls/
+    % walls_and_corners/middle_zone/center) should not overlap on the
+    % same frame. Higher-priority acts win — lower-priority bucket
+    % mates get zeroed out in frames where any winner is already true.
+    %
+    % This is a hack pending the proper exclusive-from-the-start
+    % discussion in docs/TODO.md. Done after custom acts so a user's
+    % renamed/re-thresholded "rest" still participates in the bucket.
+    Acts = enforceBucketExclusivity(Acts, ...
+        {'locomotion', 'walk', 'rest'});
+    Acts = enforceBucketExclusivity(Acts, ...
+        {'corners', 'walls', 'walls_and_corners', 'middle_zone', 'center'});
+
     % --- 10. Stats per act ---------------------------------------------------
     centerVelocity = BodyPartsTraces(end).VelocitySmoothed; % synthetic-or-real Center
     if Point.Center <= numel(BodyPartsTraces)
@@ -337,6 +351,28 @@ function result = analyzeSession(config)
             [~, sessionName, ~] = fileparts(config.paths.dlc);
         end
         sphynx.io.saveSession(result, config.paths.outDir, sessionName);
+    end
+end
+
+function Acts = enforceBucketExclusivity(Acts, priorityNames)
+    % Walk priorityNames in order. Each act only keeps frames not
+    % already claimed by a higher-priority bucket-mate. Acts whose
+    % names aren't in priorityNames are untouched.
+    if isempty(Acts) || isempty(priorityNames); return; end
+    names = {Acts.ActName};
+    cumMask = [];
+    for k = 1:numel(priorityNames)
+        idx = find(strcmpi(names, priorityNames{k}), 1);
+        if isempty(idx); continue; end
+        a = logical(Acts(idx).ActArrayRefine(:)');
+        if isempty(cumMask)
+            cumMask = a;
+        else
+            % Only frames where no higher-priority act is active.
+            a = a & ~cumMask;
+            Acts(idx).ActArrayRefine = double(a);
+            cumMask = cumMask | a;
+        end
     end
 end
 
