@@ -47,7 +47,10 @@ function outPath = renderActStitched(result, videoPath, outDir, actNameOrIdx, va
     p.addParameter('OutputName', '', @(s) ischar(s) || isstring(s));
     p.addParameter('PresetData', [], @(s) isempty(s) || isstruct(s));
     p.addParameter('VideoOffset', 0, @isnumeric);
-    p.addParameter('ProgressDlg', [], @(d) isempty(d) || isgraphics(d));
+    % uiprogressdlg returns matlab.ui.dialog.ProgressDialog, which
+    % isgraphics() rejects in R2020a. Accept any non-empty handle and
+    % defensively use isvalid()/CancelRequested inside the loop.
+    p.addParameter('ProgressDlg', [], @(d) isempty(d) || (isscalar(d) && isvalid(d)));
     parse(p, result, videoPath, outDir, actNameOrIdx, varargin{:});
 
     % --- Resolve act ----------------------------------------------------
