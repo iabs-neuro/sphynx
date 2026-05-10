@@ -773,3 +773,34 @@ Interior gaps (внутри между good samples) всё ещё интерп�
 
 Файлы: `+sphynx/+app/DefineActsTabController.m`, `+sphynx/+preprocess/interpolateGaps.m`.
 
+
+---
+
+## Render & save all + RefineLine post-processing (2026-05-10)
+
+**Кнопка «Render & save all videos»** добавлена справа от Make video (синяя). По нажатию:
+1. Спрашивает root через `uigetdir`.
+2. Создаёт `<root>/Acts_video/` если нет.
+3. Один раз гоняет analyzeSession с твоей библиотекой.
+4. Для **каждого** акта: первые `Duration*fps` активных кадров → стримит через VideoWriter в `<sessionStem>_<actName>.mp4`. Имя акта санитизируется (пробелы/спецсимволы → underscores).
+5. Прогресс-бар с кнопкой Cancel. Если 0 активных кадров — лог skip.
+
+Память: рендер потоковый (frame-by-frame в writer), не копится в RAM. 10 актов × 5s × FullHD ≈ 100-300 МБ на диске суммарно.
+
+**RefineLine — да, теперь применяю.** Ты прав, я не делал post-processing custom-актов как в `functions/RefineLine.m`. Поправил:
+
+- Новый файл `+sphynx/+acts/refineActArray.m` — порт RefineLine с двумя проходами:
+  - Pass 1: drop runs короче `minDurationSec`.
+  - Pass 2: bridge gaps короче `minGapSec` между survivor-ами (НЕ leading/trailing zeros).
+- В struct акта появились поля `minDurationSec` (**default 0.25 s** как ты просил) и `minGapSec` (default 0 = выключено).
+- В UI Simple constructor — 2 новых поля: `Min duration, s` (0.25) и `Min gap, s` (0). Сразу под Speed max.
+- `applyAct` после расчёта boolean вызывает `refineActArray` если хоть один из параметров > 0. Конвертирует sec→frames через `ctx.frameRate`.
+
+Built-in акты (rest/walk/locomotion/freezing/rear) уже имеют свой minRunFrames внутри pipeline — их не трогал. Refine применяется только к custom-актам.
+
+Существующие библиотеки актов из старых .mat будут загружаться нормально — поле просто появится с дефолтным значением через emptyAct, и refine будет применяться. Если хочешь старое поведение «без refine» — поставь Min duration = 0 при создании акта.
+
+Тесты: 16/16 PASS (refineActArray 7 + interpolateGaps 5 + 4 базовых). Класс DefineActsTabController парсится: 68 методов.
+
+Файлы: `+sphynx/+acts/refineActArray.m` (новый), `+sphynx/+acts/emptyAct.m`, `+sphynx/+acts/buildSimpleAct.m`, `+sphynx/+acts/buildComplexAct.m`, `+sphynx/+acts/applyAct.m`, `+sphynx/+app/DefineActsTabController.m`.
+

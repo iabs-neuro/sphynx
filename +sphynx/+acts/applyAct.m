@@ -34,6 +34,20 @@ function bool = applyAct(act, ctx)
             warning('sphynx:applyAct:unknownType', ...
                 'Unknown act type "%s" for "%s"', act.type, act.name);
     end
+
+    % Post-processing: drop short runs / bridge short gaps. Mirrors
+    % legacy functions/RefineLine.m (now ported to refineActArray).
+    minDurFrames = 0;
+    minGapFrames = 0;
+    if isfield(act, 'minDurationSec') && act.minDurationSec > 0
+        minDurFrames = round(act.minDurationSec * ctx.frameRate);
+    end
+    if isfield(act, 'minGapSec') && act.minGapSec > 0
+        minGapFrames = round(act.minGapSec * ctx.frameRate);
+    end
+    if minDurFrames > 0 || minGapFrames > 0
+        bool = sphynx.acts.refineActArray(bool, minDurFrames, minGapFrames);
+    end
 end
 
 function b = applySimple(act, ctx, nFrames)

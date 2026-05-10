@@ -31,6 +31,8 @@ classdef DefineActsTabController < handle
         SimpleBodyPartDropDown
         SimpleSpeedMinField
         SimpleSpeedMaxField
+        SimpleMinDurationField
+        SimpleMinGapField
 
         % Complex constructor
         ComplexNameField
@@ -243,12 +245,14 @@ classdef DefineActsTabController < handle
             % '<any zone>' sentinel = no zone gate
             zones = zones(~strcmp(zones, '<any zone>'));
             act = sphynx.acts.buildSimpleAct( ...
-                'Name',     name, ...
-                'Zones',    zones, ...
-                'ZoneOp',   'OR', ...
-                'BodyPart', obj.SimpleBodyPartDropDown.Value, ...
-                'SpeedMin', obj.SimpleSpeedMinField.Value, ...
-                'SpeedMax', obj.SimpleSpeedMaxField.Value);
+                'Name',           name, ...
+                'Zones',          zones, ...
+                'ZoneOp',         'OR', ...
+                'BodyPart',       obj.SimpleBodyPartDropDown.Value, ...
+                'SpeedMin',       obj.SimpleSpeedMinField.Value, ...
+                'SpeedMax',       obj.SimpleSpeedMaxField.Value, ...
+                'MinDurationSec', obj.SimpleMinDurationField.Value, ...
+                'MinGapSec',      obj.SimpleMinGapField.Value);
             obj.State.acts(end+1) = act;
             obj.refreshActsListBox();
             obj.applog('info', 'Added simple act: %s (zones=%d)', name, numel(zones));
@@ -658,18 +662,18 @@ classdef DefineActsTabController < handle
             outer = uigridlayout(tab, [2, 2]);
             % Top row fixed shorter so Zones listbox is ~half height of
             % the bottom preview area.
-            outer.RowHeight = {180, '1x'};
+            outer.RowHeight = {210, '1x'};
             outer.ColumnWidth = {280, '1x'};
             outer.RowSpacing = 6;
             outer.ColumnSpacing = 6;
             outer.Padding = [6 6 6 6];
 
             % --- TOP-LEFT: compact form ----------------------------------
-            form = uigridlayout(outer, [6, 2]);
+            form = uigridlayout(outer, [7, 2]);
             form.Layout.Row = 1; form.Layout.Column = 1;
-            form.RowHeight = repmat({28}, 1, 6);
-            form.ColumnWidth = {90, '1x'};
-            form.RowSpacing = 4;
+            form.RowHeight = repmat({26}, 1, 7);
+            form.ColumnWidth = {110, '1x'};
+            form.RowSpacing = 3;
             form.ColumnSpacing = 4;
             form.Padding = [0 0 0 0];
 
@@ -681,13 +685,25 @@ classdef DefineActsTabController < handle
                 'Items', {'bodycenter', 'tailbase', 'nose', 'headcenter'}, ...
                 'Value', 'bodycenter');
 
-            uilabel(form, 'Text', 'Speed min:');
+            uilabel(form, 'Text', 'Speed min, cm/s:');
             obj.SimpleSpeedMinField = uieditfield(form, 'numeric', 'Value', 0, ...
-                'Tooltip', '0 = no lower limit (cm/s)');
+                'Tooltip', '0 = no lower limit');
 
-            uilabel(form, 'Text', 'Speed max:');
+            uilabel(form, 'Text', 'Speed max, cm/s:');
             obj.SimpleSpeedMaxField = uieditfield(form, 'numeric', 'Value', Inf, ...
-                'Tooltip', 'Inf = no upper limit (cm/s)');
+                'Tooltip', 'Inf = no upper limit');
+
+            uilabel(form, 'Text', 'Min duration, s:');
+            obj.SimpleMinDurationField = uieditfield(form, 'numeric', ...
+                'Value', 0.25, 'Limits', [0 600], ...
+                'Tooltip', ['Drop runs shorter than this (RefineLine post-' ...
+                            'processing). 0 = keep every active frame.']);
+
+            uilabel(form, 'Text', 'Min gap, s:');
+            obj.SimpleMinGapField = uieditfield(form, 'numeric', ...
+                'Value', 0, 'Limits', [0 600], ...
+                'Tooltip', ['Bridge gaps shorter than this between ' ...
+                            'surviving runs. 0 = no bridging.']);
 
             % Hidden — back-compat, always 'OR'
             obj.SimpleZoneOpDropDown = uidropdown(form, ...
@@ -727,10 +743,10 @@ classdef DefineActsTabController < handle
             obj.PreviewAxes.YDir = 'reverse';
             title(obj.PreviewAxes, 'Preview — load preset to see frame + selected zone');
 
-            mv = uigridlayout(bot, [1, 4]);
+            mv = uigridlayout(bot, [1, 5]);
             mv.Layout.Row = 2;
             mv.RowHeight = {30};
-            mv.ColumnWidth = {70, 70, '1x', 110};
+            mv.ColumnWidth = {70, 70, '1x', 110, 200};
             mv.ColumnSpacing = 6;
             mv.Padding = [0 0 0 0];
             uilabel(mv, 'Text', 'Duration:');
@@ -741,7 +757,12 @@ classdef DefineActsTabController < handle
                 'HorizontalAlignment', 'left');
             obj.MakeVideoButton = uibutton(mv, 'Text', 'Make video', ...
                 'BackgroundColor', [1.00 0.55 0.55], 'FontWeight', 'bold', ...
+                'Tooltip', 'Render selected library act in memory and open in implay', ...
                 'ButtonPushedFcn', @(~,~) obj.makeActVideo());
+            uibutton(mv, 'Text', 'Render & save all videos', ...
+                'BackgroundColor', [0.55 0.85 1.00], 'FontWeight', 'bold', ...
+                'Tooltip', 'For every act in the library, save a per-act mp4 to <root>/Acts_video/', ...
+                'ButtonPushedFcn', @(~,~) obj.renderAndSaveAllActs());
         end
 
         function onZoneSelectionChanged(obj, src)
@@ -971,113 +992,200 @@ classdef DefineActsTabController < handle
 
         function frames = renderActFramesInMemory(obj, videoPath, ...
                 result, actIdx, dlcFrames, eventIds, videoOffset, dlg)
-            % BA-style overlay: optional zone tint (50/50 blend) +
-            % per-bodypart dots; the act's bodypart drawn larger and
-            % in red so it stands out from the others. The act-event
-            % counter is stamped in the bottom-right corner.
-            %
-            % `dlcFrames` is a vector of DLC frame indices to render
-            % (typically every frame where act.bool == 1, stitched).
-            % `eventIds` is the same length — which contiguous run each
-            % rendered frame belongs to (1, 1, 1, 2, 2, 3, ...).
-            % `videoOffset` shifts video reads — DLC index f maps to
-            % video frame f + videoOffset (0 when cfg.range.startFrame=1).
+            % Build the 4D uint8 stack used by the Make-video preview.
+            % For batch rendering to disk see renderAndSaveAllActs which
+            % streams frame-by-frame to a VideoWriter.
             if nargin < 6 || isempty(eventIds); eventIds = []; end
             if nargin < 7 || isempty(videoOffset); videoOffset = 0; end
             reader = VideoReader(videoPath);
             cleaner = onCleanup(@() delete(reader)); %#ok<NASGU>
-            H = reader.Height; W = reader.Width;
-            bps = result.BodyPartsTraces;
-            nBP = numel(bps);
-            bpColors = uint8(round(lines(max(1, nBP)) * 255));
-
-            actBPName = '';
-            if isfield(obj.State.acts(actIdx), 'bodyPart')
-                actBPName = obj.State.acts(actIdx).bodyPart;
-            end
-            hiIdx = [];
-            if ~isempty(actBPName)
-                hiIdx = find(strcmpi({bps.BodyPartName}, actBPName), 1);
-            end
-            hiColor = uint8([255 0 0]);
-
-            zoneMask = obj.actZoneMaskFromPreset(obj.State.acts(actIdx));
-            if ~isempty(zoneMask) ...
-                    && (size(zoneMask,1) ~= H || size(zoneMask,2) ~= W)
-                zoneMask = [];
-            end
-
-            % Velocity overlay: show only if the act has a real speed
-            % gate (not the default (0, Inf)) and we resolved its
-            % bodypart, so the number on screen actually corresponds to
-            % what gates the act.
-            showVelocity = false;
-            velocityTrace = [];
-            act = obj.State.acts(actIdx);
-            if ~isempty(hiIdx) && isfield(act, 'speedMin') && isfield(act, 'speedMax')
-                hasGate = (act.speedMin > 0) || isfinite(act.speedMax);
-                if hasGate && isfield(bps(hiIdx), 'VelocitySmoothed') ...
-                        && ~isempty(bps(hiIdx).VelocitySmoothed)
-                    showVelocity = true;
-                    velocityTrace = bps(hiIdx).VelocitySmoothed;
-                end
-            end
-
+            ctx = obj.buildRenderContext(result, actIdx, ...
+                reader.Height, reader.Width);
             nFrames = numel(dlcFrames);
-            frames = zeros(H, W, 3, nFrames, 'uint8');
-            markSize = 5;
+            frames = zeros(reader.Height, reader.Width, 3, nFrames, 'uint8');
             for i = 1:nFrames
-                f = dlcFrames(i);            % DLC index for traces
-                vF = f + videoOffset;         % absolute video frame
+                f = dlcFrames(i);
+                vF = f + videoOffset;
                 try
                     img = read(reader, vF);
                 catch
                     continue;
                 end
-                if size(img, 3) == 1
-                    img = repmat(img, [1 1 3]);
-                end
-                if ~isempty(zoneMask)
-                    img = uint8(round( ...
-                        (single(img) + single(zoneMask) * 255) / 2));
-                end
-                for b = 1:nBP
-                    if ~isfield(bps(b), 'TraceSmoothed') ...
-                            || isempty(bps(b).TraceSmoothed); continue;
-                    end
-                    tr = bps(b).TraceSmoothed;
-                    if f > numel(tr.X); continue; end
-                    xb = tr.X(f); yb = tr.Y(f);
-                    if ~(isfinite(xb) && isfinite(yb)); continue; end
-                    isHi = ~isempty(hiIdx) && b == hiIdx;
-                    if isHi
-                        rad = markSize + 2; col = hiColor;
-                    else
-                        rad = markSize; col = bpColors(b, :);
-                    end
-                    img = stampCircle(img, xb, yb, rad, col);
-                end
-
-                % Event counter — single number, top-right corner.
-                if ~isempty(eventIds)
-                    img = stampNumberCorner(img, ...
-                        sprintf('%d', eventIds(i)), 'top-right');
-                end
-
-                % Velocity overlay for speed-gated simple acts.
-                if showVelocity && ~isempty(hiIdx) ...
-                        && f <= numel(velocityTrace) ...
-                        && isfinite(velocityTrace(f))
-                    img = stampNumberCorner(img, ...
-                        sprintf('%.1f cm/s', velocityTrace(f)), ...
-                        'bottom-right');
-                end
-
+                eId = [];
+                if ~isempty(eventIds); eId = eventIds(i); end
+                img = renderOneFrame(img, f, eId, ctx);
                 frames(:, :, :, i) = img;
                 if mod(i, 10) == 0 && ~isempty(dlg) && isvalid(dlg)
                     dlg.Value = i / nFrames;
                     dlg.Message = sprintf('Rendering %d / %d', i, nFrames);
                 end
+            end
+        end
+
+        function ctx = buildRenderContext(obj, result, actIdx, H, W)
+            % Precompute everything renderOneFrame needs: bodypart
+            % colours, the act's highlighted bodypart, the zone mask,
+            % whether to show velocity. Same struct is reused for both
+            % the in-memory preview and the on-disk batch render.
+            ctx.bps = result.BodyPartsTraces;
+            ctx.nBP = numel(ctx.bps);
+            ctx.bpColors = uint8(round(lines(max(1, ctx.nBP)) * 255));
+            ctx.hiColor = uint8([255 0 0]);
+            ctx.markSize = 5;
+
+            actBPName = '';
+            if isfield(obj.State.acts(actIdx), 'bodyPart')
+                actBPName = obj.State.acts(actIdx).bodyPart;
+            end
+            ctx.hiIdx = [];
+            if ~isempty(actBPName)
+                ctx.hiIdx = find(strcmpi({ctx.bps.BodyPartName}, actBPName), 1);
+            end
+
+            zoneMask = obj.actZoneMaskFromPreset(obj.State.acts(actIdx));
+            if ~isempty(zoneMask) && (size(zoneMask,1) ~= H || size(zoneMask,2) ~= W)
+                zoneMask = [];
+            end
+            ctx.zoneMask = zoneMask;
+
+            ctx.showVelocity = false;
+            ctx.velocityTrace = [];
+            act = obj.State.acts(actIdx);
+            if ~isempty(ctx.hiIdx) && isfield(act, 'speedMin') && isfield(act, 'speedMax')
+                hasGate = (act.speedMin > 0) || isfinite(act.speedMax);
+                if hasGate && isfield(ctx.bps(ctx.hiIdx), 'VelocitySmoothed') ...
+                        && ~isempty(ctx.bps(ctx.hiIdx).VelocitySmoothed)
+                    ctx.showVelocity = true;
+                    ctx.velocityTrace = ctx.bps(ctx.hiIdx).VelocitySmoothed;
+                end
+            end
+        end
+
+        function renderAndSaveAllActs(obj)
+            % For every act in the library, stitch its active frames and
+            % stream them to a per-act .mp4 under <root>/Acts_video/.
+            % Streaming (no in-memory 4D stack) so a 10-act run doesn't
+            % balloon to 10 * H * W * 3 * nFrames bytes.
+            if isempty(obj.State.acts)
+                obj.applog('warn', 'Library is empty — nothing to render');
+                return;
+            end
+            presetPath = obj.PresetPathField.Value;
+            videoPath  = obj.VideoPathField.Value;
+            if isempty(presetPath) || ~isfile(presetPath)
+                obj.applog('warn', 'Load preset first'); return;
+            end
+            if isempty(videoPath) || ~isfile(videoPath)
+                obj.applog('warn', 'Load video first'); return;
+            end
+            dlcPath = obj.DLCPathField.Value;
+            if isempty(dlcPath) || ~isfile(dlcPath)
+                dlcPath = obj.findDLCPath(presetPath, videoPath);
+            end
+            if isempty(dlcPath) || ~isfile(dlcPath)
+                obj.applog('error', 'No DLC csv — load one explicitly'); return;
+            end
+
+            startDir = obj.resourceStartDir();
+            root = uigetdir(startDir, 'Pick output root (Acts_video/ will be created inside)');
+            obj.restoreFocus();
+            if isequal(root, 0); return; end
+            outDir = fullfile(root, 'Acts_video');
+            if ~isfolder(outDir); mkdir(outDir); end
+
+            durSec = obj.MakeVideoDurationField.Value;
+            [~, sessionStem] = fileparts(videoPath);
+
+            dlg = uiprogressdlg(obj.ParentApp.Figure, ...
+                'Title', 'Render & save all acts', ...
+                'Message', 'Preprocessing tracks...', ...
+                'Indeterminate', 'on', 'Cancelable', 'on');
+            cleaner = onCleanup(@() closeIfValid(dlg)); %#ok<NASGU>
+
+            try
+                tmpLib = [tempname '.mat'];
+                sphynx.io.saveActsSet(tmpLib, obj.State.acts, '');
+                cleanLib = onCleanup(@() deleteIfExists(tmpLib)); %#ok<NASGU>
+
+                cfg = sphynx.pipeline.defaultConfig();
+                cfg.paths.dlc    = dlcPath;
+                cfg.paths.preset = presetPath;
+                cfg.paths.outDir = tempdir;
+                cfg.acts.libraryPath = tmpLib;
+                cfg.viz.headless = true;
+                cfg.io.saveWorkspace = false;
+                result = sphynx.pipeline.analyzeSession(cfg);
+
+                fps = result.Options.FrameRate;
+                nWin = max(1, round(double(durSec) * double(fps)));
+                videoOffset = 0;
+                try; videoOffset = result.config.range.startFrame - 1; catch; end
+
+                reader = VideoReader(videoPath);
+                cleanerR = onCleanup(@() delete(reader)); %#ok<NASGU>
+                H = reader.Height; W = reader.Width;
+
+                nActs = numel(obj.State.acts);
+                saved = 0;
+                for k = 1:nActs
+                    if dlg.CancelRequested
+                        obj.applog('info', 'Render-all cancelled at act %d/%d', k, nActs);
+                        break;
+                    end
+                    actName = obj.State.acts(k).name;
+                    rIdx = find(strcmp({result.Acts.ActName}, actName), 1);
+                    if isempty(rIdx)
+                        obj.applog('warn', 'Act "%s" missing in result, skip', actName);
+                        continue;
+                    end
+                    bool = logical(result.Acts(rIdx).ActArrayRefine);
+                    activeFrames = find(bool);
+                    if isempty(activeFrames)
+                        obj.applog('info', '"%s" — 0 active frames, skip', actName);
+                        continue;
+                    end
+                    nTake = min(numel(activeFrames), nWin);
+                    selFrames = activeFrames(1:nTake);
+                    gaps = [true, diff(activeFrames(:)') > 1];
+                    eventIds = cumsum(gaps);
+                    selEventIds = eventIds(1:nTake);
+
+                    ctx = obj.buildRenderContext(result, k, H, W);
+
+                    safe = matlab.lang.makeValidName(actName);
+                    outPath = fullfile(outDir, sprintf('%s_%s.mp4', sessionStem, safe));
+                    writer = VideoWriter(outPath, 'MPEG-4');
+                    writer.FrameRate = fps;
+                    open(writer);
+                    cleanerW = onCleanup(@() closeWriter(writer)); %#ok<NASGU>
+
+                    dlg.Indeterminate = 'off';
+                    for i = 1:nTake
+                        if dlg.CancelRequested; break; end
+                        f = selFrames(i);
+                        vF = f + videoOffset;
+                        try
+                            img = read(reader, vF);
+                        catch
+                            continue;
+                        end
+                        img = renderOneFrame(img, f, selEventIds(i), ctx);
+                        writeVideo(writer, img);
+                        if mod(i, 10) == 0
+                            dlg.Value = ((k - 1) + i / nTake) / nActs;
+                            dlg.Message = sprintf( ...
+                                'Act %d/%d "%s": frame %d/%d', ...
+                                k, nActs, actName, i, nTake);
+                        end
+                    end
+                    clear cleanerW;  % closes writer
+                    saved = saved + 1;
+                    obj.applog('info', '"%s" -> %s (%d frames)', actName, outPath, nTake);
+                end
+                obj.applog('info', 'Render-all done: %d / %d acts saved -> %s', ...
+                    saved, nActs, outDir);
+            catch ME
+                obj.applog('error', 'Render-all failed: %s', ME.message);
             end
         end
 
@@ -1268,6 +1376,54 @@ function [runs, lengths] = findActiveRuns(bool)
     ends   = find(d == -1) - 1;
     runs = [starts(:), ends(:)];
     lengths = ends(:) - starts(:) + 1;
+end
+
+function img = renderOneFrame(img, f, eventId, ctx)
+    % Apply BA-style overlays to a single source frame:
+    %   * zone tint (50/50 blend) where the act has zones,
+    %   * filled circle at every body part (lines colormap), the
+    %     act's bodypart drawn in red and slightly larger,
+    %   * event-counter in the top-right corner,
+    %   * velocity readout in the bottom-right corner for speed-gated
+    %     acts.
+    if size(img, 3) == 1
+        img = repmat(img, [1 1 3]);
+    end
+    if ~isempty(ctx.zoneMask)
+        img = uint8(round((single(img) + single(ctx.zoneMask) * 255) / 2));
+    end
+    for b = 1:ctx.nBP
+        bp = ctx.bps(b);
+        if ~isfield(bp, 'TraceSmoothed') || isempty(bp.TraceSmoothed)
+            continue;
+        end
+        tr = bp.TraceSmoothed;
+        if f > numel(tr.X); continue; end
+        xb = tr.X(f); yb = tr.Y(f);
+        if ~(isfinite(xb) && isfinite(yb)); continue; end
+        isHi = ~isempty(ctx.hiIdx) && b == ctx.hiIdx;
+        if isHi
+            rad = ctx.markSize + 2; col = ctx.hiColor;
+        else
+            rad = ctx.markSize; col = ctx.bpColors(b, :);
+        end
+        img = stampCircle(img, xb, yb, rad, col);
+    end
+    if ~isempty(eventId)
+        img = stampNumberCorner(img, sprintf('%d', eventId), 'top-right');
+    end
+    if ctx.showVelocity && f <= numel(ctx.velocityTrace) ...
+            && isfinite(ctx.velocityTrace(f))
+        img = stampNumberCorner(img, ...
+            sprintf('%.1f cm/s', ctx.velocityTrace(f)), 'bottom-right');
+    end
+end
+
+function closeWriter(w)
+    try
+        if isvalid(w); close(w); end
+    catch
+    end
 end
 
 function img = stampNumberCorner(img, txt, corner)

@@ -1017,3 +1017,43 @@ O(r²) per circle, 14 точек × N кадров — не bottleneck. Без �
 - Live overlay в MATLAB GUI — юзер запустит. Печать через `print(fig, '-RGBImage')` в headless figure обычно работает в R2020a, но если что-то сломается, помечу в memory.
 - Поведение `'hold'` mode на реальном DLC с шумным началом — visual проверка юзером.
 
+
+### 2026-05-10 — Round 8d: Render & save all + RefineLine port
+
+Юзер дал 2 правки сразу:
+1. Кнопка «Render & save all videos» рядом с Make video. На клик: uigetdir → собрать `Acts_video/` под root, отрендерить и сохранить mp4 для КАЖДОГО акта в библиотеке.
+2. Применить ли я RefineLine-семантику (минимальное время акта = 0.25с)? — Не применял. Добавить опцию при создании simple-акта.
+
+**Render & save all:**
+- Рефактор: вынес render-context в `buildRenderContext(result, actIdx, H, W)` (бодипарты, цвета, hiIdx, zoneMask, showVelocity/velocityTrace), и per-frame stamping в file-scope helper `renderOneFrame(img, f, eventId, ctx)`.
+- `renderActFramesInMemory` теперь использует ctx + renderOneFrame (накапливает в 4D uint8 для implay preview).
+- Новый метод `renderAndSaveAllActs`:
+  1. Валидация preset/video/DLC/library.
+  2. `uigetdir(resourceStartDir(), ...)` → `<root>/Acts_video/` (mkdir if missing).
+  3. ОДИН `analyzeSession` с tmp library = вся State.acts → `result` со всеми актами обработанными.
+  4. Loop по `obj.State.acts(k)`: ищет в `result.Acts` по имени, делает `find(bool)`, берёт первые `nWin = duration*fps`, считает `eventIds`, **streamит** через `renderOneFrame → writeVideo` (НЕ накапливает 4D в памяти — иначе 10 актов × 5s × HD = ~9 GB).
+  5. Имя файла: `<sessionStem>_<actName>.mp4`, имя санитизировано через `matlab.lang.makeValidName`.
+  6. Прогресс-бар с `Cancelable='on'`. Обновляется на стыках actов и каждые 10 кадров внутри.
+  7. closeWriter cleanup через `onCleanup(@() closeWriter(writer))`.
+- Кнопка `Render & save all videos` (синяя, `[0.55 0.85 1.00]`) добавлена в строку Make video. Layout `mv` расширен с [1,4] до [1,5]: Duration / 5 / s / Make video / Render & save all.
+
+**RefineLine (`functions/RefineLine.m`) port:**
+- Прочитал legacy: 2 прохода. Pass 1 — drop runs of 1s shorter than `min_frame1`. Pass 2 — bridge gaps of 0s shorter than `minframe0` between surviving runs (но НЕ leading/trailing edges).
+- Новый файл `+sphynx/+acts/refineActArray.m` с двумя проходами через мою run-length encoding `rle()` helper. Edge-case handling: leading/trailing gaps НЕ бриджатся (это session-start/end, не inter-event).
+- Schema: добавил `minDurationSec=0.25` (default по запросу юзера) и `minGapSec=0` в `+sphynx/+acts/emptyAct.m` / `buildSimpleAct.m` / `buildComplexAct.m` (через 'MinDurationSec' / 'MinGapSec' name-value).
+- В `applyAct`: после switch/case вызываю refineActArray если minDurationSec > 0 OR minGapSec > 0. Конвертация sec→frames через `ctx.frameRate`.
+- UI в DefineActs Simple constructor: 2 новых поля `Min duration, s` (default 0.25) и `Min gap, s` (default 0). 6 рядов формы → 7 рядов. ColumnWidth 90 → 110px (под label «Min duration, s:»). RowHeight 28 → 26 (компактнее). outer.RowHeight `{180,'1x'}` → `{210,'1x'}` чтобы влезли 7 рядов.
+- `addSimpleAct` теперь передаёт `MinDurationSec` и `MinGapSec` в `buildSimpleAct`.
+- Новые props: `SimpleMinDurationField`, `SimpleMinGapField`.
+
+**Тесты:**
+- Новый `tests/unit/refineActArrayTest.m` — 7 кейсов: zero params, drop-short-runs, keep-exact-min, bridge-short-gap, NO-bridge-leading-zeros, last-frame-touching-run, empty-input.
+- 16/16 PASS на полном прогоне (refineActArray 7 + interpolateGaps 5 + testAnyZone 3 + testMerge 3 + createPresetSmoke 2). Methods=68 (+2: renderAndSaveAllActs + buildRenderContext).
+
+**Decisions on the fly:**
+- Default `minDurationSec = 0.25` (по запросу). `minGapSec = 0` дефолт — юзер про gaps не упоминал, добавил «на всякий случай» с дефолтом-disabled.
+- Сделал refineActArray standalone в `+sphynx/+acts/`, не file-scope helper в applyAct — потому что (а) тестируется отдельно, (б) можно использовать из других мест если понадобится.
+- НЕ применил refineActArray к built-in actам (rest/walk/locomotion/freezing/rear) — у них уже есть minRunFrames внутри `speedActs`/`freezing`/`rear`. Для custom acts (через applyAct) — да.
+- closeWriter helper в file-scope потому что VideoWriter close внутри try/catch внутри onCleanup — лучше отдельной функцией.
+- Per-act rendering streams to disk → memory bound = 1 frame at a time. Для 10 актов × 5s × FullHD = ~310 МБ временно (накапливается в 4D но мы стримим), на диск ~100-300 МБ суммарно (mp4 со сжатием).
+
