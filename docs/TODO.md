@@ -33,6 +33,8 @@ P4 = macro-decisions / re-architecture.
 
 ## Analyze Session
 
+- [ ] **P2** «Min run, s» field on the Analyze config panel — currently hardcoded to `cfg.acts.minRunSeconds = 0.25` in `+sphynx/+pipeline/defaultConfig.m:45` and only changeable by editing the config file. Wire as `cfg.acts.minRunSeconds = obj.MinRunField.Value` in `runAnalyze()`.
+- [ ] **P2** Move `FreezingMode` / `RearMode` pickers to Define Acts (or to per-experiment defaults). They were on Analyze for convenience but conceptually they describe the act library. Defaults stay `'HeadAndCenter'` / `'TailbasePaws'` from `defaultConfig.m`.
 - [ ] **P2** Multi-bodypart trajectory: dropdown to choose which parts overlay on `GoodVideoFrame`.
 - [ ] **P2** Etogram rows grouped by category headers (built-in / custom / zone) with cluster spacing.
 - [ ] **P3** Customizable speed-vs-time plot: act-bands as background patches (rest/walk/locomotion).

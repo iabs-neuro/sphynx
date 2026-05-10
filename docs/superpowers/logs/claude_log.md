@@ -1057,3 +1057,66 @@ O(r²) per circle, 14 точек × N кадров — не bottleneck. Без �
 - closeWriter helper в file-scope потому что VideoWriter close внутри try/catch внутри onCleanup — лучше отдельной функцией.
 - Per-act rendering streams to disk → memory bound = 1 frame at a time. Для 10 актов × 5s × FullHD = ~310 МБ временно (накапливается в 4D но мы стримим), на диск ~100-300 МБ суммарно (mp4 со сжатием).
 
+
+### 2026-05-10 — Round 9b: Analyze Session loader restructure + Options panel
+
+Юзер дал серию правок Analyze Session:
+1. Loader-блок как на других вкладках (Define Acts pattern): горизонтальные кнопки + path-боксы.
+2. FreezingMode/RearMode дефолты — `'HeadAndCenter'` / `'TailbasePaws'` (verified в `defaultConfig.m:46-47`). Юзер хочет убрать эти дропдауны с Analyze tab → перенести в Define Acts (TODO).
+3. Options для рендера — должны быть и в Batch, через save analysis_settings .mat:
+   - **Main video**: render checkbox / start s / duration s / trajectory / velocity / current acts list / current zones.
+   - **Acts videos**: multi-select акты + duration.
+   - **Plot bodyparts trajectory**: один чекбокс (PNG+FIG как в Preprocess Tracking).
+4. Min run, s — в TODO.
+
+**Что сделано:**
+
+A. **TODOs** — добавил в `docs/TODO.md` Min-run-field и FreezingMode/RearMode-on-DefineActs.
+
+B. **Loader rewrite** — `buildLeftConfig` целиком переписан. Старый 16x2 grid → 7 строк по семантике: loader strip / speed-thresholds / etogram-checkbox / Options panel / settings-row / run-row / log.
+- Loader: `uigridlayout(2, 6)` — 6 кнопок (Root | Preset | Video | DLC | Out dir | Acts lib) + 6 editable path-полей. Mirrors Define Acts.
+- inheritRootFromParentApp / resourceStartDir helpers — copy-paste из Define Acts.
+- pickPath расширен `'Root'` case + переименованы targets `*PathField`.
+
+C. **FreezingMode dropdown удалён** — `runAnalyze` больше не выставляет `cfg.acts.freezingMode`, юзит default из `defaultConfig.m`.
+
+D. **Options panel** (`buildOptionsPanel`):
+- 3 секции в `uipanel`: Main video / Acts videos / Plot bodyparts.
+- Main video: 4x4 grid с 7 контролами (Render checkbox spanning, Start/Duration в ряду, 4 feature checkboxes).
+- Acts videos: multi-select listbox + duration row. Listbox обновляется в `refreshActsVideoListBox()` после `runAnalyze`.
+- Plot bodyparts: одиночный checkbox.
+
+E. **Settings save/load** — `Save settings` / `Load settings` кнопки. `collectSettings()` собирает в struct `restThresholdCmS / locThresholdCmS / mainVideo / actsVideo / plotBodyparts`. `applySettings(s)` валидирует и пишет обратно в UI. Defensive `isfield` проверки чтобы старые/частичные .mat не валили.
+
+F. **Render run row** — 4 кнопки: Run analyze / Render main / Render acts / Save plots.
+- `renderMainVideo`: считает start/duration в frames, дёргает `renderActsVideo` с `Range` и `Features` (новый параметр).
+- `renderActsVideos`: для каждого выбранного акта — find активные кадры → `renderActsVideo` с тем же `Range = [first, last]` для этого окна. Сохраняет в `<outDir>/Acts_video/<sessionStem>_<actName>.mp4`.
+- `savePlots`: дёргает `sphynx.preprocess.exportTracks(BodyPartsTraces, struct('plotsDir', ...))` → PNG+FIG per bodypart.
+
+G. **`+sphynx/+pipeline/renderActsVideo.m` extension** — новый параметр `'Features'` struct с полями:
+- `trajectory` (boolean) — bodycenter trail от range(1) до текущего frame.
+- `velocity` (boolean) — текущая скорость в top-right corner.
+- `actsList` (boolean) — vertical стек labels active acts в top-left + bottom timeline.
+- `zones` (boolean) — fill зоны в которых сейчас bodycenter (полупрозрачно).
+
+`Overlay`-параметр (legacy) теперь backward-compat: `'minimal'` → все features=false, `'full'` → defaults (true). Explicit `Features` struct overrides.
+
+`mergeStruct` file-scope helper.
+
+**Тесты:**
+- `?sphynx.app.AnalyzeSessionTabController` парсится: 68 методов (новые: collectMainVideoFeatures, renderMainVideo, renderActsVideos, savePlots, saveSettings/loadSettings, collectSettings/applySettings, buildLoaderStrip/Speed/Etogram/Options/Settings/Run, refreshActsVideoListBox, inheritRoot, resourceStartDir).
+- 16/16 PASS на полном прогоне (refineActArray 7 + interpolateGaps 5 + 4 базовых).
+- `createPresetAppSmokeTest` PASS — full UI tree builds, включая мою перестроенную панель.
+
+**Не тестировал live:**
+- Реальный Run analyze + Render main с Features-checkbox-ами — юзер запустит, проверит что zones/trajectory/velocity/actsList реально toggleable.
+- Save/Load settings — round-trip.
+- Bodyparts plots сохраняются — нужен реальный `exportTracks` вызов с непустым `BodyPartsTraces`.
+
+**Decisions:**
+- В `renderActsVideos` использую тот же `renderActsVideo` (with Range), не отдельный per-act stream. Чуть медленнее (figure+getframe per frame), но не дублирует код. Если будет узкое — порту in-memory streaming подход из Define Acts.
+- Зоны в overlay показывают «текущую зону» (где сейчас bodycenter), не все. Юзер сказал «отрисовывать ли зоны, в которой сейчас животное».
+- Velocity рендерится через `text(...)` а не через мой stampNumberCorner — потому что renderActsVideo использует figure+getframe, и `text` element там естественнее.
+- ActsList tied к bottom timeline — оба «информационные» элементы про acts. Если юзеру понадобится разделить, добавлю отдельный flag.
+- Save settings сохраняет ТОЛЬКО опции (не пути) — для batch reuse. Пути сессион-специфичны.
+

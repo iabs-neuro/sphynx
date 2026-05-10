@@ -804,3 +804,61 @@ Built-in акты (rest/walk/locomotion/freezing/rear) уже имеют сво�
 
 Файлы: `+sphynx/+acts/refineActArray.m` (новый), `+sphynx/+acts/emptyAct.m`, `+sphynx/+acts/buildSimpleAct.m`, `+sphynx/+acts/buildComplexAct.m`, `+sphynx/+acts/applyAct.m`, `+sphynx/+app/DefineActsTabController.m`.
 
+
+---
+
+## Analyze Session: loader как на других вкладках + Options panel (2026-05-10)
+
+**Дефолты режимов** — проверил, всё совпадает с тем, что ты ожидал:
+- `FreezingMode = 'HeadAndCenter'` ✓ (`+sphynx/+pipeline/defaultConfig.m:46`)
+- `RearMode = 'TailbasePaws'` ✓ (`defaultConfig.m:47`)
+
+Поэтому FreezingMode дропдаун с Analyze убрал — используется default. В TODO записал, что эти режимы должны жить на Define Acts (вместе с per-experiment defaults).
+
+**Min run, s** — в TODO записал (P2). Сейчас `cfg.acts.minRunSeconds = 0.25` глобально из defaultConfig, не выведено в UI. Когда добавлю — будет поле рядом со Speed thresholds.
+
+**Loader блок** — переделал как на Define Acts:
+- Сверху горизонтальный ряд из 6 кнопок: **Root | Preset | Video | DLC | Out dir | Acts lib**.
+- Под ними 6 editable text-полей с путями.
+- Root auto-pull из `app.State.projectRoot` (как на других вкладках).
+- pickPath открывает соответствующий dialog, заполняет поле.
+
+**Speed thresholds** — оставил отдельной строкой (Rest cm/s, Locomotion cm/s).
+
+**Options panel** — три секции внутри `uipanel`:
+
+1. **Main video**:
+   - `[ ] Render` checkbox (включает рендер).
+   - `Start, s: [0]` / `Duration, s: [30]`.
+   - 4 чекбокса: Trajectory / Velocity / Active acts list / Current zones.
+
+2. **Acts videos (per-act)**:
+   - Multi-select listbox с актами (заполняется после Run analyze).
+   - `Duration, s: [5]`.
+
+3. **Plot bodyparts trajectory**:
+   - `[ ] Save bodyparts trajectory (PNG + FIG)` чекбокс. Сохраняет per-bodypart как в Preprocess Tracking (через `exportTracks`).
+
+**Save / Load settings** — две кнопки. Сохраняет опции (без путей — пути сессион-специфичны) в `.mat`. Можно настроить на одной сессии → сохранить → загрузить в Batch.
+
+**Run row** (под Options) — 4 кнопки:
+- `Run analyze` (красная) — запускает pipeline.
+- `Render main` — рендерит main video по опциям из Options panel.
+- `Render acts` — рендерит выбранные в listbox акты в `<outDir>/Acts_video/`.
+- `Save plots` — bodyparts trajectory PNG+FIG.
+
+**Под капотом:** `+sphynx/+pipeline/renderActsVideo.m` расширил параметром `'Features'` (struct с полями trajectory/velocity/actsList/zones). Дефолты — все true (= старый `'full'` Overlay). `'minimal'` Overlay сейчас → все false. Каждый чекбокс из Options panel напрямую транслируется в Features struct.
+
+**Тесты:** 16/16 PASS, `?sphynx.app.AnalyzeSessionTabController` — 68 методов. UI build не падает.
+
+**Что НЕ тестировал live:**
+- Реальный Run analyze → Render main с разными комбинациями галочек. Запусти и проверь:
+  - Zones overlay должен подсвечивать ту зону, где сейчас bodycenter.
+  - Trajectory должен показывать trail от Start кадра до текущего.
+  - Velocity — число в top-right.
+  - Active acts list — vertical list в top-left.
+- Save settings → Load settings round-trip.
+- Save plots — нужен `exportTracks` с непустым result.
+
+Файлы: `+sphynx/+app/AnalyzeSessionTabController.m` (большой рефактор), `+sphynx/+pipeline/renderActsVideo.m` (Features parameter), `docs/TODO.md` (Min run + freezing/rear перенос).
+
