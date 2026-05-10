@@ -1104,3 +1104,73 @@ Stats считается ПОСЛЕ exclusivity, поэтому ActPercent / Dis
 
 Файлы: `+sphynx/+pipeline/analyzeSession.m`, `tests/unit/bucketExclusivityTest.m` (новый), `docs/TODO.md` (помечено done).
 
+
+---
+
+## Про `_PreprocessSettings.mat` в Analyze (2026-05-10)
+
+Ответ на твой вопрос: в Analyze Session **per-session** `<stem>_Preprocessed.mat` (готовые сглаженные траектории, которые пишет Preprocess tab) **загружается автоматически** через `tryLoadPrepared` в `analyzeSession.m`. Если он лежит рядом с DLC csv — берутся готовые traces, шаги clean/interp/smooth пропускаются.
+
+Файл `<exp>_PreprocessSettings.mat` (per-experiment thresholds) **в Analyze не читается** — эти настройки уже применены при создании `_Preprocessed.mat` на Preprocess tab. Если `_Preprocessed.mat` нет — Analyze применяет дефолты из `defaultConfig.m`.
+
+В Batch (см. ниже) ты можешь явно подгрузить `_PreprocessSettings.mat` отдельной кнопкой — он там будет принят как hint, что обработка уже прогонена.
+
+
+---
+
+## Batch Analysis: полный rewrite (2026-05-10)
+
+Layout (как ты просил):
+
+**Loader строка 1 — папки:**
+- Root | DLC dir | Video dir | Preset dir | Out dir
+- Под кнопками — editable text-поля. При смене DLC/Video/Preset dir сессии автопересобираются.
+
+**Loader строка 2 — файлы настроек:**
+- Preproc settings | Acts library | Analysis settings
+- Под кнопками — editable text-поля.
+
+**Auto-pairing.** При выборе DLC dir сканируется папка на `*.csv`. Для каждого файла:
+1. Извлекается **session ID** = всё до подстроки `DLC` в имени файла. Для `WNOF_A01_1DDLC_resnet152_...csv` → `WNOF_A01_1D`.
+2. Ищется видео в Video dir: `<id>.mp4` → `.avi` → `.mov` → `.mkv` или (fallback) первое `<id>*` в папке.
+3. Ищется preset в Preset dir: `<id>_Preset.mat` → `<id>.mat` → fallback `<id>*.mat`.
+
+В шапке listbox: «Sessions: 12 found, 8 full triples, 4 incomplete». Listbox показывает каждую сессию с тегом статуса: `WNOF_A01_1D [full]` / `WNOF_A02_1D [no-video]` / etc. По дефолту все выделены — можно снять галку с проблемных или вручную.
+
+**Options panel** — те же опции что в Analyze Session:
+- Main video (Render checkbox / Start s / Duration s / Trajectory / Velocity / Active acts list / Current zones).
+- Acts videos (multi-select listbox + Duration). Listbox заполняется ИЗ загруженной библиотеки актов — выбрал лимbrary → имена актов сразу появляются.
+- Save bodyparts trajectory (PNG+FIG).
+- Heatmap bin, cm.
+
+**Save settings / Load settings** — те же опции что Save settings в Analyze. Можно настроить на одной сессии (в Analyze) → сохранить → в Batch нажать Load settings → все toggles + numeric поля заполнятся. Можно дальше править руками. Также если выбрать `Analysis settings` в loader-row 2, autoload триггерится через ValueChangedFcn.
+
+**Run + aggregate toggles:**
+- `Save per-session .mat` (default ON).
+- `Build aggregate tables` (default ON).
+- Run batch / Save tables CSV — две кнопки.
+
+**Run batch:**
+1. Из listbox берутся выделенные сессии со статусом `full`.
+2. Для каждой:
+   - Создаётся `<outDir>/<sessionId>/` (как в Analyze).
+   - `analyzeSession(cfg)` с DLC + preset + acts library из loader-row 2 → результат.
+   - Если `Render` (main video) — `renderActsVideo` с `_main.mp4` именем.
+   - Если выбраны акты — `renderActStitched` per-act в `Acts_video/`.
+   - Если bodyparts checkbox — 4-tile plots в `bodyparts_trajectory/`.
+   - Aggregate row добавляется в tidy table.
+3. После всех сессий — собирается tidy + wide. Tidy теперь имеет 10 колонок: session / act / percent / duration_s / count / mean_dur_s / **mean_v_cm_s** / **distance_cm** / **first_start_s** / **first_end_s**.
+
+**Прогресс-бар** с Cancel — можно остановить на любой сессии.
+
+**Тесты:** 22/22 PASS. Класс парсится.
+
+**Не тестировано live:**
+- Auto-pairing на твоей структуре `WNOF/BehaviorData/{2_Combined, 3_DLC, 4_Preset}` — должно матчиться по session-id-prefix.
+- Run batch на нескольких сессиях.
+- Save/Load settings round-trip.
+
+**Замечание:** `<exp>_PreprocessSettings.mat` в Batch сейчас только **сохраняется** в loader-row 2, но не используется в analyzeSession (как и в Analyze tab). Per-session `<stem>_Preprocessed.mat` подхватываются автоматически если лежат рядом с DLC csv.
+
+Файл: `+sphynx/+app/BatchAnalysisTabController.m` (полный rewrite, ~600 строк).
+

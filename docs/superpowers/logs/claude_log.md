@@ -1326,6 +1326,53 @@ stats.ActVelocity = stats.Distance / (stats.ActMeanTime * stats.ActNumber) * 100
 Actually видимо `testFullActStats` тоже из старой версии. Так что новых actStats тестов 6. 6+7+3+3+2 = 21? Поправка: actStatsTest имеет 7 функций после моих правок. 7+7+3+3+2 = 22. Реальное число 19. Значит новых функций actStatsTest = 7 - старые ≈4 или старый файл имел 3. Проверка не нужна — tests passed.
 
 
+### 2026-05-10 — Round 10: Batch tab full rewrite
+
+Юзер: «перейдем дальше в batch» + ответы:
+1. Loader как другие табы, с Root + DLC + video + preset + out.
+2. Auto-pair по session-id prefix (всё до 'DLC' в csv-имени).
+3. Loader row 1 = папки, row 2 = setting files (preprocess settings / acts library / analysis settings).
+4. Per-session subfolder.
+5. Options как в Analyze, можно подгрузить из analysis_settings.mat и переопределить вручную.
+
+**Полностью переписал `+sphynx/+app/BatchAnalysisTabController.m`** (~600 строк).
+
+**Главные изменения:**
+- Removed: «+ Session / Remove / Clear» кнопки и manual sessions struct array (с DLC+preset парами).
+- Added: 5+3 button loader strips, auto-pairing scan, options panel (mirror Analyze), settings save/load.
+- Sessions listbox теперь read-only display: каждая строка `<id> [status]` где status ∈ {full, no-video, no-preset, no-both}. Multi-select для inclusion в batch.
+- Auto-pairing: `sessionIdFromDlcName` (substring до 'DLC') + `findFirstMatch(folder, id, suffixes)` — для video {.mp4/.avi/.mov/.mkv} и preset {_Preset.mat/.mat} + glob fallback.
+
+**Run batch теперь:**
+1. Выделенные `full`-сессии прогоняются через analyzeSession в `<outDir>/<sessionId>/`.
+2. Per-session: рендеры (main, acts) если включены, plots если checkbox.
+3. Aggregate: tidy теперь 10 колонок (added mean_v_cm_s, distance_cm, first_start_s, first_end_s).
+
+**Helpers (mirror Analyze):**
+- `collectMainVideoFeatures` — struct с 4 флагами.
+- `renderMainForSession`, `renderActsForSession` — wrappers around renderActsVideo / renderActStitched.
+- `savePlotsForSession` — duplicate Analyze's per-bodypart plotter (4-tile с trajectory + X(t) + Y(t) + likelihood(t)).
+- `populateActsListFromLibrary` — при выборе acts library читает имена и сидит ActsVideoListBox.
+- `inheritRootFromParentApp` / `resourceStartDir` — copy-paste from Analyze.
+
+**ActsVideoListBox** заполняется при выборе acts library (`pickSettingFile('ActsLibrary')` → `populateActsListFromLibrary`). До этого показывает «(refresh sessions first)».
+
+**Settings flow:**
+- Save settings → Save settings .mat (collectSettings struct: mainVideo / actsVideo / plotBodyparts / heatmapBinCm).
+- Load settings → applySettings — defensive isfield для каждого поля.
+- AnalysisSettingsField.ValueChangedFcn → autoload если file exists.
+- Pick 'Analysis' button → loadSettings(path).
+
+**Tests:** 22/22 PASS. Class parses.
+
+**Не тестировано live:**
+- Auto-pairing на real user data.
+- Run batch с reнdering.
+- Round-trip save/load settings из Analyze в Batch.
+
+**Note про PreprocessSettings:** loader-row 2 принимает path, но не использует его в analyzeSession (per-session `_Preprocessed.mat` уже handles preprocessed traces). Поле — placeholder для будущего, когда будет логика «применить эти настройки ко всем сессиям перед analyzeSession».
+
+
 ### 2026-05-10 — Round 9h: bucket mutual exclusivity (post-refine)
 
 Юзер: «исправь сейчас хоть как-то, что акты скоростные не должны пересекаться друг с другом. также акты пространственные».
