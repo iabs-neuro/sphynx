@@ -42,5 +42,6 @@ function acts = actsLibraryDefaults()
     a.rearMode = 'TailbasePaws';
     a.thresholdCm = rearTBC;
     a.thresholdPxl = rearABP;
+    a.rearAutoThreshold = true;  % adapt per session
     acts(end+1) = a;
 end

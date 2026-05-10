@@ -371,11 +371,14 @@ classdef BatchAnalysisTabController < handle
         end
 
         function buildLeft(obj, parent)
-            left = uigridlayout(parent, [9, 1]);
+            % Sessions list is the only flex row; everything else has
+            % a fixed height so the Acts-videos listbox can't collapse.
+            left = uigridlayout(parent, [11, 1]);
             left.Layout.Column = 1;
             % Rows: loader1 / loader2 / sessions header / sessions list /
-            % options / settings save-load / aggregate toggles / run / log
-            left.RowHeight = {64, 64, 28, 110, '1x', 30, 28, 36, 80};
+            %       main video / acts videos / plot tail / settings /
+            %       toggles / run / log
+            left.RowHeight = {64, 64, 24, '1x', 90, 170, 28, 30, 24, 36, 80};
             left.RowSpacing = 4;
             left.Padding = [0 0 0 0];
 
@@ -383,12 +386,14 @@ classdef BatchAnalysisTabController < handle
             obj.buildLoaderSettings(left);
             obj.buildSessionsHeader(left);
             obj.buildSessionsListBox(left);
-            obj.buildOptionsPanel(left);
+            obj.buildMainVideoPanel(left);
+            obj.buildActsVideosPanel(left);
+            obj.buildPlotTailRow(left);
             obj.buildSettingsRow(left);
             obj.buildToggleRow(left);
             obj.buildRunRow(left);
             obj.LogTextArea = uitextarea(left, 'Editable', 'off', 'Value', {''});
-            obj.LogTextArea.Layout.Row = 9;
+            obj.LogTextArea.Layout.Row = 11;
         end
 
         function buildLoaderFolders(obj, parent)
@@ -475,55 +480,51 @@ classdef BatchAnalysisTabController < handle
             obj.SessionsListBox.Layout.Row = 4;
         end
 
-        function buildOptionsPanel(obj, parent)
-            opts = uigridlayout(parent, [3, 1]);
-            opts.Layout.Row = 5;
-            opts.RowHeight = {180, '1x', 30};
-            opts.RowSpacing = 4;
-            opts.Padding = [0 0 0 0];
-
-            % Main video
-            mvPanel = uipanel(opts, 'Title', 'Main video');
-            mvPanel.Layout.Row = 1;
-            mvGrid = uigridlayout(mvPanel, [4, 4]);
-            mvGrid.RowHeight = {26, 26, 26, 26};
-            mvGrid.ColumnWidth = {'1x', 70, '1x', 70};
-            mvGrid.RowSpacing = 3; mvGrid.ColumnSpacing = 4;
-            mvGrid.Padding = [4 4 4 4];
-            obj.MainVideoEnableCheckbox = uicheckbox(mvGrid, ...
+        function buildMainVideoPanel(obj, parent)
+            % Compact 2-row layout so the Acts videos listbox below
+            % gets real room.
+            mvPanel = uipanel(parent, 'Title', 'Main video');
+            mvPanel.Layout.Row = 5;
+            g = uigridlayout(mvPanel, [2, 5]);
+            g.RowHeight = {26, 26};
+            g.ColumnWidth = {'fit', 50, 'fit', 50, '1x'};
+            g.RowSpacing = 3; g.ColumnSpacing = 4;
+            g.Padding = [4 4 4 4];
+            obj.MainVideoEnableCheckbox = uicheckbox(g, ...
                 'Text', 'Render', 'Value', false);
-            obj.MainVideoEnableCheckbox.Layout.Row = 1;
-            obj.MainVideoEnableCheckbox.Layout.Column = [1 4];
-            uilabel(mvGrid, 'Text', 'Start, s:');
-            obj.MainVideoStartField = uieditfield(mvGrid, 'numeric', ...
+            uilabel(g, 'Text', 'Start, s:');
+            obj.MainVideoStartField = uieditfield(g, 'numeric', ...
                 'Value', 0, 'Limits', [0 100000]);
-            uilabel(mvGrid, 'Text', 'Duration, s:');
-            obj.MainVideoDurationField = uieditfield(mvGrid, 'numeric', ...
+            uilabel(g, 'Text', 'Duration, s:');
+            obj.MainVideoDurationField = uieditfield(g, 'numeric', ...
                 'Value', 30, 'Limits', [0.1 36000]);
-            obj.MainVideoTrajectoryCheckbox = uicheckbox(mvGrid, ...
-                'Text', 'Trajectory', 'Value', true);
-            obj.MainVideoVelocityCheckbox = uicheckbox(mvGrid, ...
-                'Text', 'Velocity', 'Value', true);
-            obj.MainVideoActsListCheckbox = uicheckbox(mvGrid, ...
-                'Text', 'Active acts list', 'Value', true);
-            obj.MainVideoZonesCheckbox = uicheckbox(mvGrid, ...
-                'Text', 'Current zones', 'Value', true);
 
-            % Acts videos
-            avPanel = uipanel(opts, 'Title', 'Acts videos (per-act)');
-            avPanel.Layout.Row = 2;
-            avGrid = uigridlayout(avPanel, [2, 1]);
-            avGrid.RowHeight = {'1x', 28};
-            avGrid.RowSpacing = 4;
-            avGrid.Padding = [4 4 4 4];
-            obj.ActsVideoListBox = uilistbox(avGrid, ...
+            obj.MainVideoTrajectoryCheckbox = uicheckbox(g, ...
+                'Text', 'Trajectory', 'Value', true);
+            obj.MainVideoVelocityCheckbox = uicheckbox(g, ...
+                'Text', 'Velocity', 'Value', true);
+            obj.MainVideoActsListCheckbox = uicheckbox(g, ...
+                'Text', 'Acts list', 'Value', true);
+            obj.MainVideoZonesCheckbox = uicheckbox(g, ...
+                'Text', 'Zones', 'Value', true);
+            uilabel(g, 'Text', '');  % spacer
+        end
+
+        function buildActsVideosPanel(obj, parent)
+            avPanel = uipanel(parent, 'Title', 'Acts videos (per-act)');
+            avPanel.Layout.Row = 6;
+            g = uigridlayout(avPanel, [2, 1]);
+            g.RowHeight = {'1x', 28};
+            g.RowSpacing = 4;
+            g.Padding = [4 4 4 4];
+            obj.ActsVideoListBox = uilistbox(g, ...
                 'Items', {'(load Acts library to populate)'}, ...
                 'Multiselect', 'on', ...
                 'Tooltip', ['Acts to render per session. Click "Acts ' ...
                             'library" in loader row 2 first; this list ' ...
                             'will fill with act names. Then Ctrl/Shift-' ...
                             'click to pick which acts to render.']);
-            durRow = uigridlayout(avGrid, [1, 2]);
+            durRow = uigridlayout(g, [1, 2]);
             durRow.Layout.Row = 2;
             durRow.RowHeight = {28};
             durRow.ColumnWidth = {110, 70};
@@ -531,36 +532,29 @@ classdef BatchAnalysisTabController < handle
             uilabel(durRow, 'Text', 'Duration, s:');
             obj.ActsVideoDurationField = uieditfield(durRow, 'numeric', ...
                 'Value', 5, 'Limits', [0.1 600]);
+        end
 
-            % Tail rows: session + bodyparts plot toggles + heatmap bin
-            tail = uigridlayout(opts, [2, 3]);
-            tail.Layout.Row = 3;
-            tail.RowHeight = {26, 26};
-            tail.ColumnWidth = {'1x', 110, 70};
-            tail.RowSpacing = 2;
+        function buildPlotTailRow(obj, parent)
+            tail = uigridlayout(parent, [1, 4]);
+            tail.Layout.Row = 7;
+            tail.RowHeight = {26};
+            tail.ColumnWidth = {'fit', '1x', 110, 70};
             tail.ColumnSpacing = 4;
             tail.Padding = [0 0 0 0];
             obj.PlotSessionCheckbox = uicheckbox(tail, ...
-                'Text', 'Save session plots (trajectory, heatmap, speed)', ...
-                'Value', true);
-            obj.PlotSessionCheckbox.Layout.Row = 1;
-            obj.PlotSessionCheckbox.Layout.Column = [1 3];
+                'Text', 'Session plots', 'Value', true, ...
+                'Tooltip', 'Save trajectory/heatmap/speed PNG+FIG per session');
             obj.PlotBodypartsCheckbox = uicheckbox(tail, ...
-                'Text', 'Save bodyparts trajectory (PNG + FIG)', ...
-                'Value', false);
-            obj.PlotBodypartsCheckbox.Layout.Row = 2;
-            obj.PlotBodypartsCheckbox.Layout.Column = 1;
-            lb = uilabel(tail, 'Text', 'Heatmap bin, cm:');
-            lb.Layout.Row = 2; lb.Layout.Column = 2;
+                'Text', 'Bodyparts plots', 'Value', false, ...
+                'Tooltip', 'Per body-part 4-tile PNG+FIG (heavier)');
+            uilabel(tail, 'Text', 'Heatmap bin, cm:');
             obj.HeatmapBinField = uieditfield(tail, 'numeric', ...
                 'Value', 4, 'Limits', [0.1 100]);
-            obj.HeatmapBinField.Layout.Row = 2;
-            obj.HeatmapBinField.Layout.Column = 3;
         end
 
         function buildSettingsRow(obj, parent)
             row = uigridlayout(parent, [1, 2]);
-            row.Layout.Row = 6;
+            row.Layout.Row = 8;
             row.RowHeight = {28};
             row.ColumnWidth = {'1x', '1x'};
             row.Padding = [0 0 0 0]; row.ColumnSpacing = 4;
@@ -574,7 +568,7 @@ classdef BatchAnalysisTabController < handle
 
         function buildToggleRow(obj, parent)
             row = uigridlayout(parent, [1, 2]);
-            row.Layout.Row = 7;
+            row.Layout.Row = 9;
             row.RowHeight = {26};
             row.ColumnWidth = {'1x', '1x'};
             row.Padding = [0 0 0 0]; row.ColumnSpacing = 4;
@@ -586,7 +580,7 @@ classdef BatchAnalysisTabController < handle
 
         function buildRunRow(obj, parent)
             row = uigridlayout(parent, [1, 2]);
-            row.Layout.Row = 8;
+            row.Layout.Row = 10;
             row.RowHeight = {32};
             row.ColumnWidth = {'1x', '1x'};
             row.Padding = [0 0 0 0]; row.ColumnSpacing = 4;

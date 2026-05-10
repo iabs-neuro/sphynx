@@ -171,7 +171,12 @@ function b = applyFreezing(act, ctx, nFrames)
 end
 
 function b = applyRears(act, ctx, nFrames)
-    % Tailbase-paws mode: distance(tailbase, paws) below threshold.
+    % Tailbase-paws mode: SUM(distance(tailbase, hindlimbs)) below
+    % threshold — same semantics as the built-in rear in analyzeSession,
+    % so a `rears` act loaded from a library now produces the same
+    % output as the built-in. The previous per-limb (dL<thr OR dR<thr)
+    % formula was much more lenient and made user libraries flag
+    % almost the entire session as a rear.
     if strcmpi(act.rearMode, 'TailbasePaws') || isempty(act.rearMode)
         tIdx = findPart(ctx.bodyParts, 'tailbase');
         lIdx = findPart(ctx.bodyParts, 'lefthindlimb');
@@ -179,10 +184,31 @@ function b = applyRears(act, ctx, nFrames)
         if isempty(tIdx) || isempty(lIdx) || isempty(rIdx)
             b = false(1, nFrames); return;
         end
-        thrPx = act.thresholdCm * ctx.pixelsPerCm;
         dL = sqrt((ctx.X(tIdx,:) - ctx.X(lIdx,:)).^2 + (ctx.Y(tIdx,:) - ctx.Y(lIdx,:)).^2);
         dR = sqrt((ctx.X(tIdx,:) - ctx.X(rIdx,:)).^2 + (ctx.Y(tIdx,:) - ctx.Y(rIdx,:)).^2);
-        b = (dL < thrPx) | (dR < thrPx);
+        sumPx = dL + dR;
+        % Smooth sumDist on the same FrameRate/2 window the built-in
+        % uses, so threshold semantics line up.
+        if isfield(ctx, 'frameRate') && ctx.frameRate > 0
+            win = max(3, 2*ceil(ctx.frameRate/4) + 1);  % nearest odd
+            sumPx = sphynx.preprocess.smoothTrace(sumPx(:), win)';
+        end
+        sumCm = sumPx / ctx.pixelsPerCm;
+        % Default auto-threshold ON when the field is missing — this
+        % covers libraries saved before the schema change AND keeps
+        % new defaults consistent with built-in rear in analyzeSession.
+        % Set rearAutoThreshold=false explicitly to opt out per-act.
+        useAuto = true;
+        if isfield(act, 'rearAutoThreshold')
+            useAuto = logical(act.rearAutoThreshold);
+        end
+        if useAuto
+            thrCm = sphynx.acts.autoRearThresholdCm(sumCm);
+            if ~isfinite(thrCm); thrCm = act.thresholdCm; end
+        else
+            thrCm = act.thresholdCm;
+        end
+        b = sumCm < thrCm;
     else
         % AllBodyParts mode: simple Y < threshold heuristic on bodycenter
         idx = findPart(ctx.bodyParts, 'bodycenter');

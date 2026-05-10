@@ -17,6 +17,11 @@ function a = emptyAct()
     a.rearMode     = '';
     a.thresholdCm  = NaN;
     a.thresholdPxl = NaN;
+    % For special 'rears' acts: when true, applyRears overrides
+    % thresholdCm with an auto-pick from the per-session
+    % (tailbase->hindlimb sum) distribution. Default true so library
+    % rear acts inherit the safer per-session threshold.
+    a.rearAutoThreshold = true;
     % Post-processing applied after the boolean is computed:
     %   minDurationSec — minimum length of a run of 1s to keep. Runs
     %     shorter than this are dropped (the act "didn't last long
