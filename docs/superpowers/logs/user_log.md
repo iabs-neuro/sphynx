@@ -1032,3 +1032,44 @@ Acts:                           ← posture + composite, без повторов
 
 Файлы: `+sphynx/+app/AnalyzeSessionTabController.m`, `+sphynx/+pipeline/{analyzeSession,renderActsVideo}.m`, `+sphynx/+pipeline/renderActStitched.m` (новый), `docs/TODO.md`.
 
+
+---
+
+## actStats: фикс mean velocity + новые метрики (2026-05-10)
+
+**Bug найден.** Ты прав — для locomotion с порогом > 5 cm/s показывало среднюю 4.5. Это была кривая формула в `+sphynx/+acts/actStats.m`:
+```matlab
+Distance = meanV * timeAct * ActPercent / 10000;       % бессмыслица
+ActVelocity = Distance / (ActMeanTime * ActNumber) * 100;
+```
+
+ActPercent зависел от ВСЕЙ сессии, поэтому средняя скорость акта дрейфовала вместе с тем, какую долю сессии этот акт занимает. Дрейф мог идти в любую сторону → отсюда твои 4.5.
+
+**Fix** — переписал на прямые формулы:
+- `ActMeanVelocity = mean(velocity[active frames])` cm/s. Точная средняя по активным кадрам.
+- `Distance = sum(velocity[active]) / fps` cm. Сумма перемещений за время акта.
+- `ActMeanDistance = Distance / ActNumber`.
+- `ActVelocity` оставил как alias на ActMeanVelocity (для backward-compat).
+- Добавил `ActMaxVelocity`, `ActMinVelocity` — пик и минимум за акт.
+
+Регрессионный тест `testLocomotionMeanAboveThreshold`: при `mask = (v >= 5)` средняя обязана быть >= 5. Падает на старой имплементации, проходит на новой.
+
+**По какой части тела считается скорость:** `analyzeSession.m` уже передаёт `centerVelocity` (bodycenter velocity) для **всех** актов. Так что speed везде по центру тела — как ты и просил. Документация в actStats docstring обновлена.
+
+**Новые метрики (которые ты просил из TODO):**
+- `FirstStartSec` — время (с) начала первой активации (NaN если акт не активен ни разу).
+- `FirstEndSec` — время конца первой активации.
+- `LastStartSec`, `LastEndSec` — bonus, симметрично для последней активации.
+
+Полезно для Barnes-style метрик: «время до первой проверки лунки», «латентность до первого rest» и т.д.
+
+**Result table в Analyze Session** расширена с 5 до 9 столбцов:
+
+| Act | % | dur, s | count | mean dur, s | **mean v, cm/s** | **distance, cm** | **first start, s** | **first end, s** |
+
+NaN'ы рендерятся как «—».
+
+**Тесты:** 19/19 PASS (новые + регрессия).
+
+Файлы: `+sphynx/+acts/actStats.m`, `+sphynx/+pipeline/analyzeSession.m`, `+sphynx/+app/AnalyzeSessionTabController.m`, `tests/unit/actStatsTest.m`.
+

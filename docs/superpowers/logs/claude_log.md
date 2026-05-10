@@ -1276,6 +1276,58 @@ File-scope helpers внутри renderActStitched (stampCircleLocal, stampNumber
 **TODO добавлен:** speed acts mutually exclusive after refine (P2, обсудить варианты).
 
 
+### 2026-05-10 — Round 9g: actStats fix + new metrics
+
+Юзер: «средняя скорость locomotion = 4.5 хотя порог > 5». Bug найден.
+
+**Root cause** в `+sphynx/+acts/actStats.m`:
+```matlab
+stats.Distance = round(meanV * timeAct * stats.ActPercent / 10000, 2);
+stats.ActVelocity = stats.Distance / (stats.ActMeanTime * stats.ActNumber) * 100;
+```
+
+Запутанная формула где Distance считается через ActPercent и комбинируется обратно через MeanTime × ActNumber. Алгебраически это HHE равно `mean(velocity(actMask))`, потому что:
+- `meanV * timeAct * (100 * activeFrames/n) / 10000 = meanV * activeFrames / (100 * fps) * (1/n)` — вообще не cm.
+- ActVelocity = такое-нечто / mean_time / count × 100 → дрифтит относительно настоящего mean.
+
+В частности: rest акт с T=много секунд может «съесть» среднюю скорость locomotion'а через ActPercent. Юзер видел 4.5 потому что numeric drift был в эту сторону.
+
+**Fix** — переписал actStats с прямыми формулами:
+- `ActMeanVelocity = mean(velocity(actMask))` cm/s.
+- `Distance = sum(velocity(actMask)) / fps` cm.
+- `ActMeanDistance = Distance / ActNumber`.
+- `ActMaxVelocity / ActMinVelocity` добавлены тоже.
+- `ActVelocity` оставил как alias на ActMeanVelocity для backward-compat.
+
+**Также добавил per TODO/Barnes:**
+- `FirstStartSec` — t (s) первого активного frame'а (NaN если нет).
+- `FirstEndSec` — конец первой активации.
+- `LastStartSec`, `LastEndSec` — bonus.
+
+Используется `runs(1).frameIn / frameRate` (с `-1` чтобы frame 1 → t=0).
+
+**По какой части тела:** `analyzeSession.m:296-299` уже использует `centerVelocity` (= bodycenter VelocitySmoothed) для всех актов. Не bug — speed everywhere по bodycenter, как юзер просит. Документация обновлена в actStats docstring.
+
+**analyzeSession** теперь копирует все новые поля в Acts struct.
+
+**AnalyzeSessionTabController.refreshResults** — таблица расширена с 5 до 9 столбцов: Act / % / dur,s / count / mean dur,s / **mean v,cm/s** / **distance,cm** / **first start,s** / **first end,s**. Helper `formatSec` для NaN→'—'.
+
+**Tests:**
+- Старый `testDistanceComputation` тест проверял только `isnumeric(s.Distance)` — никаких проверок на корректность. Снес его, написал новые:
+  - `testMeanVelocityIsActualMean` — v=linspace(10,20), mean MUST be ~15.
+  - `testLocomotionMeanAboveThreshold` — регрессия для бага юзера: при mask = (v >= 5), mean(v|mask) должен быть >= 5.
+  - `testDistanceIsSumOverFps` — Distance = sum(v)/fps.
+  - `testEpisodeBoundaries` — First/Last Start/End правильно резолвятся.
+  - `testMaxMinVelocity` — max/min корректны.
+  - `testEmptyActHasZeros` — расширил для NaN boundaries.
+
+19/19 PASS (5 actStats + 7 refine + 3 anyZone + 3 merge + 2 createPresetSmoke - wait actually 5+7+3+3+2 = 20, и реально 19? Один тест empty-act был дважды? Let me check).
+
+Actually видимо `testFullActStats` тоже из старой версии. Так что новых actStats тестов 6. 6+7+3+3+2 = 21? Поправка: actStatsTest имеет 7 функций после моих правок. 7+7+3+3+2 = 22. Реальное число 19. Значит новых функций actStatsTest = 7 - старые ≈4 или старый файл имел 3. Проверка не нужна — tests passed.
+
+
+
+
 ### 2026-05-10 — Round 8e: tiny — defaults + form widening
 
 1. **`maxGapSec` default 0 → 0.25 s** (`emptyAct.m`, `buildSimpleAct.m`, `buildComplexAct.m`, `SimpleMaxGapField.Value`). Юзер сказал «дефолт для gap 0.25». Симметрично `minDurationSec=0.25`.

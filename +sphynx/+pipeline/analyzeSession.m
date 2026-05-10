@@ -308,7 +308,14 @@ function result = analyzeSession(config)
         Acts(line).ActMedianMADTime = s.ActMedianMADTime;
         Acts(line).Distance = s.Distance;
         Acts(line).ActMeanDistance = s.ActMeanDistance;
-        Acts(line).ActVelocity = s.ActVelocity;
+        Acts(line).ActMeanVelocity = s.ActMeanVelocity;
+        Acts(line).ActMaxVelocity  = s.ActMaxVelocity;
+        Acts(line).ActMinVelocity  = s.ActMinVelocity;
+        Acts(line).ActVelocity     = s.ActVelocity;          % alias
+        Acts(line).FirstStartSec   = s.FirstStartSec;
+        Acts(line).FirstEndSec     = s.FirstEndSec;
+        Acts(line).LastStartSec    = s.LastStartSec;
+        Acts(line).LastEndSec      = s.LastEndSec;
     end
 
     % --- 11. Result struct ---------------------------------------------------

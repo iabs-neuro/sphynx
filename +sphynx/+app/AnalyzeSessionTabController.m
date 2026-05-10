@@ -679,7 +679,9 @@ classdef AnalyzeSessionTabController < handle
 
             % Row 1: results table spanning both cols
             obj.ResultTable = uitable(right, 'ColumnName', ...
-                {'Act', '%', 'duration', 'count', 'mean dur, s'});
+                {'Act', '%', 'dur, s', 'count', 'mean dur, s', ...
+                 'mean v, cm/s', 'distance, cm', ...
+                 'first start, s', 'first end, s'});
             obj.ResultTable.Layout.Row = 1;
             obj.ResultTable.Layout.Column = [1 2];
 
@@ -750,7 +752,7 @@ classdef AnalyzeSessionTabController < handle
 
             % --- Results table (full library, including zone acts) -----
             n = numel(r.Acts);
-            data = cell(n, 5);
+            data = cell(n, 9);
             for k = 1:n
                 a = r.Acts(k);
                 data{k, 1} = a.ActName;
@@ -758,6 +760,10 @@ classdef AnalyzeSessionTabController < handle
                 data{k, 3} = sprintf('%.2f', getOr(a, 'ActDuration', NaN));
                 data{k, 4} = getOr(a, 'ActNumber', 0);
                 data{k, 5} = sprintf('%.2f', getOr(a, 'ActMeanTime', NaN));
+                data{k, 6} = sprintf('%.2f', getOr(a, 'ActMeanVelocity', NaN));
+                data{k, 7} = sprintf('%.2f', getOr(a, 'Distance', NaN));
+                data{k, 8} = formatSec(getOr(a, 'FirstStartSec', NaN));
+                data{k, 9} = formatSec(getOr(a, 'FirstEndSec', NaN));
             end
             obj.ResultTable.Data = data;
 
@@ -970,6 +976,10 @@ end
 
 function v = getOr(s, name, fallback)
     if isfield(s, name); v = s.(name); else; v = fallback; end
+end
+
+function s = formatSec(x)
+    if isnan(x); s = '—'; else; s = sprintf('%.2f', x); end
 end
 
 function updateDlg(dlg, frac, msg)
