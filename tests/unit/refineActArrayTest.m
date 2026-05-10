@@ -48,3 +48,17 @@ function testEmptyInputReturnsEmpty(testCase)
     verifyTrue(testCase, isempty(out));
     verifyClass(testCase, out, 'logical');
 end
+
+function testBridgeBeforeDropConsolidatesFragmentedAct(testCase)
+    % Short fragment + small internal gap + longer fragment. With the
+    % required bridge-then-drop order: the gap (2) bridges the two
+    % fragments into a single 9-frame run, which then survives the
+    % min-run=4 drop. With the wrong order (drop first) the 2-frame
+    % fragment would die before the bridge, leaving only the 5-frame
+    % survivor.
+    in = logical([1 1 0 0 1 1 1 1 1 0]);
+    %             ^^^ 2 ^^^^^^^^^ 5
+    out = sphynx.acts.refineActArray(in, 4, 4);
+    expected = logical([1 1 1 1 1 1 1 1 1 0]);
+    verifyEqual(testCase, out, expected);
+end

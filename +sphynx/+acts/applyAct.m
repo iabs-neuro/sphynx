@@ -35,16 +35,29 @@ function bool = applyAct(act, ctx)
                 'Unknown act type "%s" for "%s"', act.type, act.name);
     end
 
-    % Post-processing: drop short runs / bridge short gaps. Mirrors
-    % legacy functions/RefineLine.m (now ported to refineActArray).
-    minDurFrames = 0;
-    minGapFrames = 0;
-    if isfield(act, 'minDurationSec') && act.minDurationSec > 0
-        minDurFrames = round(act.minDurationSec * ctx.frameRate);
+    % Post-processing: bridge short gaps inside the act, then drop
+    % runs that are still too short. Mirrors legacy
+    % functions/RefineLine.m (now ported to refineActArray) but in the
+    % bridge-then-drop order — a fragment plus a tiny hole plus another
+    % fragment should consolidate into one event, not get erased.
+    %
+    % Backfill: legacy libraries saved before the schema gained
+    % minDurationSec / minGapSec come back without those fields. Treat
+    % a missing minDurationSec as 0.25 s so existing libraries inherit
+    % the same default new acts get from emptyAct.m. To opt out for a
+    % specific custom act, set minDurationSec = 0 explicitly.
+    if isfield(act, 'minDurationSec')
+        durSec = max(0, act.minDurationSec);
+    else
+        durSec = 0.25;
     end
-    if isfield(act, 'minGapSec') && act.minGapSec > 0
-        minGapFrames = round(act.minGapSec * ctx.frameRate);
+    if isfield(act, 'minGapSec')
+        gapSec = max(0, act.minGapSec);
+    else
+        gapSec = 0;
     end
+    minDurFrames = round(durSec * ctx.frameRate);
+    minGapFrames = round(gapSec * ctx.frameRate);
     if minDurFrames > 0 || minGapFrames > 0
         bool = sphynx.acts.refineActArray(bool, minDurFrames, minGapFrames);
     end

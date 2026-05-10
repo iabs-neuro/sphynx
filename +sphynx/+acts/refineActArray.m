@@ -3,19 +3,25 @@ function out = refineActArray(bool, minRunFrames, minGapFrames)
 %
 %   out = sphynx.acts.refineActArray(bool, minRunFrames, minGapFrames)
 %
-%   Pass 1 — drop runs of 1s shorter than minRunFrames.
-%   Pass 2 — bridge gaps of 0s shorter than minGapFrames between
-%            the runs that survived pass 1 (gaps from index 1 to the
-%            first run are NOT bridged — those are session-start zeros,
-%            not real inter-event gaps).
+%   Pass 1 — bridge gaps of 0s shorter than minGapFrames between
+%            adjacent runs. Conceptually: "if a hole inside an act is
+%            short, that hole is still part of the act."
+%   Pass 2 — drop runs of 1s shorter than minRunFrames. Conceptually:
+%            "after consolidating fragments, kill anything that is
+%            still too short to be a real event."
+%
+%   Order matters. Bridging first lets a fragmented near-event
+%   consolidate into a single long run that then survives the drop
+%   pass; dropping first would erase those fragments before they get a
+%   chance to merge.
 %
 %   Both arguments are integer frame counts. 0 (or negative) disables
 %   the corresponding pass.
 %
-%   Port of legacy functions/RefineLine.m, with the same edge-case
-%   handling (a run that touches the last frame is kept; a leading-edge
-%   gap is not bridged so the act doesn't bleed into the start of a
-%   recording where DLC isn't reliable yet).
+%   Edge handling: leading and trailing gaps (those that touch index 1
+%   or index n) are NOT bridged — they're session boundaries, not
+%   inter-event gaps. A run that touches the last frame IS still
+%   eligible for the drop pass.
 
     bool = logical(bool(:)');
     n = numel(bool);
@@ -24,30 +30,25 @@ function out = refineActArray(bool, minRunFrames, minGapFrames)
     if nargin < 2 || isempty(minRunFrames); minRunFrames = 0; end
     if nargin < 3 || isempty(minGapFrames); minGapFrames = 0; end
 
-    % --- Run-length encode --------------------------------------------------
-    [runs, lengths] = rle(bool);
-
-    % --- Pass 1: drop short runs of 1s --------------------------------------
-    if minRunFrames > 0
-        for k = 1:size(runs, 1)
-            if bool(runs(k, 1)) && lengths(k) < minRunFrames
-                bool(runs(k, 1):runs(k, 2)) = false;
+    % --- Pass 1: bridge short gaps of 0s ------------------------------------
+    if minGapFrames > 0
+        [runs1, lengths1] = rle(bool);
+        for k = 1:size(runs1, 1)
+            isGap      = ~bool(runs1(k, 1));
+            isLeading  = runs1(k, 1) == 1;
+            isTrailing = runs1(k, 2) == n;
+            if isGap && ~isLeading && ~isTrailing && lengths1(k) < minGapFrames
+                bool(runs1(k, 1):runs1(k, 2)) = true;
             end
         end
     end
 
-    % --- Pass 2: bridge short gaps of 0s ------------------------------------
-    if minGapFrames > 0
+    % --- Pass 2: drop short runs of 1s --------------------------------------
+    if minRunFrames > 0
         [runs2, lengths2] = rle(bool);
         for k = 1:size(runs2, 1)
-            isGap = ~bool(runs2(k, 1));
-            % Skip the leading-edge gap (it touches index 1) and the
-            % trailing one (touches index n) — these aren't between
-            % real act events.
-            isLeading  = runs2(k, 1) == 1;
-            isTrailing = runs2(k, 2) == n;
-            if isGap && ~isLeading && ~isTrailing && lengths2(k) < minGapFrames
-                bool(runs2(k, 1):runs2(k, 2)) = true;
+            if bool(runs2(k, 1)) && lengths2(k) < minRunFrames
+                bool(runs2(k, 1):runs2(k, 2)) = false;
             end
         end
     end

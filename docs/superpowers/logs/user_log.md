@@ -862,3 +862,30 @@ Built-in акты (rest/walk/locomotion/freezing/rear) уже имеют сво�
 
 Файлы: `+sphynx/+app/AnalyzeSessionTabController.m` (большой рефактор), `+sphynx/+pipeline/renderActsVideo.m` (Features parameter), `docs/TODO.md` (Min run + freezing/rear перенос).
 
+
+---
+
+## refineActArray: правильный порядок (bridge → drop) + backfill (2026-05-10)
+
+**Ты прав.** Я делал в неправильном порядке (как в legacy `RefineLine.m`):
+1. ~~Сначала dropped короткие runs.~~
+2. ~~Потом bridged короткие gaps.~~
+
+Это плохо: 2-кадровый фрагмент акта умирает ДО того как bridge смог бы склеить его с соседним длинным куском.
+
+**Поменял на твою логику:**
+1. **Сначала bridge** коротких дыр (gap < `minGapSec`) внутри акта — фрагменты консолидируются.
+2. **Потом drop** коротких runs (run < `minDurationSec`) — настоящие коротыши умирают.
+
+Пример: вход `[1 1 0 0 1 1 1 1 1 0]` с min_dur=4, min_gap=4 (4 кадра).
+- **Раньше (drop-first):** убил [1 1] → `[0 0 0 0 1 1 1 1 1 0]`. Bridge не помог (leading gap не бриджится).
+- **Теперь (bridge-first):** склеил [1 1 _ _ 1 1 1 1 1] → `[1 1 1 1 1 1 1 1 1 0]`. Длина 9, drop не убил. Сохранился весь акт.
+
+**Backfill для старых библиотек.** Раньше: если у акта нет поля `minDurationSec` (старый .mat загружен) → refine не применялся. Теперь: missing field → default 0.25s, refine идёт. Чтобы отключить для конкретного акта — поставь Min duration = 0 явно при создании.
+
+**Тесты:** 17/17 PASS (новый `testBridgeBeforeDropConsolidatesFragmentedAct` валидирует именно порядок).
+
+Эффект для твоего Object1 акта: соседние 1-2-кадровые вспышки теперь дропаются (default 0.25s = ~7-8 кадров при 30fps). А фрагменты внутри настоящего акта склеиваются — но только если ты выставишь `Min gap > 0` в Define Acts. По умолчанию gap=0 (ничего не бриджится). Если хочешь агрессивную консолидацию — поставь Min gap, s = 0.3 или 0.5.
+
+Файлы: `+sphynx/+acts/refineActArray.m`, `+sphynx/+acts/applyAct.m`, `tests/unit/refineActArrayTest.m`.
+

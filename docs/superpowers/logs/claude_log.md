@@ -1120,3 +1120,27 @@ G. **`+sphynx/+pipeline/renderActsVideo.m` extension** — новый парам
 - ActsList tied к bottom timeline — оба «информационные» элементы про acts. Если юзеру понадобится разделить, добавлю отдельный flag.
 - Save settings сохраняет ТОЛЬКО опции (не пути) — для batch reuse. Пути сессион-специфичны.
 
+
+### 2026-05-10 — Round 9c: refineActArray order fix + legacy backfill
+
+Юзер посмотрел acts videos и заметил, что в акт попадают «соседние» точки. Объяснил свою mental model:
+1. Сначала bridge коротких дыр **внутри** акта (если дыра < min_gap → она часть акта).
+2. Потом drop коротких runs (если акт < min_duration → удалить).
+
+Я делал **наоборот** (как в legacy `RefineLine.m`): drop первый, bridge второй. Это плохо: фрагмент акта (2 кадра) умирает до того, как bridge мог бы его склеить с соседним длинным куском.
+
+**Fix:**
+
+1. **`+sphynx/+acts/refineActArray.m`** — поменял порядок проходов. Теперь Pass 1 = bridge, Pass 2 = drop. Edge handling сохранён (leading/trailing gaps НЕ бриджатся).
+
+2. **`+sphynx/+acts/applyAct.m`** — backfill для legacy library acts. Раньше: `if isfield(act, 'minDurationSec') && act.minDurationSec > 0` → если поля нет, никакого refine. Теперь: missing field → default 0.25s (как в `emptyAct.m`). Чтобы opt-out для конкретного custom акта — поставить minDurationSec=0 явно.
+
+3. **Новый unit test** `testBridgeBeforeDropConsolidatesFragmentedAct` который различает порядок: input `[1 1 0 0 1 1 1 1 1 0]` с min_run=4, min_gap=4. bridge-first → `[1 1 1 1 1 1 1 1 1 0]`. drop-first дал бы `[0 0 0 0 1 1 1 1 1 0]`. Разные результаты, тест валит drop-first имплементацию.
+
+**Тесты:** 17/17 PASS (было 16, +1 новый).
+
+**Эффект для юзера:**
+- Для новых актов (созданных после 7339a52): default minDurationSec=0.25 уже был, теперь применяется в правильном порядке.
+- Для существующих библиотек без поля: backfill применит default 0.25, акты будут refine-нуты.
+- Object1 акт юзера должен теперь не содержать «соседних» 1-2-кадровых вспышек, и фрагменты соседних активаций (если разделены < 0 сек, default minGapSec) — не бриджатся (нужно явно поставить minGapSec). Если юзер хочет агрессивную консолидацию — выставит minGapSec=0.5 в Define Acts UI.
+
