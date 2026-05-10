@@ -642,6 +642,12 @@ classdef DefineActsTabController < handle
             tabComplex = uitab(right, 'Title', 'Complex act');
             obj.buildSimpleConstructor(tabSimple);
             obj.buildComplexConstructor(tabComplex);
+            % Make Simple acts the default visible tab — otherwise the
+            % tab-group highlight is hard to spot against the panel bg.
+            try
+                right.SelectedTab = tabSimple;
+            catch
+            end
         end
 
         function buildSimpleConstructor(obj, tab)
@@ -653,7 +659,7 @@ classdef DefineActsTabController < handle
             % Top row fixed shorter so Zones listbox is ~half height of
             % the bottom preview area.
             outer.RowHeight = {180, '1x'};
-            outer.ColumnWidth = {220, '1x'};
+            outer.ColumnWidth = {280, '1x'};
             outer.RowSpacing = 6;
             outer.ColumnSpacing = 6;
             outer.Padding = [6 6 6 6];
@@ -721,19 +727,18 @@ classdef DefineActsTabController < handle
             obj.PreviewAxes.YDir = 'reverse';
             title(obj.PreviewAxes, 'Preview — load preset to see frame + selected zone');
 
-            mv = uigridlayout(bot, [1, 5]);
+            mv = uigridlayout(bot, [1, 4]);
             mv.Layout.Row = 2;
             mv.RowHeight = {30};
-            mv.ColumnWidth = {110, 70, 110, 'fit', '1x'};
+            mv.ColumnWidth = {70, 70, '1x', 110};
             mv.ColumnSpacing = 6;
             mv.Padding = [0 0 0 0];
-            uilabel(mv, 'Text', 'Make video — duration:');
+            uilabel(mv, 'Text', 'Duration:');
             obj.MakeVideoDurationField = uieditfield(mv, 'numeric', ...
-                'Value', 30, 'Limits', [1 600], ...
-                'Tooltip', 'Seconds of footage to render around the act');
-            uilabel(mv, 'Text', 'sec, act =');
-            uilabel(mv, 'Text', '(use selected in library)', ...
-                'FontAngle', 'italic', 'FontColor', [0.4 0.4 0.4]);
+                'Value', 5, 'Limits', [0.1 600], ...
+                'Tooltip', 'Seconds of stitched active-act footage to render');
+            uilabel(mv, 'Text', 's', ...
+                'HorizontalAlignment', 'left');
             obj.MakeVideoButton = uibutton(mv, 'Text', 'Make video', ...
                 'BackgroundColor', [1.00 0.55 0.55], 'FontWeight', 'bold', ...
                 'ButtonPushedFcn', @(~,~) obj.makeActVideo());
@@ -903,20 +908,19 @@ classdef DefineActsTabController < handle
                 fps  = result.Options.FrameRate;
                 nWin = max(1, round(durSec * fps));
 
-                % --- 2b. Pick the longest active run, center the window
-                %        on its midpoint. Picking the *first* active
-                %        frame puts the start of a session-long rest
-                %        right at frame 1, which is uninformative.
-                [runs, lengths] = findActiveRuns(bool);
-                if isempty(runs)
+                % --- 2b. Stitch ONLY active frames (bool=1). The act is
+                %        a 0/1 timeseries over DLC frames; the player
+                %        should show the moments where the act fires,
+                %        back-to-back, capped at duration*fps.
+                activeFrames = find(bool);
+                nActive = numel(activeFrames);
+                if nActive == 0
                     obj.applog('warn', ...
                         'Act "%s" has zero active frames in this session', sel);
                     return;
                 end
-                [bestLen, kBest] = max(lengths);
-                midF = round(mean(runs(kBest, :)));
-                startF = max(1, midF - floor(nWin/2));
-                endF   = min(numel(bool), startF + nWin - 1);
+                nTake = min(nActive, nWin);
+                selFrames = activeFrames(1:nTake);
 
                 % Video frame index = DLC index + StartFrame offset.
                 % By default cfg.range.startFrame = 1 → offset = 0.
@@ -930,7 +934,7 @@ classdef DefineActsTabController < handle
                 dlg.Indeterminate = 'off';
                 dlg.Message = 'Rendering frames...';
                 frames = obj.renderActFramesInMemory( ...
-                    videoPath, result, actIdx, startF, endF, ...
+                    videoPath, result, actIdx, selFrames, ...
                     videoOffset, dlg);
                 if isempty(frames)
                     obj.applog('warn', 'No frames rendered'); return;
@@ -940,8 +944,8 @@ classdef DefineActsTabController < handle
                 hPlay = implay(frames, fps);
                 try
                     set(hPlay.Parent, 'Name', sprintf( ...
-                        'Act: %s — DLC frames %d..%d (longest run: %d frames, %.1fs)', ...
-                        sel, startF, endF, bestLen, bestLen/fps));
+                        'Act: %s — %d / %d active frames (%.1fs / %.1fs in session)', ...
+                        sel, nTake, nActive, nTake/fps, nActive/fps));
                     set(hPlay.Parent, 'Position', [80 80 1280 960]);
                     if isprop(hPlay, 'Visual') && isprop(hPlay.Visual, 'ScaleFactor')
                         hPlay.Visual.ScaleFactor = 0.5;
@@ -949,21 +953,24 @@ classdef DefineActsTabController < handle
                 catch
                 end
                 obj.applog('info', ...
-                    'Made video (in memory): %s, DLC frames %d..%d (longest run %d, %.1fs)', ...
-                    sel, startF, endF, bestLen, bestLen/fps);
+                    'Made video (in memory): %s, stitched %d/%d active frames (%.1fs)', ...
+                    sel, nTake, nActive, nTake/fps);
             catch ME
                 obj.applog('error', 'Make-video failed: %s', ME.message);
             end
         end
 
         function frames = renderActFramesInMemory(obj, videoPath, ...
-                result, actIdx, startF, endF, videoOffset, dlg)
+                result, actIdx, dlcFrames, videoOffset, dlg)
             % BA-style overlay: optional zone tint (50/50 blend) +
             % per-bodypart dots; the act's bodypart drawn larger and
             % in red so it stands out from the others.
+            %
+            % `dlcFrames` is a vector of DLC frame indices to render
+            % (typically every frame where act.bool == 1, stitched).
             % `videoOffset` shifts video reads — DLC index f maps to
             % video frame f + videoOffset (0 when cfg.range.startFrame=1).
-            if nargin < 7 || isempty(videoOffset); videoOffset = 0; end
+            if nargin < 6 || isempty(videoOffset); videoOffset = 0; end
             reader = VideoReader(videoPath);
             cleaner = onCleanup(@() delete(reader)); %#ok<NASGU>
             H = reader.Height; W = reader.Width;
@@ -971,7 +978,6 @@ classdef DefineActsTabController < handle
             nBP = numel(bps);
             bpColors = uint8(round(lines(max(1, nBP)) * 255));
 
-            % Highlight bodypart for this act
             actBPName = '';
             if isfield(obj.State.acts(actIdx), 'bodyPart')
                 actBPName = obj.State.acts(actIdx).bodyPart;
@@ -982,18 +988,17 @@ classdef DefineActsTabController < handle
             end
             hiColor = uint8([255 0 0]);
 
-            % Zone mask (union of act's zones) — for tint only.
             zoneMask = obj.actZoneMaskFromPreset(obj.State.acts(actIdx));
             if ~isempty(zoneMask) ...
                     && (size(zoneMask,1) ~= H || size(zoneMask,2) ~= W)
-                zoneMask = []; % size mismatch — drop quietly
+                zoneMask = [];
             end
 
-            nFrames = endF - startF + 1;
+            nFrames = numel(dlcFrames);
             frames = zeros(H, W, 3, nFrames, 'uint8');
             markSize = 5;
             for i = 1:nFrames
-                f = startF + i - 1;          % DLC index for traces
+                f = dlcFrames(i);            % DLC index for traces
                 vF = f + videoOffset;         % absolute video frame
                 try
                     img = read(reader, vF);
@@ -1004,9 +1009,8 @@ classdef DefineActsTabController < handle
                     img = repmat(img, [1 1 3]);
                 end
                 if ~isempty(zoneMask)
-                    tinted = uint8(round( ...
+                    img = uint8(round( ...
                         (single(img) + single(zoneMask) * 255) / 2));
-                    img = tinted;
                 end
                 for b = 1:nBP
                     if ~isfield(bps(b), 'TraceSmoothed') ...

@@ -947,3 +947,30 @@ O(r²) per circle, 14 точек × N кадров — не bottleneck. Без �
 - Barnes maze — все 8+9 метрик из его списка.
 - Macro: MATLAB upgrade / Python rewrite (P4, требуют разговора).
 
+
+### 2026-05-10 — Round 8b: Define Acts UX + make-video semantics
+
+Юзер запустил GUI после Round 8/9, дал 5 правок:
+
+1. **SelectedTab=Simple** — раньше TabGroup стартовал с никаким явно выбранным табом, юзер не видел highlight. Поправил в `buildRightConstructorColumn`: `right.SelectedTab = tabSimple` в try/catch.
+
+2. **«Add to library» не влезала** — outer ColumnWidth был `{220, '1x'}`, top-left form 220px, label col 90, field col = 130px → кнопка обрезалась. Расширил до `{280, '1x'}` → field col 190px. Кнопка влезла без правки form.ColumnWidth.
+
+3. **Make-video duration default 5s, label «Duration»** — `MakeVideoDurationField.Value = 30 → 5`, `Limits` от 1 до 600 → 0.1 до 600 (на случай микро-демо). Перебрал layout `mv` — было [1,5] с метками «Make video — duration:» / поле / «sec, act =» / «(use selected in library)» / Make video. Стало [1,4]: «Duration:» / поле / «s» / Make video. Чище и компактнее.
+
+4. **Сделать Complex acts compact + flexible** — в TODO.md, не сейчас. Записал P2 пункт со схемой redesign-а: wider Name field, более компактный layout, expression-style композиция (Act1 OR Act2 EXCLUDE Act3, Act1 + Δt1 + Act2 + Δt2 ...). Требует schema-изменений в `emptyAct.m` / `buildComplexAct.m` / `applyAct.m::applyComplex`.
+
+5. **CRITICAL: семантика make-video была неправильная.** Юзер: «акт у меня есть Object1 = bodypart=nose + speed (0,inf) + zone Object1RealOut. Ожидаю что акт - это timeseries 0/1 длиной nFrames. Видео должно отрендерить только моменты когда акт=1, длиной суммарно duration». Это полностью противоречит моему round-8 «longest run + center window». Раньше я думал юзер хочет видеть «настоящий» эпизод акта, а на самом деле он хочет stitched-acts-only видео.
+
+   Переписал:
+   - `makeActVideo:907-920`: вместо `findActiveRuns` + longest-run + center → `activeFrames = find(bool); nTake = min(numel(activeFrames), nWin); selFrames = activeFrames(1:nTake)`. Берём первые N активных кадров, сшиваем back-to-back.
+   - `renderActFramesInMemory` сигнатура: было `(videoPath, result, actIdx, startF, endF, videoOffset, dlg)` → стало `(videoPath, result, actIdx, dlcFrames, videoOffset, dlg)`. Принимает массив frame-indices напрямую вместо range.
+   - Внутри: `for i = 1:numel(dlcFrames); f = dlcFrames(i); vF = f + videoOffset; img = read(reader, vF); ...`. DLC trace-индексы остаются 1-based (X(f), Y(f)).
+   - Title implay: «Act: %s — %d / %d active frames (%.1fs / %.1fs in session)» — показывает сколько отрендерено vs сколько всего активных в сессии.
+   - `findActiveRuns` helper больше не дёргается тут, но оставил в file-scope — может пригодиться позже для act-filters.
+
+**Тесты:**
+- `?sphynx.app.DefineActsTabController` парсится: 66 методов, 33 props (без изменений).
+- 4/4 PASS (smoke + UI build).
+- Live в MATLAB GUI юзер должен запустить — должно открыться окошко с кадрами Object1, mouse nose в зоне Object1RealOut, без скучных простоев.
+

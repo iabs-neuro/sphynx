@@ -705,3 +705,38 @@ Batch analysis — задать пути, настроить визуализа�
 
 Файлы: `+sphynx/+pipeline/analyzeSession.m` (Category), `+sphynx/+app/AnalyzeSessionTabController.m` (вся правая панель + checkbox), `docs/TODO.md` (новый).
 
+
+---
+
+## Define Acts: UX-правки + правильная семантика make-video (2026-05-10)
+
+**Простые UX-правки:**
+1. **Simple acts теперь активный таб по дефолту** — TabGroup стартует с явно выделенным Simple. Раньше highlight'а не было.
+2. **«Add to library» влезла** — расширил левую колонку конструктора с 220px до 280px. Кнопка теперь не обрезается.
+3. **Duration default = 5s, label = «Duration»** — было «Make video — duration:» / 30 / «sec, act =» / «(use selected in library)». Стало одной строкой: `Duration: [5] s [Make video]`.
+
+**Complex acts → отложил в `docs/TODO.md` (P2).** Записал план: wider Name field, компактный layout, expression-style композиция (`Act1 OR Act2 EXCLUDE Act3`, `Act1 + Δt1 + Act2 + Δt2 + ...`). Это потребует переделки схемы acts (буду делать позже).
+
+**Главное — переписал семантику make-video:**
+
+Ты правильно сформулировал: **акт = timeseries 0/1 длиной nFrames**, видео должно показать **только те кадры, где акт=1**, сшитые подряд, суммарной длительностью `Duration`.
+
+Раньше я делал «найти самый длинный непрерывный run акта и центрировать окно на его середине». Это другая семантика — показывает «один реальный эпизод», а ты хочешь «все эпизоды стикнутые в один поток».
+
+Сейчас:
+```
+activeFrames = find(bool);              % все DLC-индексы где акт=1
+nTake = min(numel(activeFrames), Duration*fps);
+selFrames = activeFrames(1:nTake);       % первые N активных
+% рендерим эти N кадров back-to-back
+```
+
+Title окна implay теперь показывает: `Act: Object1 — 145 / 800 active frames (4.8s / 26.7s in session)` — сколько кадров взято, сколько всего активных.
+
+Запусти твой акт `Object1` (nose / speed (0,inf) / zone Object1RealOut) и проверь:
+- Видео должно содержать **только** кадры, где nose внутри Object1RealOut.
+- Длина = 5 секунд (по умолчанию) или сколько реально активных кадров, если меньше.
+- Если кадров много — берутся первые `5 * fps` штук.
+
+Файл: `+sphynx/+app/DefineActsTabController.m`. Тесты PASS, класс парсится.
+

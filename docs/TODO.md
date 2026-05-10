@@ -19,6 +19,14 @@ P4 = macro-decisions / re-architecture.
 
 ## Define Acts
 
+- [ ] **P2** **Complex-acts redesign.** Current Complex tab is cramped and rigid. Wanted:
+  - Wider Name field (current is narrow because grid column 2 is `1x` while column 1 is 120px label).
+  - More compact overall layout (fewer separate rows; combine label+widget where possible).
+  - Expression-style composition. Goal: build acts as equations, e.g.
+    - `Act1 OR Act2 EXCLUDE Act3`
+    - `Act1 + Δt1 + Act2 + Δt2 + Act3` — sequence-style with explicit gap durations between every pair.
+  - Currently the schema only supports a single op (intersect/union/exclude/sequence) over a flat list of components, with one global `seqDelaySec`. Need a richer model — probably an ordered list of tokens (act names interleaved with operators / gap durations), parsed into a tree. Schema change in `+sphynx/+acts/emptyAct.m` + `buildComplexAct.m` + `applyAct.m::applyComplex`.
+
 - [ ] **P2** Act post-filters: median window + min-duration. Add fields to `+sphynx/+acts/emptyAct.m`, `buildSimpleAct.m`, `buildComplexAct.m`. New helper `+sphynx/+acts/filterActArray.m`. Apply after `evalActsLibrary` in `+sphynx/+pipeline/analyzeSession.m:262`. UI: two numeric fields in Simple/Complex constructor.
 - [ ] **P2** Make-video preview: confirm `implay` zoom + window resize land correctly on user's machine; fall back gracefully if R2020a's `Visual.ScaleFactor` API differs.
 - [ ] **P3** Frame-scrubber inside the make-video player — `implay` already has a timeline scrubber; only revisit if user wants finer control.
