@@ -37,6 +37,7 @@ function ST = buildSuperTable(batchResults, varargin)
     p.addParameter('Metadata', table.empty);
     p.addParameter('NamePattern', '^(?<exp>[^_]+)_(?<mouse>[^_]+)_(?<session>\d+D)$', @ischar);
     p.addParameter('Metrics', {'ActPercent', 'ActDuration', 'ActNumber', 'ActMeanTime'}, @iscell);
+    p.addParameter('MetricsByAct', struct(), @isstruct);
     p.addParameter('NaNPolicy', 'keep', @(s) any(strcmp(s, {'keep', 'zero'})));
     p.addParameter('SortBy', {'group', 'line', 'mouse'}, @iscell);
     parse(p, batchResults, varargin{:});
@@ -47,15 +48,22 @@ function ST = buildSuperTable(batchResults, varargin)
     end
 
     metrics = p.Results.Metrics;
+    metricsByAct = p.Results.MetricsByAct;
     actNames = collectActNames(batchResults);
     sessions = unique(metadata.session, 'stable');
     mice = unique(metadata.mouse, 'stable');
 
+    % Resolve per-act metric list. If MetricsByAct is non-empty, use it
+    % for any act it covers; fall back to the flat Metrics list for
+    % acts it doesn't mention. With empty MetricsByAct every act uses
+    % the flat list (backward-compat).
+    perAct = resolvePerActMetrics(actNames, metricsByAct, metrics);
+
     % Tidy long-format table first
-    tidy = buildTidy(batchResults, metadata, actNames, metrics);
+    tidy = buildTidy(batchResults, metadata, actNames, perAct);
 
     % Wide pivot
-    wide = pivotWide(tidy, mice, sessions, actNames, metrics);
+    wide = pivotWide(tidy, mice, sessions, actNames, perAct);
 
     % Add distance / velocity columns (one per session)
     wide = addPerSessionScalar(wide, batchResults, metadata, mice, sessions, ...
@@ -120,7 +128,36 @@ function names = collectActNames(batchResults)
     names = names(:)';
 end
 
-function tidy = buildTidy(batchResults, metadata, actNames, metrics)
+function perAct = resolvePerActMetrics(actNames, metricsByAct, flatMetrics)
+    % Map each act -> cellstr of metric names. metricsByAct may have
+    % name fields whose values are cellstr or string array. Acts not
+    % covered fall back to flatMetrics.
+    perAct = containers.Map('KeyType', 'char', 'ValueType', 'any');
+    for k = 1:numel(actNames)
+        nm = actNames{k};
+        if isfield(metricsByAct, nm)
+            v = metricsByAct.(nm);
+            if isstring(v); v = cellstr(v); end
+            if ischar(v); v = {v}; end
+            perAct(nm) = v;
+        else
+            % Try a case-insensitive fallback (legacy acts spelled
+            % with different casing — Object1 vs object1).
+            keys = fieldnames(metricsByAct);
+            hit = find(strcmpi(keys, nm), 1);
+            if ~isempty(hit)
+                v = metricsByAct.(keys{hit});
+                if isstring(v); v = cellstr(v); end
+                if ischar(v); v = {v}; end
+                perAct(nm) = v;
+            else
+                perAct(nm) = flatMetrics;
+            end
+        end
+    end
+end
+
+function tidy = buildTidy(batchResults, metadata, actNames, perAct)
     rows = {};
     for f = 1:numel(batchResults)
         sname = batchResults(f).SessionName;
@@ -130,6 +167,7 @@ function tidy = buildTidy(batchResults, metadata, actNames, metrics)
         sess  = metadata.session{midx};
         for a = 1:numel(actNames)
             actIdx = find(strcmp({batchResults(f).Acts.ActName}, actNames{a}), 1);
+            metrics = perAct(actNames{a});
             for m = 1:numel(metrics)
                 v = NaN;
                 if ~isempty(actIdx) && isfield(batchResults(f).Acts(actIdx), metrics{m})
@@ -140,14 +178,21 @@ function tidy = buildTidy(batchResults, metadata, actNames, metrics)
             end
         end
     end
+    if isempty(rows)
+        tidy = table('Size', [0 5], ...
+            'VariableTypes', {'cell','cell','cell','cell','double'}, ...
+            'VariableNames', {'mouse', 'session', 'act', 'metric', 'value'});
+        return;
+    end
     tidy = cell2table(rows, 'VariableNames', ...
         {'mouse', 'session', 'act', 'metric', 'value'});
 end
 
-function wide = pivotWide(tidy, mice, sessions, actNames, metrics)
+function wide = pivotWide(tidy, mice, sessions, actNames, perAct)
     wide = table();
     wide.mouse = mice(:);
     for a = 1:numel(actNames)
+        metrics = perAct(actNames{a});
         for m = 1:numel(metrics)
             for s = 1:numel(sessions)
                 col = nan(numel(mice), 1);
@@ -186,10 +231,21 @@ end
 
 function s = prettyMetric(m)
     switch m
-        case 'ActPercent';   s = 'percent';
-        case 'ActDuration';  s = 'duration_s';
-        case 'ActNumber';    s = 'count';
-        case 'ActMeanTime';  s = 'mean_dur_s';
+        case 'ActPercent';      s = 'percent';
+        case 'ActDuration';     s = 'duration_s';
+        case 'ActNumber';       s = 'count';
+        case 'ActMeanTime';     s = 'mean_dur_s';
+        case 'ActMedianTime';   s = 'median_dur_s';
+        case 'ActMeanVelocity'; s = 'mean_v_cm_s';
+        case 'ActMaxVelocity';  s = 'max_v_cm_s';
+        case 'ActMinVelocity';  s = 'min_v_cm_s';
+        case 'ActVelocity';     s = 'mean_v_cm_s';
+        case 'Distance';        s = 'distance_cm';
+        case 'ActMeanDistance'; s = 'mean_dist_cm';
+        case 'FirstStartSec';   s = 'first_start_s';
+        case 'FirstEndSec';     s = 'first_end_s';
+        case 'LastStartSec';    s = 'last_start_s';
+        case 'LastEndSec';      s = 'last_end_s';
         otherwise; s = m;
     end
 end

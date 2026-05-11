@@ -1174,3 +1174,46 @@ Layout (как ты просил):
 
 Файл: `+sphynx/+app/BatchAnalysisTabController.m` (полный rewrite, ~600 строк).
 
+
+---
+
+## Make Output Table: матрица act × metric (2026-05-11)
+
+Layout под твою задачу:
+
+**Loader строка:** Root | Batch dir | Metadata CSV | Out CSV — горизонтальный ряд кнопок + поля под ними, как на других вкладках. При смене Batch dir автоматически сканируются акты во всех `*_WorkSpace.mat` файлах.
+
+**Матрица:**
+- Строки = имена актов (найденные во всех сессиях batch).
+- Столбцы = метрики: count / percent / duration_s / mean_dur_s / median_dur_s / mean_v_cm_s / distance_cm / first_start_s / first_end_s / last_end_s.
+- Ячейки = чекбоксы (логические), кликаешь — отмечаешь нужную метрику.
+
+**Toolbar над матрицей:**
+- **Scan acts** — повторно проходит batch dir и обновляет список актов.
+- **Reset to default** — заполняет матрицу по `sphynx.acts.actParams` (тот же набор что был в legacy `behavior_act_params`).
+- **Load .mat** — подгружает твой кастомный набор (структура `metrics`).
+- **Save .mat** — сохраняет текущую матрицу как набор по умолчанию для этого проекта. Сохраняй куда хочешь, например `<root>/<exp>_output_metrics.mat`.
+- **Select all** / **Clear all** — массовые операции.
+
+**Options:** NaN policy (keep / zero) + Sort by (group,line,mouse / etc) — как было.
+
+**Run row:** Build table / Save CSV.
+
+**Под капотом:** `buildSuperTable` теперь принимает параметр `'MetricsByAct'` — структура `metrics.<actName> = {'metric1', 'metric2', ...}`. Каждый акт получает свой набор колонок в wide-таблице. Колонки именуются `<actName>_<prettyMetric>_<session>`. Backward-compat: если `MetricsByAct` пустая, используется flat `Metrics` для всех актов как раньше.
+
+**Метадата (group, line):** уже работает через Metadata CSV. Формат: колонки `session_name, mouse, session, group, line`. CSV объединится с твоими данными при build table.
+
+**Flow:**
+1. Pick **Batch dir** = твоя `5_Behavior/` — акты автоматически просканируются.
+2. Pick **Metadata CSV** (с колонками mouse/group/line/session_name).
+3. Pick **Out CSV** — куда сохранить.
+4. Матрица заполнится дефолтами (rest = count+percent, freezing = percent, object1 = duration+percent, и т.д.).
+5. Подправь галочки по нужным для статьи.
+6. **Save .mat** — текущий набор останется на потом.
+7. **Build table** → wide + tidy справа.
+8. **Save CSV** — wide + `<name>_tidy.csv`.
+
+Не тестировано live — у меня нет твоей metadata.csv. Запусти на `5_Behavior/`, выбери галочки, прогони. Если кривое — скрин.
+
+Файлы: `+sphynx/+app/MakeOutputTableTabController.m` (rewrite ~430 строк), `+sphynx/+pipeline/buildSuperTable.m` (новый `MetricsByAct` параметр, prettyMetric расширен новыми именами).
+
