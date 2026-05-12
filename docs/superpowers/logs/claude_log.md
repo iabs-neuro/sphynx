@@ -1409,3 +1409,308 @@ Acts вне priorityNames untouched (object1, freezing и т.д.).
 
 12/12 PASS (4 теста под this branch — interpolateGaps убран из быстрого прогона).
 
+
+
+
+
+### 2026-05-11 — Round 8h: metadata short-form + WNOF 4D rename diagnostic
+
+**Что сделано:**
+
+`+sphynx/+pipeline/buildSuperTable.m` — расширен приём метадаты.
+
+Раньше: CSV должен был содержать ровно `session_name, mouse, session, group, line` (5 колонок, по одной строке на каждую сессию × мышь — для 30 мышей × 3 дня это 90 строк руками).
+
+Теперь: принимается короткая форма `mouse, group` (опционально `line`) — одна строка на мышь, разворот в полную форму via cross-join с парсенными SessionName из batch.
+
+**Алиасы колонок (case-insensitive):**
+- `ID_mouse`, `mouse_id`, `subject`, `animal` → `mouse`
+- `ID_group`, `group_id` → `group`
+- `ID_line`, `line_id` → `line`
+- `sessionname`, `session_id` → `session_name`
+
+Новые file-scope хелперы: `normalizeMetadata`, `renameUserColumns`, `ensureColumns`, `fillMissingCellStr`. Полная форма (с `session_name`) тоже работает — `ensureColumns` добивает недостающие group/line дефолтом 'unknown'.
+
+**Smoke-test (in-line, не сохранён):**
+```matlab
+user = table({'A01';'A02';'A16'}, {'Test';'Test';'Control'}, ...
+    'VariableNames', {'ID_mouse','ID_group'});
+batch = struct('SessionName', {'WNOF_A01_1D','WNOF_A01_4D','WNOF_A02_1D','WNOF_A16_4D'}, ...);
+ST = sphynx.pipeline.buildSuperTable(batch, 'Metadata', user);
+```
+Meta получилась корректная: A01/1D Test, A01/4D Test, A02/1D Test, A16/4D Control. Sessions: 1D, 4D. Wide.Properties.VariableNames: mouse/group/line + distance/velocity на сессию.
+
+187/187 PASS. Регрессий нет.
+
+**WNOF 4D rename — диагностика:**
+
+Юзер заявил: в 4D файлы «легенда напутана», нужно переименовать source + analyzed. Дал две легенды:
+- 3D dict (15 мышей, A1_B→A01..A3_RR→A15): корректна для 1D/2D/3D
+- 4D dict (30 мышей, A1_B→A01..A3_RR→A30): корректна для 4D
+
+Состояние на диске:
+- `4_Preset/`: есть WNOF_A01..A30_4D_Preset.mat (все 30) + WNOF_A01..A15_3D_Preset.mat
+- `3_DLC/`: содержит как 3D, так и 4D файлы — все уже под numeric A##
+- `5_Behavior/WNOF_A01_4D..A30_4D/` — анализы прошли
+
+Внутри 4D preset нет field с оригинальным cage label (проверил A05_4D: top-level Options/ArenaAndObjects/Zones; в Options нет 'SourceFile' или 'OriginalName'). То есть из файлов восстановить «правильный cage → текущий wrong A##» нельзя.
+
+**Что нужно от юзера для переименования:**
+1. Какой mapping был ОШИБОЧНО применён к 4D (cage → текущий A##)? Подозреваю что 3D-style (10 мышей на кейдж, по тому же порядку — но дома). Если можно — дать тот dict, как 3D и 4D.
+2. Сохранилась ли где-то изначальная папка с cage-label именами (вроде `1_Cage/`)? Если да — там можно проверить.
+
+Без этого делать batch-rename вслепую опасно: 30 файлов × 7 типов (csv, mp4 в 2_Combined, preset .mat, и в 5_Behavior — WorkSpace.mat, main.mp4, Acts_video/*.mp4) = 200+ файлов.
+
+
+
+
+### 2026-05-11 — Round 8i: arbitrary ID_* metadata columns + xlsx support
+
+**Что сделано:**
+
+`+sphynx/+pipeline/buildSuperTable.m`:
+- `renameUserColumns`: теперь дополнительно к alias-table обрезает ID_ prefix с любой колонки (`ID_sex` → `sex`, `ID_drug` → `drug`). Конфликты имён (две колонки сводятся к одному имени) разруливаются суффиксом `_2`, `_3`.
+- `normalizeMetadata`: вместо trim до {mouse, group, line} теперь делает outerjoin со ВСЕМИ пользовательскими колонками. Перед join обнуляет placeholder `group`/`line` в parsed (чтобы user-таблица побеждала). После — заполняет пустые ячейки `'unknown'` для всех cellstr колонок.
+- `uniqueMiceMetadata`: возвращает все колонки meta кроме `session`/`session_name` (т.е. per-mouse факторы). Mouse остаётся первой колонкой.
+
+`+sphynx/+app/MakeOutputTableTabController.m`:
+- File picker для Metadata теперь принимает `*.csv; *.xlsx; *.xls`.
+- SortDropDown: `Editable='on'` чтобы юзер мог напечатать произвольный set колонок типа `sex,drug,mouse`. Tooltip обновлён.
+- Tooltip кнопки Metadata: `CSV/XLSX: ID_mouse + ID_group/ID_line/any ID_* columns`.
+
+**Smoke-test (in-line):**
+```matlab
+user = table({'A01';'A02';'A16'}, {'Test';'Test';'Control'}, ...
+    {'M';'F';'M'}, {'Saline';'Drug';'Drug'}, ...
+    'VariableNames', {'ID_mouse','ID_group','ID_sex','ID_drug'});
+ST = sphynx.pipeline.buildSuperTable(batch, 'Metadata', user, ...
+    'SortBy', {'group','sex','mouse'});
+```
+Wide.Properties.VariableNames: mouse, group, sex, drug, line, distance/velocity на сессию. Sorted by group → sex → mouse (Control пошёл первым по алфавиту). Meta содержит session_name, mouse, session, group, sex, drug, line.
+
+187/187 PASS.
+
+
+
+
+### 2026-05-11 — WNOF 4D rename apply
+
+Юзер дал маппинг wrong->correct (30 строк, перестановка) после fix: `A04_wrong -> A30_correct, A30_wrong -> A15_correct`. Запустил `tools/rename_4D_behavior.m` (написан с двухпроходным TMP-rename для коллизий).
+
+dryRun: 30/30 папок найдено, 202 файла + 29 папок (A01 identity skipped), 0 SessionName updates в .mat (поля нет, имя сессии парсится из имени файла).
+
+Apply: успешно, 0 ошибок. Проверил `WNOF_A30_4D` (была A04): все 7 файлов (WorkSpace.mat + main.mp4 + 5 Acts_video) переименованы, bodyparts_trajectory и session-wide plots не тронуты, TMP-папок нет.
+
+Только 5_Behavior. 3_DLC/4_Preset/2_Combined не трогали по запросу юзера.
+
+
+
+
+### 2026-05-11 — Make Output Table: SessionName fix + flexible pattern
+
+**Баг по скрину юзера:**
+
+Wide-таблица показала 4 строки на мышь (вместо 1), а в колонке mouse — `WNOF_A01_1DDLC_resnet152_MiceUniversal152...` (полное имя .mat с DLC-хвостом). Session везде `1D`.
+
+**Корень:**
+- `MakeOutputTableTabController.buildTable` брал SessionName из basename `.mat` файла (с DLC-хвостом).
+- Default NamePattern в buildSuperTable был `^(?<exp>[^_]+)_(?<mouse>[^_]+)_(?<session>\d+D)$` — не парсил DLC-хвост → дефолт `mouse=fullname, session=1D` для всех.
+- Из-за того что mouse был unique per file, каждая сессия становилась отдельной "мышью". 30 мышей × 4 сессии = 120 строк, и все с разными mouse-ID-ми.
+
+**Фикс:**
+
+`+sphynx/+app/MakeOutputTableTabController.m`: SessionName теперь берётся из имени родительской папки (`WNOF_A01_4D` — чисто `<exp>_<mouse>_<session>`). Fallback на basename с regex-стрипом `DLC_.*$`, если .mat лежит прямо в batch-dir без подпапки.
+
+`+sphynx/+pipeline/buildSuperTable.m`: NamePattern по дефолту изменён на `^(?<exp>[^_]+)_(?<mouse>[^_]+)_(?<session>.+)$`. Теперь session может быть `1D`, `1T`, `1D_1T`, любая строка с подчёркиваниями.
+
+**Verify regex:**
+- WNOF_A01_4D     -> exp=WNOF mouse=A01 session=4D
+- WNOF_A01_1T     -> exp=WNOF mouse=A01 session=1T
+- WNOF_A01_1D_1T  -> exp=WNOF mouse=A01 session=1D_1T
+- NOF_H01_2D      -> exp=NOF mouse=H01 session=2D
+
+187/187 PASS.
+
+После фикса Wide будет: 30 строк × (mouse, group, line + N_acts*N_metrics*N_sessions колонок).
+
+
+
+
+### 2026-05-11 — Make Output: metadata fixes (mouse-prefix, no auto-line)
+
+Юзер кинул свою `MetaData.csv`. Три фикса в `+sphynx/+pipeline/buildSuperTable.m`:
+
+1. **CSV с `;` разделителем** — readtable автодетектит, code-change не нужен. Проверил.
+
+2. **Mouse-формат `WNOF_A01` (с exp-префиксом)** — parsed.mouse из regex был `A01` (bare). Не сматчивалось при join.
+   - parseMetadataFromNames теперь дополнительно сохраняет `exp` колонку.
+   - normalizeMetadata добавляет helper `userMouseHasExpPrefix`: проверяет, начинается ли первый mouse-ID юзера с известного exp. Если да — parsed.mouse upgrade'ится в форму `<exp>_<mouse>`.
+   - Outerjoin теперь матчит юзеровский `WNOF_A01` с upgraded parsed `WNOF_A01`.
+
+3. **Не форсить `group`/`line`** в финальной таблице если юзер их не дал.
+   - parseMetadataFromNames больше не добавляет placeholder group='unknown', line='unknown'.
+   - normalizeMetadata не добивает их пост-фактум.
+   - ensureColumns (для full-form metadata) аналогично.
+   - В no-metadata branch: вообще нет group/line, только session_name/exp/mouse/session — Wide показывает только то, что есть.
+
+**Verify smoke-test (4 sessions × 3 mice, real MetaData.csv):**
+```
+Wide cols: mouse, group, distance_cm_1D, distance_cm_4D, velocity_cm_per_s_1D, velocity_cm_per_s_4D
+Wide:
+    WNOF_A16  Control   NaN   4     NaN   0.8
+    WNOF_A01  Test      1     2     0.5   0.6
+    WNOF_A02  Test      3     NaN   0.7   NaN
+```
+3 строки на 3 мыши, mouse в exp-prefixed форме, `line` НЕ появилось.
+
+187/187 PASS.
+
+
+
+
+### 2026-05-11 — Make Output: focus retention + distance units + rounding
+
+**1. Focus retention:** новый helper `restoreFocus()` в `MakeOutputTableTabController` дёргает `figure(obj.Figure)` после каждого пикера (uigetdir/uigetfile/uiputfile). Вызовы добавлены в pickPath, loadDefaults, saveDefaults.
+
+**2. Distance unit dropdown:** заменил placeholder secondary toolbar на ряд с двумя dropdown'ами:
+- `DistUnitDropDown`: {cm, m}
+- `DistScopeDropDown`: {all, general only}
+
+Логика scope в buildTable:
+- `all`     -> generalUnit=distUnit, perActUnit=distUnit
+- `general only` -> generalUnit=distUnit, perActUnit='cm'
+
+**3. buildSuperTable новые параметры:**
+- `GeneralDistanceUnit` ('cm'|'m')
+- `PerActDistanceUnit`  ('cm'|'m')
+
+**Post-process pass `applyUnitsAndRounding`:**
+- General distance: regex `^distance_(cm|m)_(.+)$` -> rename column + convert /100 if 'm'.
+- Per-act distance: regex `^(.+)_distance_cm_(.+)$` -> convert + rename to _distance_m_ если 'm'.
+- Velocity (general `velocity_cm_per_s_*` + per-act `_(mean|max|min)_v_cm_s_*`) -> round 1 dec.
+- Tidy: same conversion для metric=='Distance' и velocity-metrics.
+
+**Rounding rules:**
+- cm -> nearest integer
+- m -> 2 decimals
+- velocity (always cm/s) -> 1 decimal
+
+Smoke test on synthetic batch:
+- all cm: per-act + general как integers, velocity 1 dec
+- all m: per-act + general как 2 dec в meters (column `_distance_m_`), velocity 1 dec
+- per-act cm, general m: per-act как integer cm, general как 2 dec m
+
+187/187 PASS.
+
+
+
+
+### 2026-05-11 — TODO consolidation + GUI WIP markers
+
+**1. GUI:** добавил `*` к Title 3 вкладок в `+sphynx/+app/CreatePresetApp.m:569-571`:
+- `Plot Data` -> `Plot Data *`
+- `Preprocess Video` -> `Preprocess Video *`
+- `Synthetic Data` -> `Synthetic Data *`
+
+Все три контроллера существуют и не stub'ы (Plot 289 LoC, PrepVideo 162, Synthetic 244), но не feature-complete. Звезда означает WIP.
+
+**2. TODO.md полностью переписан.** Новая структура:
+
+- Заголовок + scoring scale (P1-P4 priority, C1-C4 complexity).
+- Таблица статуса всех 9 вкладок с LoC.
+- Per-tab секции в порядке вкладок (1-9).
+- Cross-cutting: tab nav, metadata system, tracker compat, universal act features.
+- Barnes maze metrics (отдельный block с training-day + test-day).
+- Scattered % TODO markers из кода (2 actionable + 4 historical/self-ref).
+- Macro decisions (P4).
+- Recently done — лог последних 13 завершённых.
+
+Все задачи теперь имеют пару `**Px / Cy**`. C1 = <1ч, C2 = <1д, C3 = 1-3д, C4 = >3д.
+
+Audit отметил:
+- Done items из старого TODO перенесены в "Recently done".
+- Новые WIP-секции для Plot Data / Preprocess Video / Synthetic — с конкретными next-steps вместо placeholder'ов.
+- Make Output получил доп пункт про reorder колонок в Wide (group-by-metric option).
+- Batch Analysis получил резюме-секцию (раньше было пусто).
+
+Scattered code TODO:
+- cleanBodyPart.m:30 -> в TODO как P3/C1.
+- speedActs.m:23 -> в TODO как P3/C1.
+- CreatePresetApp.m:1522, 1654 -> historical notes, not pending.
+
+187/187 PASS.
+
+---
+
+## 2026-05-11 - Конвертация legacy mat-файлов под новый формат (sphynx-GUI)
+
+### Контекст
+Юзер указал на H:\Dataset\BehaviorData — 4 эксперимента (CC, FOF, NOF, RFC), у каждого папка 5_BehaviorMAT с legacy *_WorkSpace.mat от старого BehaviorAnalyzer. Нужно переделать под формат, который читает MakeOutputTable + buildSuperTable (новые ключи: Acts с ActMeanVelocity / FirstStartSec / LastEndSec / ActMaxVelocity / ActMinVelocity, BodyPartsTraces с непустыми AverageDistance / AverageSpeed). Положить в 5_BehaviorMAT_new рядом.
+
+### Структурные различия (по `whos -file`)
+- CC/FOF/NOF — legacy с полным Acts (10-13 элементов) + BodyPartsTraces (12-13, включая bodycenter). AverageDistance/Speed заполнены.
+  - Acts fields: ActName, ActArray, ActArrayRefine, ActNumber, ActPercent, ActDistr, ActMeanTime, ActMeanSTDTime, ActMedianTime, ActMedianMADTime, Zone, Distance, ActMeanDistance, ActVelocity, ActDuration
+  - НЕ хватает: FirstStartSec/FirstEndSec/LastStartSec/LastEndSec, ActMeanVelocity (есть alias ActVelocity), ActMaxVelocity, ActMinVelocity.
+- RFC — Acts отсутствует целиком (legacy Freezing-Track pipeline их не считал), BPT всего 3 (nose, miniscope, tailbase), AverageDistance/Speed пустые. pxl2sm=1 — калибровка не делалась.
+
+### Решение
+`tools/convert_legacy_mat.m`:
+- Загружает только нужные переменные (Acts, BodyPartsTraces, Zones, ArenaAndObjects, Options, Point, BodyPartsNames).
+- Для каждого Act мутирует поля по одному (не присваивает obj(i) = newStruct — даёт "Subscripted assignment between dissimilar structures"): добавляет First/LastStartSec, First/LastEndSec из ActArrayRefine + FrameRate; ActMeanVelocity = ActVelocity если нет; ActMaxVelocity/ActMinVelocity из VelocitySmoothed бодицентра в маске акта.
+- Для каждой BPT если AverageDistance/Speed пустые — считает сумму sqrt(dx^2+dy^2) по TraceSmoothed.X/Y / pxl2sm и AverageSpeed = AverageDistance / ((N-1)/fps).
+- Сохраняет flat в `<EXP>/5_BehaviorMAT_new/<same_filename>` (`-v7.3`). SessionName MakeOutputTable получит из stripping `_WorkSpace`.
+
+### Применено
+- CC: 34/34 OK, FOF: 63/63 OK, NOF: 64/64 OK, RFC: 52/52 OK. Всего 213 файлов, 0 ошибок.
+- Sanity-проверка: 3 CC файла через `buildSuperTable` -> 128-колоночная wide-таблица с per-act + distance_m/velocity_cm_per_s_*; new `rear_first_start_s_*` и `rear_last_end_s_*` присутствуют. RFC tailbase.AverageDistance=7705.43 (в пикселях — pxl2sm=1 у RFC).
+
+### Caveat
+RFC: MakeOutputTable пишет 'No acts to build the table from' если Acts пуст во всех файлах — RFC standalone не построит таблицу. Юзеру либо смешивать с CC/FOF/NOF в одном Batch dir, либо доработать вкладку чтобы строила distance-only таблицу.
+
+---
+
+## 2026-05-11 - Plot Data tab: rewrite with auto-stats (sphynx-GUI)
+
+### Контекст
+Юзеру нужна вкладка Plot Data, читающая super_table.csv от Make Output Table, с авто-выбором t-test / 1-way / 2-way / RM ANOVA, авто-коррекциями, Prism-стилем (bar+SEM+dots), стартами над достоверными парами. Пресет факторов: 1 метрика → 1 график при ≤2 факторах. Шрифт/размер/цвета общие. Чекбокс auto-stats и звёзды.
+
+### Архитектура
+- `+sphynx/+stats/extractMetrics.m` — wide-CSV → struct array metrics. Парсит колонки `<act>_<suffix>_<session>`, `distance_<cm|m>_<session>`, `velocity_cm_per_s_<session>` с приоритетом длинных суффиксов. На CC: 66 metrics из 135 cols.
+- `+sphynx/+stats/metricToLong.m` — per-metric long table (subject, session, factors..., value).
+- `+sphynx/+stats/detectFactors.m` — within/between auto: фактор within если ≥1 субъект имеет >1 уникальный уровень.
+- `+sphynx/+stats/runTest.m` — авто-pick: 1 фактор × 2 уровня + between → ttest; +within → paired-ttest; ≥3 уровней + between → anova1; +within → rm-anova; 2 фактора оба between → anova2; иначе rm-anova. Поддерживает forced test через opts.test и correction (tukey/bonferroni/holm/none → multcompare CType).
+- `+sphynx/+stats/pStars.m` — ns/*/**/***/****.
+- `+sphynx/+plot/barWithStats.m` — Prism-style bar+errorbar+points. Стиль конфигурируется (errorbar SEM/SD/95CI/none, colormap, fontName, fontSize, titleFontSize, axisFontSize). Стары рисует через брекеты над парами; для двухфакторных учитывает factor2-уровни через `f2lvl` локацию. Все служебные plot() помечены `HandleVisibility off` чтобы не лезли в легенду.
+- `+sphynx/+app/PlotDataTabController.m` — переписан с нуля. Левая колонка: loader → metric/factor1/factor2/splitBy → style panel (errorbar/colormap/font/size) → stats panel (auto+stars+test+correction) → Plot/SavePNG/SaveAll buttons → stats output text area. Правая колонка: один uiaxes.
+
+### Тонкости
+- RM-ANOVA через `fitrm + ranova + multcompare`. Within-design использует numeric indices 1..nW; после multcompare мапим обратно через `wlev(idx)`. Без этого pairwise возвращает '1', '2' вместо '1D', '2D' и в plot не находит координаты.
+- multcompare на between-факторе делается отдельным вызовом `multcompare(rmModel, betweenName)`, потому что один вызов возвращает только в одном измерении. Иначе для типичного случая (group between + session within с маленьким session-эффектом) звёзды над group-парой не появлялись.
+- Star-filter в `drawStars`: `xor(isempty(fA), isempty(fB))` — пропускаем cross-factor (1D vs ctrl), но не within-factor (1D vs 2D, оба fA=fB='') и не within-factor2 (ctrl vs exp, оба fA='ctrl' и fB='exp'). Изначальный фильтр `~strcmp(fA, fB)` всё резал.
+- Bar() звал legend на каждый бар, легенда вырастала в 4 entries (ctrl x 2 sessions + ditto exp). Фикс: первый бар каждого j-цвета получает `DisplayName`, остальные — `HandleVisibility off`.
+- uigridlayout([12,1]) с RowHeight длины 7 ломал buildUI при `Layout.Row = 7` — collision с другим виджетом на ряду 7. Грид переделан в [7,1] с осмысленными heights.
+
+### Verification
+End-to-end test `tools/test_plotdata_e2e.m`: на CC создан super_table.csv с двумя фейк-группами (ctrl=H01..H10, exp=H11..H23), прогнаны:
+- `rest_percent` 1-way (group, session=1D): ttest t=1.685, df=15, p=0.113 ✓
+- `rest_percent` 2-way (group×session): RM-ANOVA F=26.54, p=7.88e-05, pairwise ctrl vs exp p=0.042 ✓ -> на графике брекет со * над bars.
+- `distance_cm` session-only: paired-ttest t=-0.15, df=16, p=0.88 (ns) ✓ -> график без звёзд.
+
+187/187 PASS, createPresetAppSmokeTest проходит. `*` снят с заголовка вкладки в CreatePresetApp.m:569.
+
+---
+
+## 2026-05-12 - Familiarization: текущая папка + Ontogenez BehaviorData
+
+### Что просмотрел
+- `C:\Users\User\PycharmProjects\sphynx\` — ветка sphynx-GUI; `+sphynx` уже разделён на 13 пакетов (включая новые `+plot/`, `+stats/`). `docs/TODO.md` — таблица 9 вкладок со статусами и priority/complexity tagging. 187/187 тестов идут.
+- `C:\Users\User\YandexDisk\_Projects\Ontogenez\BehaviorData\` — pipeline-структура `1_Raw / 2_Combined / 3_DLC / 4_Preset / 5_Behavior` + `Ontogenez - Main.csv` (582 строки, кол: Name_expert/Folder/Name_video/Mouse_id/Trial/Time_start frame/End_start frame/Data/Target_place/Example/Format).
+
+### Состояние Ontogenez-датасета
+- 1_Raw: подкаталоги `first order` (A31..A56 .MOV), `second order` (D/F/G/H .mp4), `other` (A9..A30 .MOV).
+- 4_Preset: 37 папок (A9A10..A56 + C1C2..C35C36), везде `<id>_Preset.mat` + `<id>_layout.png`. Сделано Apr 29-30.
+- 2_Combined, 3_DLC, 5_Behavior пусты — DLC ещё не прогонялся.
+- Связки с sphynx repo нет (pipeline вручную через GUI-вкладки Preset -> Preprocess -> Analyze).
+
+### Зачем это нужно
+Юзер ввёл в контекст для будущих задач; никаких изменений не вносил.

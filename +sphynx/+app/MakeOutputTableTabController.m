@@ -34,6 +34,8 @@ classdef MakeOutputTableTabController < handle
         % Table options
         NaNDropDown
         SortDropDown
+        DistUnitDropDown
+        DistScopeDropDown
 
         % Run / save
         BuildButton
@@ -144,6 +146,7 @@ classdef MakeOutputTableTabController < handle
         function loadDefaults(obj)
             startDir = obj.resourceStartDir();
             [f, p] = uigetfile({'*.mat'}, 'Load metric matrix', startDir);
+            obj.restoreFocus();
             if isequal(f, 0); return; end
             try
                 s = load(fullfile(p, f));
@@ -164,6 +167,7 @@ classdef MakeOutputTableTabController < handle
             startDir = obj.resourceStartDir();
             [f, p] = uiputfile({'*.mat'}, 'Save metric matrix', ...
                 fullfile(startDir, 'output_table_metrics.mat'));
+            obj.restoreFocus();
             if isequal(f, 0); return; end
             metrics = obj.metricMatrixToStruct(); %#ok<NASGU>
             try
@@ -258,9 +262,20 @@ classdef MakeOutputTableTabController < handle
                 p = fullfile(files(k).folder, files(k).name);
                 try
                     s = load(p);
-                    [~, base, ~] = fileparts(files(k).name);
-                    base = regexprep(base, '_WorkSpace$', '');
-                    rec.SessionName = base;
+                    % Session stem: prefer the parent folder name (clean
+                    % <exp>_<mouse>_<session> form). Fall back to the
+                    % .mat basename minus the _WorkSpace and DLC suffixes
+                    % if the file sits at batch-dir top level.
+                    [~, parentName] = fileparts(files(k).folder);
+                    [~, batchName]  = fileparts(d);
+                    if ~isempty(parentName) && ~strcmp(parentName, batchName)
+                        rec.SessionName = parentName;
+                    else
+                        [~, base, ~] = fileparts(files(k).name);
+                        base = regexprep(base, '_WorkSpace$', '');
+                        base = regexprep(base, 'DLC_.*$', '');
+                        rec.SessionName = base;
+                    end
                     rec.Acts = getOr(s, 'Acts', []);
                     rec.Distance = NaN; rec.Velocity = NaN;
                     if isfield(s, 'BodyPartsTraces') && ~isempty(s.BodyPartsTraces)
@@ -285,11 +300,22 @@ classdef MakeOutputTableTabController < handle
             end
 
             metricsByAct = obj.metricMatrixToStruct();
+            distUnit  = obj.DistUnitDropDown.Value;
+            distScope = obj.DistScopeDropDown.Value;
+            if strcmp(distScope, 'general only')
+                perActUnit = 'cm';
+                generalUnit = distUnit;
+            else
+                perActUnit = distUnit;
+                generalUnit = distUnit;
+            end
             ST = sphynx.pipeline.buildSuperTable(batch, ...
                 'Metadata', meta, ...
                 'MetricsByAct', metricsByAct, ...
                 'NaNPolicy', obj.NaNDropDown.Value, ...
-                'SortBy', strsplit(obj.SortDropDown.Value, ','));
+                'SortBy', strsplit(obj.SortDropDown.Value, ','), ...
+                'GeneralDistanceUnit', generalUnit, ...
+                'PerActDistanceUnit', perActUnit);
             obj.State.superTable = ST;
             obj.refreshTables();
             obj.applog('info', 'Built table: %d rows x %d cols (wide), %d rows tidy', ...
@@ -358,7 +384,7 @@ classdef MakeOutputTableTabController < handle
                 'ButtonPushedFcn', @(~,~) obj.pickPath('Batch'));
             obj.MetadataButton = uibutton(row, 'Text', 'Metadata', ...
                 'BackgroundColor', semanticColor('action'), ...
-                'Tooltip', 'CSV: session_name, mouse, session, group, line', ...
+                'Tooltip', 'CSV/XLSX: ID_mouse + ID_group/ID_line/any ID_* columns', ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('Metadata'));
             obj.OutCsvButton = uibutton(row, 'Text', 'Out csv', ...
                 'BackgroundColor', semanticColor('action'), ...
@@ -424,14 +450,30 @@ classdef MakeOutputTableTabController < handle
                 'Value', 'keep');
             uilabel(row, 'Text', 'Sort by:');
             obj.SortDropDown = uidropdown(row, ...
-                'Items', {'group,line,mouse', 'mouse', 'line,mouse', 'group,mouse'}, ...
-                'Value', 'group,line,mouse');
+                'Items', {'line,group,mouse', 'group,line,mouse', 'mouse', 'line,mouse', 'group,mouse'}, ...
+                'Value', 'line,group,mouse', ...
+                'Editable', 'on', ...
+                'Tooltip', 'Comma-separated metadata columns to sort by (e.g. sex,drug,mouse)');
         end
 
-        function buildSecondaryToolbar(~, parent)
-            % Reserved for future / placeholder so the row layout
-            % stays consistent.
-            uilabel(parent, 'Text', '', 'Visible', 'off');
+        function buildSecondaryToolbar(obj, parent)
+            % Distance-unit options.
+            row = uigridlayout(parent, [1, 4]);
+            row.Layout.Row = 5;
+            row.RowHeight = {26};
+            row.ColumnWidth = {'fit', 80, 'fit', '1x'};
+            row.ColumnSpacing = 4;
+            row.Padding = [0 0 0 0];
+            uilabel(row, 'Text', 'Dist unit:');
+            obj.DistUnitDropDown = uidropdown(row, ...
+                'Items', {'cm', 'm'}, ...
+                'Value', 'cm', ...
+                'Tooltip', 'Distance output unit (rounding: cm->integer, m->2 dec)');
+            uilabel(row, 'Text', 'Apply to:');
+            obj.DistScopeDropDown = uidropdown(row, ...
+                'Items', {'all', 'general only'}, ...
+                'Value', 'all', ...
+                'Tooltip', 'all = both session-wide and per-act distance; general only = leave per-act distance in cm');
         end
 
         function buildBuildRow(obj, parent)
@@ -496,12 +538,28 @@ classdef MakeOutputTableTabController < handle
                         obj.scanActsInBatchDir();
                     end
                 case 'Metadata'
-                    [f, p] = uigetfile({'*.csv'}, 'Metadata CSV', startDir);
+                    [f, p] = uigetfile( ...
+                        {'*.csv;*.xlsx;*.xls', 'Metadata (*.csv, *.xlsx, *.xls)'; ...
+                         '*.*', 'All files'}, ...
+                        'Metadata file', startDir);
                     if ~isequal(f, 0); obj.MetadataField.Value = fullfile(p, f); end
                 case 'OutCsv'
                     [f, p] = uiputfile({'*.csv'}, 'Output CSV', ...
                         fullfile(startDir, 'super_table.csv'));
                     if ~isequal(f, 0); obj.OutCsvField.Value = fullfile(p, f); end
+            end
+            obj.restoreFocus();
+        end
+
+        function restoreFocus(obj)
+            % Bring the main Sphynx window back to front after any
+            % modal picker so the user does not get pushed to other
+            % apps.
+            try
+                if ~isempty(obj.Figure) && isvalid(obj.Figure)
+                    figure(obj.Figure);
+                end
+            catch
             end
         end
 

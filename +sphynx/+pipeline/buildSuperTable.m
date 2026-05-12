@@ -35,16 +35,20 @@ function ST = buildSuperTable(batchResults, varargin)
     p = inputParser;
     p.addRequired('batchResults');
     p.addParameter('Metadata', table.empty);
-    p.addParameter('NamePattern', '^(?<exp>[^_]+)_(?<mouse>[^_]+)_(?<session>\d+D)$', @ischar);
+    p.addParameter('NamePattern', '^(?<exp>[^_]+)_(?<mouse>[^_]+)_(?<session>.+)$', @ischar);
     p.addParameter('Metrics', {'ActPercent', 'ActDuration', 'ActNumber', 'ActMeanTime'}, @iscell);
     p.addParameter('MetricsByAct', struct(), @isstruct);
     p.addParameter('NaNPolicy', 'keep', @(s) any(strcmp(s, {'keep', 'zero'})));
-    p.addParameter('SortBy', {'group', 'line', 'mouse'}, @iscell);
+    p.addParameter('SortBy', {'line', 'group', 'mouse'}, @iscell);
+    p.addParameter('GeneralDistanceUnit', 'cm', @(s) any(strcmpi(s, {'cm','m'})));
+    p.addParameter('PerActDistanceUnit',  'cm', @(s) any(strcmpi(s, {'cm','m'})));
     parse(p, batchResults, varargin{:});
 
     metadata = p.Results.Metadata;
     if isempty(metadata)
         metadata = parseMetadataFromNames({batchResults.SessionName}, p.Results.NamePattern);
+    else
+        metadata = normalizeMetadata(metadata, {batchResults.SessionName}, p.Results.NamePattern);
     end
 
     metrics = p.Results.Metrics;
@@ -65,9 +69,10 @@ function ST = buildSuperTable(batchResults, varargin)
     % Wide pivot
     wide = pivotWide(tidy, mice, sessions, actNames, perAct);
 
-    % Add distance / velocity columns (one per session)
+    % Add distance / velocity columns (one per session). Distance unit
+    % is settable via GeneralDistanceUnit.
     wide = addPerSessionScalar(wide, batchResults, metadata, mice, sessions, ...
-        'Distance', 'distance', 'cm');
+        'Distance', 'distance', p.Results.GeneralDistanceUnit);
     wide = addPerSessionScalar(wide, batchResults, metadata, mice, sessions, ...
         'Velocity', 'velocity', 'cm_per_s');
 
@@ -81,6 +86,11 @@ function ST = buildSuperTable(batchResults, varargin)
     if ~isempty(sortBy)
         wide = sortrows(wide, sortBy);
     end
+
+    % Unit conversion + rounding for distance/velocity. Done last so it
+    % applies to any join/sort done above.
+    [wide, tidy] = applyUnitsAndRounding(wide, tidy, ...
+        p.Results.GeneralDistanceUnit, p.Results.PerActDistanceUnit);
 
     % NaN policy
     if strcmp(p.Results.NaNPolicy, 'zero')
@@ -99,13 +109,132 @@ end
 
 % --- Helpers ---------------------------------------------------------------
 
+function meta = normalizeMetadata(user, sessionNames, pattern)
+    % Accept any of:
+    %   (a) full form: session_name / mouse / session / group / line / ...
+    %   (b) short form: mouse + arbitrary ID_* columns
+    %                   -> cross-joined with parsed sessions from
+    %                      batchResults SessionNames.
+    % Column names are matched case-insensitively, ID_ prefix is
+    % stripped, common aliases are resolved (ID_mouse -> mouse,
+    % Subject -> mouse, etc.). Any extra columns (ID_sex, ID_drug, ...)
+    % are passed through as additional grouping factors.
+
+    user = renameUserColumns(user);
+    have = user.Properties.VariableNames;
+
+    if any(strcmpi(have, 'session_name'))
+        meta = ensureColumns(user, sessionNames, pattern);
+        return;
+    end
+
+    if ~any(strcmpi(have, 'mouse'))
+        error('buildSuperTable:badMetadata', ...
+            'Metadata must contain a "mouse" or "session_name" column. Got: %s', ...
+            strjoin(have, ', '));
+    end
+
+    parsed = parseMetadataFromNames(sessionNames, pattern);
+
+    % Bring user.mouse and parsed.mouse to the same form before join.
+    % If user provided mouse like "WNOF_A01" (with exp prefix), we need
+    % parsed.mouse to match. parsed.mouse from the regex is the bare
+    % token (e.g. "A01"). Detect prefix usage on the user side and
+    % upgrade parsed.mouse accordingly.
+    user.mouse = cellstr(string(user.mouse));
+    parsed.mouse = cellstr(string(parsed.mouse));
+    if userMouseHasExpPrefix(user.mouse, parsed)
+        parsed.mouse = strcat(parsed.exp, '_', parsed.mouse);
+    end
+
+    meta = outerjoin(parsed(:, {'session_name', 'mouse', 'session'}), ...
+        user, 'Keys', 'mouse', 'MergeKeys', true, 'Type', 'left');
+
+    % Fill missing cells for any string-typed grouping column the user
+    % provided. Do NOT auto-add group/line if the user didn't supply
+    % them — keep Wide compact.
+    skip = {'mouse', 'session', 'session_name'};
+    for k = 1:width(meta)
+        nm = meta.Properties.VariableNames{k};
+        if any(strcmp(skip, nm)); continue; end
+        v = meta.(nm);
+        if iscell(v) || isstring(v) || ischar(v)
+            meta.(nm) = fillMissingCellStr(v, 'unknown');
+        end
+    end
+end
+
+function tf = userMouseHasExpPrefix(userMouseList, parsed)
+    % Returns true if user's mouse values include at least one entry
+    % whose first underscore-separated token matches any parsed exp.
+    if isempty(userMouseList); tf = false; return; end
+    sample = userMouseList{find(~cellfun('isempty', userMouseList), 1)};
+    if isempty(sample) || ~contains(sample, '_'); tf = false; return; end
+    tokens = strsplit(sample, '_');
+    if isempty(tokens); tf = false; return; end
+    tf = any(strcmp(parsed.exp, tokens{1}));
+end
+
+function T = renameUserColumns(T)
+    aliases = struct( ...
+        'id_mouse',   'mouse',   'mouse_id',  'mouse', ...
+        'subject',    'mouse',   'animal',    'mouse', ...
+        'id_group',   'group',   'group_id',  'group', ...
+        'id_line',    'line',    'line_id',   'line', ...
+        'sessionname','session_name', 'session_id', 'session_name');
+    aliasKeys = fieldnames(aliases);
+    names = T.Properties.VariableNames;
+    seen = containers.Map('KeyType', 'char', 'ValueType', 'logical');
+    for k = 1:numel(names)
+        lower_name = lower(names{k});
+        if any(strcmp(aliasKeys, lower_name))
+            newName = aliases.(lower_name);
+        elseif startsWith(lower_name, 'id_')
+            % Strip ID_ prefix for any user column (ID_sex -> sex, ...).
+            newName = lower_name(4:end);
+        else
+            newName = lower_name;
+        end
+        % Guard against duplicate-after-rename collisions (e.g. two
+        % columns reducing to the same name) — keep the first, suffix
+        % the rest.
+        if seen.isKey(newName)
+            i = 2;
+            while seen.isKey(sprintf('%s_%d', newName, i)); i = i + 1; end
+            newName = sprintf('%s_%d', newName, i);
+        end
+        seen(newName) = true;
+        T.Properties.VariableNames{k} = newName;
+    end
+end
+
+function T = ensureColumns(T, sessionNames, pattern)
+    have = T.Properties.VariableNames;
+    if ~any(strcmpi(have, 'mouse')) || ~any(strcmpi(have, 'session'))
+        parsed = parseMetadataFromNames(sessionNames, pattern);
+        if ~any(strcmpi(have, 'mouse'));   T.mouse   = parsed.mouse;   end
+        if ~any(strcmpi(have, 'session')); T.session = parsed.session; end
+    end
+end
+
+function c = fillMissingCellStr(c, fillVal)
+    if ~iscell(c); c = cellstr(string(c)); end
+    for k = 1:numel(c)
+        if isempty(c{k}) || (isnumeric(c{k}) && all(isnan(c{k})))
+            c{k} = fillVal;
+        end
+    end
+end
+
 function meta = parseMetadataFromNames(sessionNames, pattern)
     n = numel(sessionNames);
+    exp = repmat({''}, n, 1);
     mouse = repmat({''}, n, 1);
     session = repmat({''}, n, 1);
     for k = 1:n
         m = regexp(sessionNames{k}, pattern, 'names');
         if ~isempty(m)
+            if isfield(m, 'exp');   exp{k}   = m.exp;     end
             mouse{k}   = m.mouse;
             session{k} = m.session;
         else
@@ -113,9 +242,8 @@ function meta = parseMetadataFromNames(sessionNames, pattern)
             session{k} = '1D';
         end
     end
-    meta = table(sessionNames(:), mouse, session, ...
-        repmat({'unknown'}, n, 1), repmat({'unknown'}, n, 1), ...
-        'VariableNames', {'session_name', 'mouse', 'session', 'group', 'line'});
+    meta = table(sessionNames(:), exp, mouse, session, ...
+        'VariableNames', {'session_name', 'exp', 'mouse', 'session'});
 end
 
 function names = collectActNames(batchResults)
@@ -252,7 +380,109 @@ end
 
 function T = uniqueMiceMetadata(meta)
     [~, ia] = unique(meta.mouse, 'stable');
-    cols = {'mouse', 'group', 'line'};
-    cols = cols(ismember(cols, meta.Properties.VariableNames));
+    % Carry every per-mouse column except the per-session ones.
+    skip = {'session', 'session_name'};
+    cols = meta.Properties.VariableNames;
+    cols = cols(~ismember(cols, skip));
+    % Keep 'mouse' first for cleaner output.
+    cols = ['mouse', cols(~strcmp(cols, 'mouse'))];
     T = meta(ia, cols);
+end
+
+function [wide, tidy] = applyUnitsAndRounding(wide, tidy, generalUnit, perActUnit)
+    % Distance values are stored in cm everywhere upstream.
+    %   General distance column name was already created with the chosen
+    %   unit suffix (distance_<unit>_<session>), but the value is still
+    %   in cm and needs conversion when unit='m'.
+    %   Per-act distance column is always `<act>_distance_cm_<session>`;
+    %   we rename to _distance_m_ when perActUnit='m'.
+    %
+    % Rounding rules:
+    %   cm  -> nearest integer
+    %   m   -> 2 decimals
+    %   velocity (always cm/s) -> 1 decimal
+
+    % ----- Wide -----
+    cols = wide.Properties.VariableNames;
+    for k = 1:numel(cols)
+        nm = cols{k};
+        v = wide.(nm);
+        if ~isnumeric(v); continue; end
+
+        % General distance: 'distance_<unit>_<session>' (no leading act).
+        tok = regexp(nm, '^distance_(cm|m)_(.+)$', 'tokens', 'once');
+        if ~isempty(tok)
+            sess = tok{2};
+            [vNew, newName] = convertDistance(v, 'distance', '', sess, generalUnit);
+            wide.(nm) = vNew;
+            wide = renameVar(wide, nm, newName);
+            continue;
+        end
+
+        % Per-act distance: '<act>_distance_cm_<session>'.
+        tok = regexp(nm, '^(.+)_distance_cm_(.+)$', 'tokens', 'once');
+        if ~isempty(tok)
+            [vNew, newName] = convertDistance(v, 'distance', tok{1}, tok{2}, perActUnit);
+            wide.(nm) = vNew;
+            wide = renameVar(wide, nm, newName);
+            continue;
+        end
+
+        % Velocity (general): 'velocity_cm_per_s_<session>'.
+        % Per-act velocity:   '<act>_(mean|max|min)_v_cm_s_<session>'.
+        if startsWith(nm, 'velocity_cm_per_s_') ...
+                || ~isempty(regexp(nm, '_(mean|max|min)_v_cm_s_', 'once'))
+            wide.(nm) = roundTo(v, 1);
+            continue;
+        end
+    end
+
+    % ----- Tidy -----
+    if isempty(tidy) || height(tidy) == 0; return; end
+    velMetrics = {'ActMeanVelocity','ActMaxVelocity','ActMinVelocity','ActVelocity'};
+    for k = 1:height(tidy)
+        metric = tidy.metric{k};
+        val = tidy.value(k);
+        if isnan(val); continue; end
+        if strcmp(metric, 'Distance')
+            if strcmpi(perActUnit, 'm')
+                tidy.value(k) = roundTo(val / 100, 2);
+            else
+                tidy.value(k) = roundTo(val, 0);
+            end
+        elseif any(strcmp(velMetrics, metric))
+            tidy.value(k) = roundTo(val, 1);
+        end
+    end
+end
+
+function [v, newName] = convertDistance(v, baseName, actPrefix, sess, unit)
+    if strcmpi(unit, 'm')
+        v = v / 100;
+        v = roundTo(v, 2);
+        suffix = 'm';
+    else
+        v = roundTo(v, 0);
+        suffix = 'cm';
+    end
+    if isempty(actPrefix)
+        newName = sprintf('%s_%s_%s', baseName, suffix, sess);
+    else
+        newName = sprintf('%s_%s_%s_%s', actPrefix, baseName, suffix, sess);
+    end
+end
+
+function v = roundTo(v, n)
+    f = 10^n;
+    v = round(v * f) / f;
+end
+
+function T = renameVar(T, oldName, newName)
+    if strcmp(oldName, newName); return; end
+    idx = find(strcmp(T.Properties.VariableNames, oldName), 1);
+    if isempty(idx); return; end
+    % If a column with the new name already exists, leave the old one
+    % alone — caller should not produce duplicate targets.
+    if any(strcmp(T.Properties.VariableNames, newName)); return; end
+    T.Properties.VariableNames{idx} = newName;
 end

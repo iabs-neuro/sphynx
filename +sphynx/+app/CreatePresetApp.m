@@ -567,8 +567,8 @@ classdef CreatePresetApp < handle
             app.TabBatch           = uitab(app.TabGroup, 'Title', 'Batch Analysis');
             app.TabMakeOutputTable = uitab(app.TabGroup, 'Title', 'Make Output Table');
             app.TabPlotData        = uitab(app.TabGroup, 'Title', 'Plot Data');
-            app.TabPreprocessVideo = uitab(app.TabGroup, 'Title', 'Preprocess Video');
-            app.TabSynthetic       = uitab(app.TabGroup, 'Title', 'Synthetic Data');
+            app.TabPreprocessVideo = uitab(app.TabGroup, 'Title', 'Preprocess Video *');
+            app.TabSynthetic       = uitab(app.TabGroup, 'Title', 'Synthetic Data *');
 
             buildCreateTab(app);
             app.PreprocessController      = sphynx.app.PreprocessTabController(app.TabPreprocess, app);

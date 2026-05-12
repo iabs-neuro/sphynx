@@ -1,94 +1,218 @@
-# Sphynx GUI — deferred TODO
+# Sphynx — Deferred TODO
 
-Ranked P1..P4. P1 = next round of polish, P2 = nice-to-have post-MVP,
-P3 = larger effort or pre-condition for new experiment types,
-P4 = macro-decisions / re-architecture.
+Single source of truth for everything not done yet. Per-tab + cross-cutting + macro.
 
-## CreatePreset (frozen — see `feedback_createpreset_frozen` memory)
+## Scoring
 
-- [ ] **P3** Verify "download preset" feature still works end-to-end.
-- [ ] **P3** Zones display correctly when loading a new video on top of an existing preset.
-- [ ] **P3** Warnings on duplicated zone definitions (or other nonsense states).
-- [ ] **P3** Object-copy with auto-numbering: copying `object2` produces `object3` if free, else next; opens interactive draw menu so the copy can be repositioned. Driven by Barnes maze where many identical objects sit at different locations.
+Each task has **priority** (how badly we want it) and **complexity** (how big a sit-down).
 
-## Preprocess Track (stable — used by user's existing settings)
+**Priority:**
+- **P1** — next polish round, blocker for current workflow.
+- **P2** — nice post-MVP, do soon after P1s drain.
+- **P3** — larger effort, new feature, or pre-req for a new experiment type.
+- **P4** — macro decision (re-architecture, language switch).
 
-- [ ] **P3** Layout rework: panels 1+2 stacked left, 3 top-right, plot strip full-width below.
-- [ ] **P2** Restore the lost "log Y" toggle for the likelihood histogram.
-- [ ] **P3** Optional likelihood-vs-time plots (X and Y), checkbox-gated.
+**Complexity:**
+- **C1** — < 1 h. Wire one field, fix a label, flip a default.
+- **C2** — < 1 day. Single function rewrite, one new helper + tests.
+- **C3** — 1-3 days. Multi-module feature, schema change, new pipeline pass.
+- **C4** — > 3 days. New module / tab / architecture-level rework.
 
-## Define Acts
+## Tab status
 
-- [ ] **P2** **Complex-acts redesign.** Current Complex tab is cramped and rigid. Wanted:
-  - Wider Name field (current is narrow because grid column 2 is `1x` while column 1 is 120px label).
-  - More compact overall layout (fewer separate rows; combine label+widget where possible).
-  - Expression-style composition. Goal: build acts as equations, e.g.
+| # | Tab                  | State        | Controller LoC |
+|---|----------------------|--------------|----------------|
+| 1 | Create Preset        | frozen       | inline in CreatePresetApp |
+| 2 | Preprocess Tracking  | stable       | 1918 |
+| 3 | Define Acts          | active dev   | 1543 |
+| 4 | Analyze Session      | active dev   | 1091 |
+| 5 | Batch Analysis       | stable       | 930  |
+| 6 | Make Output Table    | active dev   | 633  |
+| 7 | Plot Data `*`        | **WIP**      | 289  |
+| 8 | Preprocess Video `*` | **WIP**      | 162  |
+| 9 | Synthetic Data `*`   | **WIP**      | 244  |
+
+Tabs marked `*` show an asterisk in the GUI title — feature-incomplete, not on the MVP path.
+
+---
+
+# Per-tab TODO
+
+## 1. Create Preset (frozen — see `feedback_createpreset_frozen` memory)
+
+Do not touch without explicit user ask.
+
+- [ ] **P3 / C2** Verify "download preset" feature still works end-to-end.
+- [ ] **P3 / C2** Zones display correctly when loading a new video on top of an existing preset.
+- [ ] **P3 / C1** Warnings on duplicated zone definitions / nonsense states.
+- [ ] **P3 / C2** Object-copy with auto-numbering: copying `object2` produces `object3` if free, else next. Opens interactive draw menu so the copy can be repositioned. Driven by Barnes maze (many identical objects at different locations).
+
+## 2. Preprocess Tracking
+
+- [ ] **P3 / C2** Layout rework: panels 1+2 stacked left, 3 top-right, plot strip full-width below.
+- [ ] **P2 / C1** Restore the lost "log Y" toggle for the likelihood histogram.
+- [ ] **P3 / C2** Optional likelihood-vs-time plots (X and Y), checkbox-gated.
+
+## 3. Define Acts
+
+- [ ] **P2 / C3** **Complex-acts redesign.** Current Complex tab is cramped and rigid. Wanted:
+  - Wider Name field (col 2 is `1x` while col 1 is 120px label).
+  - More compact layout (combine label+widget rows where possible).
+  - Expression-style composition. Examples:
     - `Act1 OR Act2 EXCLUDE Act3`
-    - `Act1 + Δt1 + Act2 + Δt2 + Act3` — sequence-style with explicit gap durations between every pair.
-  - Currently the schema only supports a single op (intersect/union/exclude/sequence) over a flat list of components, with one global `seqDelaySec`. Need a richer model — probably an ordered list of tokens (act names interleaved with operators / gap durations), parsed into a tree. Schema change in `+sphynx/+acts/emptyAct.m` + `buildComplexAct.m` + `applyAct.m::applyComplex`.
+    - `Act1 + dt1 + Act2 + dt2 + Act3` — sequence-style with explicit gaps.
+  - Schema today supports only one op (intersect/union/exclude/sequence) over a flat component list + one global `seqDelaySec`. Need an ordered token list parsed into a tree. Touches `+sphynx/+acts/emptyAct.m`, `buildComplexAct.m`, `applyAct.m::applyComplex`.
 
-- [ ] **P2** Act post-filters: median window + min-duration. Add fields to `+sphynx/+acts/emptyAct.m`, `buildSimpleAct.m`, `buildComplexAct.m`. New helper `+sphynx/+acts/filterActArray.m`. Apply after `evalActsLibrary` in `+sphynx/+pipeline/analyzeSession.m:262`. UI: two numeric fields in Simple/Complex constructor.
-- [ ] **P2** Make-video preview: confirm `implay` zoom + window resize land correctly on user's machine; fall back gracefully if R2020a's `Visual.ScaleFactor` API differs.
-- [ ] **P3** Frame-scrubber inside the make-video player — `implay` already has a timeline scrubber; only revisit if user wants finer control.
+- [ ] **P2 / C2** Act post-filters: median window + min-duration. Add fields to `+sphynx/+acts/emptyAct.m`, `buildSimpleAct.m`, `buildComplexAct.m`. New helper `+sphynx/+acts/filterActArray.m`. Apply after `evalActsLibrary` in `+sphynx/+pipeline/analyzeSession.m:262`. UI: two numeric fields in Simple/Complex constructor.
+- [ ] **P2 / C1** Make-video preview: confirm `implay` zoom + window resize work on user's machine; graceful fallback if R2020a's `Visual.ScaleFactor` API differs.
+- [ ] **P3 / C1** Frame-scrubber inside make-video player — `implay` already has a timeline; revisit only if finer control wanted.
 
-## Analyze Session
+## 4. Analyze Session
 
-- [ ] **P2** «Min run, s» field on the Analyze config panel — currently hardcoded to `cfg.acts.minRunSeconds = 0.25` in `+sphynx/+pipeline/defaultConfig.m:45` and only changeable by editing the config file. Wire as `cfg.acts.minRunSeconds = obj.MinRunField.Value` in `runAnalyze()`.
-- [x] **DONE 2026-05-10** Speed acts (rest / walk / locomotion) and spatial acts (corners / walls / walls_and_corners / middle_zone / center) are now mutually exclusive within their bucket via a post-refine priority pass in `analyzeSession`. Higher-priority acts win — lower bucket-mates lose the contested frames. Implemented as the simplest of the three discussed strategies (option c). Future work: option (b) — refine all bucket members together as a categorical assignment so the boundaries are self-consistent rather than coming out of independent refine + dedupe.
-- [ ] **P2** **Bucket exclusivity breaks the per-act min-duration / max-gap refine.** Current order: each act gets `refineActArray` (bridge then drop) → custom dedup → bucket priority pass. The priority pass runs *after* refine, so when `locomotion` claims frames from `walk`, `walk` ends up with tiny fragments (1-2 frames) that violate its `minDurationSec`. Same for spatial: `walls_and_corners` loses chunks to `corners`/`walls` and gets fragmented. Visible in stats as inflated `ActNumber` and tiny `ActMeanTime`. Two fixes to discuss: (a) re-run `refineActArray` per act after the exclusivity pass — quick patch, may re-introduce overlap if a bridged hole crosses bucket-mate territory; (b) take option (b) above (joint categorical refine) which sidesteps the issue. Pick one once option (b) is on the table.
-- [ ] **P2** Move `FreezingMode` / `RearMode` pickers to Define Acts (or to per-experiment defaults). They were on Analyze for convenience but conceptually they describe the act library. Defaults stay `'HeadAndCenter'` / `'TailbasePaws'` from `defaultConfig.m`.
-- [ ] **P2** Multi-bodypart trajectory: dropdown to choose which parts overlay on `GoodVideoFrame`.
-- [ ] **P2** Split the bodyparts-trajectory plot into two separate files per bodypart: `trajectory_<bp>.{png,fig}` for just the 2D trajectory over `GoodVideoFrame`, and `timeseries_<bp>.{png,fig}` for the X(t) / Y(t) / likelihood(t) panel. Saves both kinds inside `<sessionDir>/bodyparts_trajectory/`.
-- [ ] **P2** Settings load — drop the hard "Analysis settings .mat" filename pattern so any `.mat` is acceptable. The `applySettings` defensive `isfield` checks already tolerate missing fields, so the file-dialog filter is the only gate. `'*.mat'` instead of the named pattern, or no filter at all.
-- [x] **DONE 2026-05-10** Session-wide bodycenter stats now show in a header label above the result table: «Session (bodycenter): avg speed X.XX cm/s | total distance Y.Y cm | duration T s | N frames». The legacy `AverageDistance` `/100` factor was removed; the field is now correctly in cm.
-- [ ] **P2** Etogram rows grouped by category headers (built-in / custom / zone) with cluster spacing.
-- [ ] **P3** Customizable speed-vs-time plot: act-bands as background patches (rest/walk/locomotion).
-- [ ] **P3** Egocentric trajectory + heading-angle trace for direction-aware acts.
+- [ ] **P1 / C1** «Min run, s» field on the config panel. Currently hardcoded to `cfg.acts.minRunSeconds = 0.25` in `defaultConfig.m`. Wire as `obj.MinRunField.Value` in `runAnalyze()`.
+- [ ] **P2 / C3** **Bucket exclusivity breaks the per-act refine.** Order today: per-act `refineActArray` (bridge then drop) → custom dedup → bucket priority pass. The priority pass runs *after* refine, so `walk` ends up with 1-2-frame fragments when `locomotion` claims its frames. Same for spatial (`walls_and_corners` losing chunks to `corners`/`walls`). Stats show inflated `ActNumber` + tiny `ActMeanTime`. Two routes:
+  - (a) **C2** — re-run `refineActArray` after the exclusivity pass. Quick. May re-introduce overlap if a bridged hole crosses bucket-mate territory.
+  - (b) **C3** — joint categorical refine for the whole bucket. Cleaner, more code.
+- [ ] **P2 / C1** Move `FreezingMode` / `RearMode` pickers to Define Acts (or per-experiment defaults). Conceptually they describe the act library, not the analysis. Defaults stay `'HeadAndCenter'` / `'TailbasePaws'`.
+- [ ] **P2 / C2** Multi-bodypart trajectory: dropdown to choose which parts overlay on `GoodVideoFrame`.
+- [ ] **P2 / C2** Split bodyparts-trajectory plot into two files per bodypart: `trajectory_<bp>.{png,fig}` (2D over `GoodVideoFrame`) and `timeseries_<bp>.{png,fig}` (X(t) / Y(t) / likelihood(t)). Both saved in `<sessionDir>/bodyparts_trajectory/`.
+- [ ] **P2 / C1** Settings load: drop the hard "Analysis settings .mat" filename filter so any `.mat` is acceptable. `applySettings` already does defensive `isfield` checks.
+- [ ] **P2 / C2** Etogram rows grouped by category headers (built-in / custom / zone) with cluster spacing.
+- [ ] **P3 / C2** Customisable speed-vs-time plot: act-bands as background patches (rest/walk/locomotion).
+- [ ] **P3 / C3** Egocentric trajectory + heading-angle trace for direction-aware acts.
 
-## Big features / new modules
+## 5. Batch Analysis
 
-- [ ] **P3** Numbered tabs: prefix tab titles with their step number (1. CreatePreset / 2. Preprocess / 3. Define Acts / ...).
-- [ ] **P2** Add Barnes maze to the experiment-type list (`ExpTypeDropDown`).
-- [ ] **P3** Per-experiment defaults: each experiment id (Novelty_OF, Odor track, Barnes...) carries its expected number of objects, arena geometry, default acts library, default zone strategy, default zone widths. Saving a preset with mismatched object count → warning.
-- [ ] **P3** Project tab at the start: "Create / Load / Save project." Creates the standard folder skeleton, fills paths app-wide, writes a project metadata file (description, library choice, expected act count).
-- [ ] **P3** Metadata accumulation: each tab appends to a project metadata struct; the final super-table writes warnings for outliers / weird values.
-- [ ] **P3** Extract list of mice from a batch dir, allow excluding mice, attach per-mouse metadata for the super-table.
-- [ ] **P3** SLEAP / Bonsai compatibility (in addition to DLC). Bonsai pulls trajectories — needs a body-part rename step on the Preprocess tab. Investigate other current popular pose-estimation tools (e.g. AnimalPose, Lightning Pose).
-- [ ] **P3** Per-session standard outputs: features table, kinematogram, egocentric kinematogram, etogram (multiple variations) — produced automatically.
+- [ ] **P2 / C1** Surface a Min-run-s field on Batch (mirror of Analyze, once Analyze gets one).
+- [ ] **P2 / C1** Resume-on-error: when one session fails, log and continue instead of aborting the rest of the batch.
+- [ ] **P3 / C2** Progress bar with ETA based on average session time.
 
-## Barnes maze metrics (specific to that paradigm)
+## 6. Make Output Table
+
+- [ ] **P2 / C2** **Outlier warning system.** When a value falls far from the per-group / per-session distribution (e.g. mouse A07 distance 3x the mean), flag in log + tint the offending Wide-preview uitable cells. Heuristic: per `(group, session, metric)` cell-set compute median + MAD; flag if `|x - median| > k * MAD` (start k=3.5). Distance first, then velocity / percent. Log line: `[WARN] mouse=A07 distance_cm_4D=12345 outlier (median=4200, MAD=900)`. Use `addStyle(...,'BackgroundColor',[1 0.9 0.9])`. Tunable threshold field in options.
+- [ ] **P3 / C1** Per-metric override of the rounding rule (currently fixed: cm->int, m->2dec, velocity->1dec).
+- [ ] **P3 / C2** Export per-group summary stats (n, mean, sem) as a separate CSV section or sheet.
+- [ ] **P3 / C2** Reorder columns in Wide: keep per-act blocks together (currently `act1_metric1_s1 act1_metric1_s2 ... act1_metric2_s1 ...`; alternative: group by metric → all sessions of one metric adjacent).
+
+## 7. Plot Data `*` (WIP)
+
+Currently has a table picker + plot button skeleton — needs full design.
+
+- [ ] **P2 / C3** Define plot vocabulary: line/bar/scatter/box for grouped data; error-bar variants (SEM, SD, CI); paired vs unpaired; per-session vs collapsed-across-sessions.
+- [ ] **P2 / C2** Auto-detect numeric columns vs grouping columns from loaded super-table.
+- [ ] **P2 / C2** Group-by selector (group / line / sex / any ID_* column).
+- [ ] **P2 / C2** Save plot as PNG + FIG with sane defaults (300 dpi, Arial 12 pt).
+- [ ] **P3 / C3** Pairwise stats overlay: t-test / Mann-Whitney / Kruskal with multiple-comparison correction; significance bars on the plot.
+- [ ] **P3 / C2** Custom Y-axis filter per plot — clip outliers above a percentile so the rest is readable.
+
+## 8. Preprocess Video `*` (WIP)
+
+Currently can scan a folder and re-encode FPS via existing tool functions.
+
+- [ ] **P2 / C2** Trim video to start/end frames (preset-driven or manual).
+- [ ] **P2 / C2** Crop to ROI saved in preset.
+- [ ] **P3 / C2** Batch-rename mode using a user-supplied dict (similar to `tools/rename_4D_behavior.m` but per-session).
+- [ ] **P3 / C3** Re-encode pipeline: target fps + codec + resolution + audio strip, all in one pass.
+
+## 9. Synthetic Data `*` (WIP)
+
+Currently generates a fake DLC trace with a single motion model + outlier mode.
+
+- [ ] **P3 / C2** Multiple motion models on the same trace (e.g. rest -> walk -> locomotion segments with controllable durations).
+- [ ] **P3 / C2** Scripted act events (insert a rear / freezing burst at frame N).
+- [ ] **P3 / C2** Save synthetic preset + DLC csv as a regression test fixture for downstream pipeline.
+- [ ] **P3 / C3** Multi-mouse synthetic for testing tracking-confusion scenarios.
+
+---
+
+# Cross-cutting
+
+## Tab navigation / app-wide
+
+- [ ] **P3 / C1** Numbered tab titles: prefix with step number (`1. Create Preset`, `2. Preprocess`, ...).
+- [ ] **P3 / C2** App-wide state propagation: project root / current session / current preset shared across tabs (today inherited piecemeal via `ParentApp.State.projectRoot`).
+- [ ] **P3 / C3** Project tab at the start: Create / Load / Save project. Creates the standard folder skeleton, fills paths app-wide, writes a project metadata file (description, library, expected act count).
+
+## Metadata / experiment system
+
+- [ ] **P2 / C2** Add Barnes maze to the experiment-type list (`ExpTypeDropDown`).
+- [ ] **P3 / C3** Per-experiment defaults: each experiment id (Novelty_OF, Odor track, Barnes, ...) carries expected object count, arena geometry, default acts library, default zone strategy, default zone widths. Saving a preset with mismatched object count -> warning.
+- [ ] **P3 / C2** Metadata accumulation: each tab appends to a project metadata struct; final super-table writes warnings for outliers / weird values.
+- [ ] **P3 / C2** Extract list of mice from a batch dir, allow excluding mice, attach per-mouse metadata for the super-table.
+
+## Tracker compatibility
+
+- [ ] **P3 / C3** SLEAP / Bonsai compatibility (in addition to DLC). Bonsai pulls trajectories — needs a body-part rename step on Preprocess. Investigate AnimalPose, Lightning Pose too.
+- [ ] **P3 / C2** Per-session standard outputs: features table, kinematogram, egocentric kinematogram, etogram (multiple variations) — produced automatically.
+
+## Universal act-derived features
+
+- [ ] **P2 / C2** Time-to-completion of a specific act: when did this act first finish?
+- [ ] **P2 / C2** Time-to-first-completion of the first act in a sequence.
+- [ ] **P2 / C1** Audit `actStats` for missing fields; expose any that aren't currently surfaced in the super-table.
+
+---
+
+# Barnes maze metrics (specific to that paradigm — needs Barnes geometry first)
 
 **Training-day metrics:**
-- [ ] **P3** Time to leave start platform.
-- [ ] **P3** Primary latency: time until the target hole is found.
-- [ ] **P3** Total latency: time until the mouse enters the hole.
-- [ ] **P3** Primary errors: count of incorrectly checked holes.
-- [ ] **P3** Total errors: count of dips into wrong holes.
-- [ ] **P3** Path length.
-- [ ] **P3** Angular distance of the first checked hole from the target hole (degrees).
-- [ ] **P3** Search strategy classification: spatial / serial / random (see Pitts 2018, https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5891830/figure/BioProtoc-8-05-2744-g004/).
-- [ ] **P3** Ordinal index of the target hole among the checked holes.
-- [ ] **P3** Mean angular distance of all checked holes from target / count of checked holes.
+- [ ] **P3 / C2** Time to leave start platform.
+- [ ] **P3 / C2** Primary latency — time until the target hole is found.
+- [ ] **P3 / C2** Total latency — time until the mouse enters the hole.
+- [ ] **P3 / C2** Primary errors — count of incorrectly checked holes.
+- [ ] **P3 / C2** Total errors — count of dips into wrong holes.
+- [ ] **P3 / C2** Path length.
+- [ ] **P3 / C2** Angular distance of first checked hole from target (deg).
+- [ ] **P3 / C3** Search-strategy classification: spatial / serial / random (Pitts 2018, https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5891830/figure/BioProtoc-8-05-2744-g004/).
+- [ ] **P3 / C2** Ordinal index of the target hole among the checked holes.
+- [ ] **P3 / C2** Mean angular distance of all checked holes from target / count of checked holes.
 
 **Test-day metrics:**
-- [ ] **P3** Time to leave start platform.
-- [ ] **P3** Total time spent on start platform (including returns).
-- [ ] **P3** Latency.
-- [ ] **P3** Path length.
-- [ ] **P3** Angular distance of first checked hole from target.
-- [ ] **P3** Number of target-hole checks.
-- [ ] **P3** Number of non-target-hole checks.
-- [ ] **P3** Mean angular distance of all checked holes from target.
-- [ ] **P3** Time spent near the target hole.
-- [ ] **P3** Averaged tracks across mice in a group.
+- [ ] **P3 / C2** Time to leave start platform.
+- [ ] **P3 / C2** Total time spent on start platform (including returns).
+- [ ] **P3 / C2** Latency.
+- [ ] **P3 / C2** Path length.
+- [ ] **P3 / C2** Angular distance of first checked hole from target.
+- [ ] **P3 / C2** Number of target-hole checks.
+- [ ] **P3 / C2** Number of non-target-hole checks.
+- [ ] **P3 / C2** Mean angular distance of all checked holes from target.
+- [ ] **P3 / C2** Time spent near the target hole.
+- [ ] **P3 / C3** Averaged tracks across mice in a group.
 
-## Universal act-derived features (apply to any experiment)
+---
 
-- [ ] **P2** Time-to-completion of a specific act: when did this act first finish?
-- [ ] **P2** Time-to-first-completion of the first act in a sequence.
-- [ ] **P2** Per-act statistics into the super-table (already partially there via `actStats` — audit which fields are missing).
+# Scattered `% TODO` markers in code
 
-## Macro decisions (need user discussion)
+These are inline notes the user / Claude left during development. Resolve or delete.
 
-- [ ] **P4** Install latest MATLAB, port the codebase, leverage modern toolboxes.
-- [ ] **P4** Rewrite in Python.
+- [ ] **P3 / C1** `+sphynx/+preprocess/cleanBodyPart.m:30` — expose all magic numbers (FrameWidth/FrameHeight) as named params.
+- [ ] **P3 / C1** `+sphynx/+acts/speedActs.m:23` — expose `midPointCmS = mean(rest, loc)` as a named param.
+- `+sphynx/+app/CreatePresetApp.m:1522` — note about TODO #7 (strips along Polygon sides). This is a historical comment, not a pending task. Convert to plain comment or delete next time CreatePreset is unfrozen.
+- `+sphynx/+app/CreatePresetApp.m:1654` — note about TODO #6 (shared-pivot rotation). Same — historical, can be cleaned up.
+- `+sphynx/+pipeline/analyzeSession.m:310` — refers to this file. Self-reference, no action.
+- `+sphynx/+app/AnalyzeSessionTabController.m:104` — refers to this file. Self-reference, no action.
+
+---
+
+# Macro decisions (P4 — need user discussion)
+
+- [ ] **P4 / C4** Install latest MATLAB, port the codebase, leverage modern toolboxes.
+- [ ] **P4 / C4** Rewrite in Python.
+
+---
+
+# Recently done (kept here so we can see velocity)
+
+- [x] **2026-05-11** WNOF 4D rename: `tools/rename_4D_behavior.m`. 30 folders, 0 errors.
+- [x] **2026-05-11** All session files prefixed: `tools/add_session_prefix.m`. 2404 files renamed, 0 errors.
+- [x] **2026-05-11** Make Output: SessionName from folder name, NamePattern allows `1D_1T` style. `ID_mouse` with exp prefix auto-detected.
+- [x] **2026-05-11** Make Output: focus retention after pickers, Distance unit (cm/m) + scope (all/general-only), rounding (cm->int, m->2dec, velocity->1dec).
+- [x] **2026-05-11** `buildSuperTable`: arbitrary `ID_*` metadata columns pass through; xlsx accepted; no auto `line`/`group` if user didn't provide.
+- [x] **2026-05-11** `buildSuperTable`: short-form metadata accepted (`ID_mouse,ID_group` -> auto cross-join with parsed sessions).
+- [x] **2026-05-10** Make Output Table tab: per-act metric matrix (rows=acts, cols=metrics, logical checkboxes); save/load .mat default set; `MetricsByAct` param in `buildSuperTable`.
+- [x] **2026-05-10** Speed + spatial bucket exclusivity via post-refine priority pass in `analyzeSession`.
+- [x] **2026-05-10** Session-wide bodycenter stats header on Analyze; `AverageDistance` fixed to cm.
+- [x] **2026-05-10** Rear auto-threshold via robust statistics (`prctile(s,7)` and `median - 1.5*std`, clamped [1.5, 3.5] cm).
+- [x] **2026-05-09** Render acts in Analyze shares `+sphynx/+pipeline/renderActStitched.m` with Define Acts.
+- [x] **2026-05-08** Save session-wide plots (trajectory / heatmap / speed) as PNG + FIG in Analyze + Batch.
+- [x] **2026-05-08** Batch Analysis rewrite: auto-pair DLC + video + preset by ID prefix, Analyze parity.

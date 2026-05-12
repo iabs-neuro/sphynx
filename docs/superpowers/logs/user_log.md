@@ -1217,3 +1217,243 @@ Layout под твою задачу:
 
 Файлы: `+sphynx/+app/MakeOutputTableTabController.m` (rewrite ~430 строк), `+sphynx/+pipeline/buildSuperTable.m` (новый `MetricsByAct` параметр, prettyMetric расширен новыми именами).
 
+
+
+
+
+### 2026-05-11 — метадата + 4D rename вопрос
+
+**Формат метадаты для Make Output Table:**
+
+Принимается два варианта. Используй то, что удобнее.
+
+**Короткая форма** (твой текущий вид) — 1 строка на мышь:
+
+```csv
+ID_mouse,ID_group
+A01,Test
+A02,Test
+...
+A15,Test
+A16,Control
+...
+A30,Control
+```
+
+Можно также `mouse, group` или `subject, group` — алиасы понимаются. Опциональная третья колонка `ID_line` (или `line`).
+
+При build таблицы каждая мышь автоматически разворачивается на все сессии, которые нашлись в batch dir (1D, 2D, 3D, 4D — по тому что есть). Если у A20 в `5_Behavior/` есть только `WNOF_A20_4D` — в Wide получится одна колонка для 4D, остальное NaN.
+
+**Полная форма** (если хочешь явно задать что-то per-session) — 1 строка на сессию:
+
+```csv
+session_name,mouse,session,group,line
+WNOF_A01_1D,A01,1D,Test,
+WNOF_A01_4D,A01,4D,Test,
+...
+```
+
+**4D rename — стоп**
+
+Из файлов восстановить «cage → текущий wrong A##» нельзя — в пресетах не хранится оригинальное имя. Чтобы рискнуть batch-rename (там 200+ файлов: 3_DLC csv + 2_Combined mp4 + 4_Preset .mat + 5_Behavior/* всё), мне нужны от тебя 2 вещи:
+
+1. **Какой dict был НЕПРАВИЛЬНО применён к 4D?** То есть текущие имена A01..A30_4D соответствуют каким cage label'ам? Скинь словарь типа того что прислал, но «как есть сейчас».
+2. **Есть ли где-то на диске папка с оригинальными cage-label именами** (типа `1_Cage/WNOF_A1_B_4D.mp4`)? Если есть путь — гляну сам.
+
+Без п.1 я просто не знаю, какой A##_4D переименовать в какой. Слепое применение «правильного» dict-а не сработает: переименует A05_4D в A05_4D (если cage был A1_I, который в обеих легендах = A05).
+
+Альтернатива: если у тебя ещё есть оригинальные 4D mp4 с cage именами — переименуй их по новому dict, перепрогони DLC + анализ. Будет чище.
+
+
+
+
+### 2026-05-11 — формат метадаты + произвольные ID_*
+
+**Формат:** csv или xlsx — оба ОК. Picker обновлён, ест и то и то.
+
+**Колонки:** обязательная только `ID_mouse`. Всё остальное опционально и протаскивается на ВЫХОД как доп-факторы.
+
+```
+ID_mouse, ID_group, ID_line, ID_sex, ID_drug, ...
+A01,      Test,     WT,      M,      Saline
+A02,      Test,     WT,      F,      Drug
+A16,      Control,  KO,      M,      Drug
+...
+```
+
+Что получается в Wide:
+```
+mouse | group   | line | sex | drug    | <act_metric>_<session>...
+A01   | Test    | WT   | M   | Saline  | ...
+A02   | Test    | WT   | F   | Drug    | ...
+A16   | Control | KO   | M   | Drug    | ...
+```
+
+`ID_` префикс отрезается. Group/line добиваются `'unknown'` если их нет.
+
+**Sort by** теперь редактируемый — можно напечатать что угодно через запятую: `sex,drug,mouse` или `group,sex,mouse`. Дефолт остался `group,line,mouse`.
+
+**xlsx:** просто выбери .xlsx в file picker, readtable сам распознает.
+
+По именам жду от тебя инфу — без неё 4D rename не делаю.
+
+
+
+
+### 2026-05-11 — 4D rename done
+
+Готово. 30 папок в `5_Behavior\` переименованы по твоему маппингу. 0 ошибок. TMP-папок не осталось.
+
+Спот-проверка `WNOF_A30_4D` (бывшая A04): WorkSpace.mat, main.mp4, Acts_video, bodyparts_trajectory, session-wide plots — все на месте под новым префиксом A30.
+
+`3_DLC\`, `4_Preset\`, `2_Combined\` не тронуты (по запросу).
+
+Скрипт остался в `tools/rename_4D_behavior.m` — если нужно откатить или применить такой же fix к другим папкам, поправить map и запустить.
+
+
+
+
+### 2026-05-11 — Make Output fix: 1 строка = 1 мышь
+
+Поправил то что было на скрине:
+
+1. SessionName теперь тащится из **имени папки** (`WNOF_A01_4D`), не из .mat файла. DLC-хвост больше не попадает в `mouse`.
+2. Паттерн расширен: `<exp>_<mouse>_<session>` где **session — любая строка** (включая `1D`, `1T`, `1D_1T`, `Trial2`, что угодно с подчёркиваниями).
+
+После фикса Wide:
+```
+mouse | group | line | center_count_1D | center_count_2D | ... | center_count_4D | ...
+A01   | Test  | WT   | 60              | 44              | ... | 26              | ...
+A02   | Test  | WT   | 53              | 39              | ... | 31              | ...
+...
+A30   | Ctrl  | KO   | ...             | ...             | ... | ...             | ...
+```
+
+То есть **30 строк** (по числу мышей), и **по 4 колонки на каждую метрику акта** (1D/2D/3D/4D).
+
+Перезапусти Make Output: `clear all; clear classes`, открой Sphynx, на вкладке Build table.
+
+Файлы: `+sphynx/+app/MakeOutputTableTabController.m` (SessionName из папки), `+sphynx/+pipeline/buildSuperTable.m` (паттерн session=.+).
+
+
+
+
+### 2026-05-11 — MetaData.csv: фиксы
+
+Проверил твою `MetaData.csv` — три вещи:
+
+1. **`;` как разделитель** — `readtable` сам разобрался, ничего не делал.
+2. **mouse в формате `WNOF_A01`** (с exp-префиксом) — раньше парсер моей сессии выдавал просто `A01`, не сматчивалось при join. Теперь автоопределяю: если у тебя в метадате mouse начинается с известного exp (`WNOF`, `NOF` и т.п.) → парсер тоже подгоняет имена в `WNOF_A01` форму. Без необходимости что-то конфигурировать.
+3. **`line` в финальной таблице больше не появится**, если её нет в метадате. Это касается любой колонки — `line`, `sex`, что угодно: что не дал — то и не вывожу.
+
+Smoke на твоей метадате + 4 фейковых сессий: 3 строки на 3 мыши, mouse=`WNOF_A01/02/16`, group=Test/Control, `line` отсутствует. Как заказывал.
+
+Перезапусти Make Output: `clear all; clear classes`. 187/187 PASS.
+
+
+
+
+### 2026-05-11 — Make Output: focus + distance units + округление
+
+1. **Окно остаётся активным** после picker'ов (Root/Batch/Metadata/Out CSV/Load/Save) — добавил восстановление фокуса.
+2. **Два дропдауна** в options-блоке:
+   - `Dist unit`: cm | m
+   - `Apply to`: all | general only
+   
+   `all` — конвертирует и общую дистанцию и per-act. `general only` — только общую (per-act остаётся в cm).
+3. **Округление**:
+   - cm -> целое
+   - m -> 2 знака
+   - velocity (всегда cm/s) -> 1 знак
+
+Имена колонок при выборе m переименовываются: `distance_cm_1D` -> `distance_m_1D`, `center_distance_cm_4D` -> `center_distance_m_4D`. Чтобы было видно в каких единицах прислана метрика.
+
+187/187 PASS. `clear all; clear classes`, перезапусти.
+
+
+
+
+### 2026-05-11 — add_session_prefix done
+
+2404 файла переименованы (плоты на верхнем уровне + bodyparts_trajectory/*), 0 ошибок.
+
+`*_WorkSpace.mat`, `*_main.mp4`, `Acts_video/*.mp4` уже были с префиксом — скип (524 шт).
+
+Чтобы все PNG/FIG слить в одну папку:
+```
+robocopy "c:\Users\User\YandexDisk\_Projects\WNOF\BehaviorData\5_Behavior" "<куда>" *.png *.fig /S /FFT
+```
+
+Скрипт: `tools\add_session_prefix.m`.
+
+
+
+
+### 2026-05-11 — TODO собран в одном месте + WIP-звёзды
+
+1. **GUI:** `Plot Data`, `Preprocess Video`, `Synthetic Data` получили `*` в заголовке вкладки. Визуально маркер что они WIP. `clear all; clear classes`, перезапусти.
+
+2. **`docs/TODO.md` полностью обновлён**. Структура:
+   - Scoring: P1-P4 (приоритет) + C1-C4 (сложность: C1<1ч, C2<1д, C3=1-3д, C4>3д).
+   - Таблица статуса вкладок.
+   - Per-tab TODO (по 9 вкладкам в порядке как в GUI).
+   - Cross-cutting (tab-навигация, metadata, tracker compat, универсальные act-фичи).
+   - Barnes maze metrics (отдельным блоком).
+   - Scattered `% TODO` маркеры в коде.
+   - Macro (P4).
+   - Recently done — лог последних завершённых работ.
+
+Всё что было сделано последние дни перекочевало в "Recently done". Все новые задачи теперь с пометкой сложности — будет видно что мелочь, а что 3-дневный заход.
+
+187/187 PASS. Файлы: `docs/TODO.md` (~180 строк), `+sphynx/+app/CreatePresetApp.m` (3 строки c `*`).
+
+---
+
+## 2026-05-11 - Конвертация legacy mat-файлов под новый формат
+
+H:\Dataset\BehaviorData -- посмотрел 4 эксперимента (CC, FOF, NOF, RFC). У CC/FOF/NOF в legacy *_WorkSpace.mat уже считались Acts (10-13 актов) и есть bodycenter с готовыми AverageDistance/Speed — им только дописал то, чего хочет новый формат (FirstStartSec, LastEndSec, ActMeanVelocity, ActMin/MaxVelocity). У RFC Acts вообще нет (legacy Freezing-Track этого не считал) и AverageDistance/Speed пустые — посчитал из TraceSmoothed.X/Y tailbase'а.
+
+Файлы лежат рядом в `H:\Dataset\BehaviorData\<EXP>\5_BehaviorMAT_new\` под теми же именами. Можно сразу подсунуть Make Output Table.
+
+213/213 OK (CC 34, FOF 63, NOF 64, RFC 52). Скрипт: `tools/convert_legacy_mat.m`.
+
+ВАЖНО: RFC отдельно через MakeOutputTable таблицу не соберёт — Acts=0 во всех 52 файлах, вкладка ругнётся "No acts to build the table from". Варианты: смешать в одной Batch dir с другим экспериментом или доработать вкладку чтобы строила distance-only режим. Скажи, как хочешь.
+
+Также: у RFC `pxl2sm=1` в Options, поэтому AverageDistance/Speed получились в пикселях, не в см. Если калибровать — надо знать масштаб (WidthReal=29 см / HeightReal=24 см и площадь арены), можно сделать пост-фиксом.
+
+---
+
+## 2026-05-11 - Plot Data tab переписана
+
+Вкладка читает super_table.csv от Make Output Table и сама выбирает тест: 2 уровня → t-test (paired если RM), >=3 → 1-way ANOVA; добавь второй фактор → 2-way ANOVA или RM-ANOVA если что-то within. Сессия определяется как within-subject автоматически.
+
+Графика — Prism-style: bar + SEM + индивидуальные точки + брекет со * над достоверными парами. Скриншоты двух тест-кейсов в `docs/tests/plotdata_e2e/`:
+- `rest_percent.png` — 2-way RM-ANOVA, ctrl vs exp p=0.042 * → одна звезда над брекетом.
+- `distance_cm.png` — paired t-test, session 1D vs 2D, ns → без звёзд.
+
+UI левой панели:
+- Loader: Wide CSV + Browse + Load
+- Metric / Factor 1 (X) / Factor 2 (color) / Split plots by
+- Стиль: error bars (SEM/SD/95CI/none), colormap, font name, font size, title size, axis size, show points
+- Stats: auto-stats / show stars / test (auto/ttest/paired-ttest/anova1/anova2/rm-anova) / correction (auto/tukey/bonferroni/holm/none)
+- Plot / Save PNG / Save all metrics
+- Stats output текст-арея с детализацией пары
+
+Save all metrics — обходит все detected metrics + все уровни split-фактора, рендерит off-screen и сохраняет PNG в выбранную папку. Одно нажатие = пачка картинок для статьи.
+
+`*` с заголовка Plot Data снял в GUI. 187/187 PASS.
+
+Что пока упрощено (можно докрутить когда понадобится):
+1. Звёзды рисуются для main effects (group main, session main). Interaction-уровневых пар (ctrl_1D vs exp_1D) нет — это полезно для биологических статей, но требует отдельной логики через `multcompare 'By'`. Если хочешь — допилю по запросу.
+2. Multi-within RM (две within-фактора одновременно) откатывается на `anovan` без RM-коррекции. Для типичной session-only within это не страшно.
+3. Box / violin типы пока не подключены к UI (есть только bar). barWithStats — single rendering function; добавить тип = 1 helper + dropdown. Скажешь — добавлю.
+
+Скрипт e2e: `tools/test_plotdata_e2e.m` (не часть тест-сьюита, можно запускать руками).
+
+---
+
+## 2026-05-12 — familiarization pass
+
+**Юзер:** про йдись по текущей папке, изучи. пройдись по папке c:\Users\User\YandexDisk\_Projects\Ontogenez\BehaviorData\ изучи.
+
+**Claude:** Прочитал структуру sphynx (`+sphynx/` с 13 пакетами, 9 GUI-вкладок, статус из `docs/TODO.md`) и Ontogenez BehaviorData (pipeline 1_Raw/2_Combined/3_DLC/4_Preset/5_Behavior + `Ontogenez - Main.csv` на 582 строки). Пресеты сделаны на 37 когорт (A9A10..A56, C1C2..C35C36); 2_Combined/3_DLC/5_Behavior пусты — DLC ещё не прогонялся. Изменений не вносил.
