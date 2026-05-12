@@ -286,60 +286,143 @@ What each tab does in `onProjectChanged()`. All idempotent.
 
 ---
 
-## Section 6 — CreatePreset unfreezing scope  [TBD]
+## Section 6 — CreatePreset unfreezing scope  [APPROVED]
 
-To be designed next session. Goals:
+CreatePreset was frozen on 2026-05-02 (commit c7d8a89). Under Project subsystem we unfreeze **minimally**: subscribe + read-from-Project only. Geometry, zone composition, draw-callbacks, coordinate transforms, image loading, pxl2sm calibration logic — all stay frozen.
 
-- Constructor takes Project, subscribes.
-- `onProjectChanged()`: read `Project.Defaults.{objectsNumber, wallWidthCm, middleWidthCm, frameRate, arenaGeometry}` and update relevant UI widgets only if user hasn't edited them.
-- On Save Preset: appendLog.
-- Don't touch geometry / zone composition / drawing logic — that's frozen.
+**Wiring:**
+1. CreatePresetApp constructor creates `obj.Project = sphynx.app.ProjectState()` (the app is the root container and owner).
+2. CreatePresetApp itself does NOT subscribe — it's the root. The Project tab + every other tab controller does.
+3. CreatePreset as a tab (tab 1) receives the listener.
 
-Open questions:
-- How to detect "user already edited a field"? Per-field flag set on ValueChangedFcn? Compare current value to last-set-from-project value?
-- Should ExperimentType drive zoneStrategy too (auto-add zones for Novelty_OF)?
-- Library presets — should `actsLibrary` field auto-load the library when CreatePreset opens, or wait for Define Acts?
+**Detection of "user already edited" — three-state value source:**
 
----
+Per-field state machine `obj.FieldSource.<name> = 'default' | 'project' | 'user'`:
+- At buildUI time: `FieldSource.objectsNumber = 'default'`.
+- In `onProjectChanged()`: if `FieldSource.<name> ~= 'user'` → overwrite value from `Project.Defaults.<name>`, set `FieldSource.<name> = 'project'`.
+- In ValueChangedFcn: if the change did NOT originate from listener (guard via `obj.UpdatingFromListener = true/false` wrapping listener writes) → set `FieldSource.<name> = 'user'`.
 
-## Section 7 — Backward compat / migration  [TBD]
+Testable: load project defaults → switch ExperimentType → defaults update; manually edit one field → switch ExperimentType again → that field stays user value, others update.
 
-To be designed next session. Goals:
+**Fields under Project control:**
+- ObjectsNumberField (uispinner)
+- WallWidthCmField (uispinner)
+- MiddleWidthCmField (uispinner)
+- FrameRateField (uispinner)
+- ArenaGeometryDropDown (Circle / Square / Polygon)
+- NumStripsField, StripDirectionDropDown — if present in Defaults
+- ObjectZoneWidthCmField, DistanceYCmField, DistanceXCmField — if present in Defaults
 
-- App starts with no project → tabs work as today (loader strips fallback).
-- Existing folders without `sphynx_project.json` → "Initialize as project" offers same flow as Create.
-- Old presets / `_WorkSpace.mat` files should be openable without breaking.
-- Schema versioning via `schema` field.
+**Fields NOT under Project (frozen):**
+- All draw callbacks, zone composition, click handlers, coordinate transforms.
+- Image loading, pxl2sm calibration mechanic — geometry-sensitive.
 
-Open questions:
-- What about already-converted H:\Dataset experiments (CC/FOF/NOF/RFC)? Auto-initialize a project there from existing 5_BehaviorMAT_new folder?
-- If user opens an unsupported newer schema, hard fail or read-only mode?
+**Logging:**
+- On every successful `savePreset` →
+  `Project.appendLog(struct('tab','CreatePreset', 'action','preset_saved', 'session',<preset_basename>, 'status','OK'))`.
 
----
+**Explicit non-goals for the big-bang (deferred):**
+- ExperimentType → zoneStrategy auto-add of zones. Requires unfreezing geometry. Deferred to its own design pass.
+- Loading actsLibrary inside CreatePreset. Library belongs to Define Acts. CreatePreset only knows the name for preset metadata.
 
-## Section 8 — Testing approach  [TBD]
-
-To be designed next session. Goals:
-
-- `tests/unit/projectStateTest.m`: construct, setField, listener fires, batched update fires once, JSON round-trip preserves all fields.
-- `tests/unit/experimentsRegistryTest.m`: each registry name returns a struct with required fields.
-- `tests/integration/projectToTabsTest.m`: spin up CreatePresetApp with a temp project root, load a JSON, verify Analyze tab default paths reflect Project.Folders.
-
-Open questions:
-- Headless test of listener-driven UI updates — do uispinner ValueChangedFcn callbacks fire in headless mode?
-- Do we need a project-fixture / golden file under `tests/fixtures/`?
+**Estimated touch:** `+sphynx/+app/CreatePresetApp.m` +constructor accepting Project, +FieldSource state, +UpdatingFromListener guard, +listener subscribe/teardown, +`onProjectChanged()` method, +appendLog in savePreset. ~80-120 LoC delta. C2.
 
 ---
 
-# Resume instructions (for next session)
+## Section 7 — Backward compat / migration  [APPROVED]
 
-When user says "продолжаем дизайн Project subsystem":
+Goal: nothing existing breaks. Project subsystem is additive.
 
-1. Read this file end-to-end.
-2. Resume with **Section 6 — CreatePreset unfreezing scope**. Present scope + answer open questions, get approval.
-3. Then **Section 7 — Backward compat**, then **Section 8 — Testing**.
-4. After all sections approved: run spec self-review pass (placeholders / contradictions / scope / ambiguity).
-5. Ask user to review the written spec.
-6. On approval: invoke `superpowers:writing-plans` skill to produce the implementation plan.
+**Scenario A — App started without a project:**
+- `obj.Project = sphynx.app.ProjectState()` is constructed empty (Root=''; Defaults=Custom; Mice empty table).
+- All tab listeners receive an idempotent empty callback; their loader-strips remain as fallback.
+- User works exactly as today. Project tab shows "No project loaded — Create or Load".
 
-Total effort estimate (gut): C4 — full subsystem touches 7-9 tab controllers + CreatePreset unfreeze + new package + new tab + tests. Realistic: 5-8 calendar days of focused work.
+**Scenario B — Existing folder without sphynx_project.json:**
+- Project tab → Load → folder picker → JSON not found.
+- Dialog: "Initialize as project here? This will scaffold the folder skeleton (if missing) and write sphynx_project.json with Custom defaults." [Yes/No]
+- Yes → create skeleton (if folders missing), write JSON, ProjectState.update.
+- No → close dialog, Project tab stays empty.
+
+**Scenario C — H:\Dataset experiments (CC/FOF/NOF/RFC already converted):**
+- These are typical "existing folders". On Load: skeleton partly exists (e.g. `5_BehaviorMAT_new` instead of `5_Behavior`).
+- Resolution: in the Initialize flow the user **sees** the default folder names BEFORE the JSON is written and can edit them (e.g. type `5_BehaviorMAT_new` in the Behavior field). This is the same Folders UI section from Section 2 pre-filled with defaults.
+- After Initialize: Scan mice over `<Folders.behavior>` collects mice → `Project.Mice` is populated.
+
+**Scenario D — User opens a newer JSON than this code knows (schema=2):**
+- Read `schema` field. If higher than supported → modal: "Project file uses newer schema (vN). Open in read-only mode? Some fields may be ignored." [Yes/No].
+- Yes → load recognised fields only; set `obj.ReadOnly = true`; Save button disabled.
+- No → don't load.
+
+**Scenario E — User opens schema=1 (current):**
+- Load all fields. Missing fields (partial older save) → fill from experimentType's Defaults.
+
+**Scenario F — Migration path for future changes:**
+- `+sphynx/+app/migrateProject.m`: `S = migrateProject(S, fromSchema, toSchema)`. Chain of forward-migrations. v1 → v2 will go through this function. At schema=1 the function is a no-op.
+
+**Old preset .mat / _WorkSpace.mat files** — not touched, format unchanged. Project tab read-only sees them via Scan mice / Validate, but does not modify them.
+
+---
+
+## Section 8 — Testing approach  [APPROVED]
+
+New tests under `tests/unit/` and `tests/integration/`. No headless-UI smoke for the new tab (uigridlayout headless is limited — class-load smoke only).
+
+**Unit — `tests/unit/projectStateTest.m`:**
+- testConstructEmpty: default values OK.
+- testSetFieldNotifies: setField('Root', '/tmp') fires notify exactly once (listener-call counter).
+- testUpdateBatched: update with 3 fields fires notify exactly once.
+- testAppendLogGrowsAndNotifies.
+- testJsonRoundTripFull: populate all fields → saveToFile → loadFromFile into new ProjectState → field-by-field equal.
+- testJsonRoundTripPartial: JSON without `mice` → load → `Mice` defaults to empty table.
+- testSchemaForward: schema=99 → loadFromFile sets ReadOnly=true.
+
+**Unit — `tests/unit/experimentsRegistryTest.m`:**
+- testRegistryNonEmpty.
+- testAllRegistryReturnsStruct: for every name, `sphynx.experiments.get(name)` returns a struct with required fields (`experimentType`, `namePattern`, `frameRate`, `actsLibrary`).
+- testCustomIsBlank: `Custom()` has experimentType='Custom', other fields allowed empty.
+
+**Unit — `tests/unit/projectTabControllerSmokeTest.m`:**
+- Class-load only: `?sphynx.app.ProjectTabController` returns a metaclass (no syntax error). Skip UI construction in headless.
+
+**Integration — `tests/integration/projectPropagationTest.m`:**
+- Construct `sphynx.app.ProjectState` (no UI).
+- Attach a stub-listener (anonymous fn incrementing a counter).
+- setField → counter=1; update(3 fields) → counter=2; appendLog → counter=3.
+- JSON round-trip preserves the Mice table with categorical / mixed columns.
+
+**Integration — `tests/integration/createPresetAppWithProjectTest.m`:**
+- Construct CreatePresetApp in the same headless mode the existing `createPresetAppSmokeTest` uses.
+- Verify `app.Project` exists and is `sphynx.app.ProjectState`.
+- Verify ProjectTabController exists and registered a listener.
+- Emulate: `app.Project.update(struct('Defaults', myDefaults))` → check that CreatePreset tab fields updated (direct read of `app.CreatePresetTabController.<UIField>.Value`).
+- Validates the listener loop without UI events.
+
+**Fixtures — `tests/fixtures/`:**
+- `project_v1_full.json` — typical project, ~5 mice with a couple of ID_* columns.
+- `project_v1_partial.json` — minimal (only experimentType + Root).
+- `project_v99_future.json` — wrong-schema for forward-compat test.
+
+**Coverage delta:** ~10 new tests. Existing 187 must stay green.
+
+---
+
+## Clarifications added during self-review
+
+- **`actsLibrary` resolution in Defaults** — the value is either (a) a built-in name registered in `+sphynx/+acts/libraries/` or `+sphynx/+experiments/<Name>.m` (e.g. `'novelty_of_default'`), or (b) an absolute path to a `.mat`. The loader tries (a) first, falls back to (b). This applies to both Project.Defaults and direct user input in Define Acts.
+- **Project.Mice column convention** — reserved columns: `mouse` (string), `included` (bool). Any other column is metadata and flows downstream into Make Output Table / Plot Data automatically. Convention: name them as `ID_<thing>` (`ID_sex`, `ID_drug`) or just `<thing>` (`group`, `line`, `sex`). The `renameUserColumns` helper in `buildSuperTable` already strips `ID_` prefix.
+- **"User edited" semantics in Section 6** — defined via `FieldSource` state machine, NOT by comparing current value to last-set value. State transitions: `default → project` on listener apply; `default | project → user` on UI ValueChangedFcn outside listener context.
+
+---
+
+# Implementation plan handoff
+
+When the user approves this spec, the next skill to invoke is `superpowers:writing-plans` to produce the implementation plan. Plan should break work into ordered passes:
+
+1. **Pass A — ProjectState + experiments registry + unit tests.** No UI yet. Tests prove handle-class semantics, JSON round-trip, registry shape. Safe to land independently.
+2. **Pass B — ProjectTabController + integration tests.** New Tab 0 only. CreatePresetApp gets `obj.Project` member but other tabs still don't subscribe. Project tab functional end-to-end (Create/Load/Save, Scan, Validate).
+3. **Pass C — Subscribe Analyze + Batch + Make Output + Plot Data.** The "consumer" tabs that benefit most from project defaults. Lower risk than CreatePreset.
+4. **Pass D — Unfreeze CreatePreset + Define Acts + Preprocess Tracking.** The "producer" tabs. Higher care because CreatePreset has frozen geometry around the change.
+5. **Pass E — WIP stubs for Preprocess Video + Synthetic Data, polish, full regression run.**
+
+Total estimate: 5-8 calendar days of focused work (C4 scope).
