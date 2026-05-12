@@ -1457,3 +1457,52 @@ Save all metrics — обходит все detected metrics + все уровн�
 **Юзер:** про йдись по текущей папке, изучи. пройдись по папке c:\Users\User\YandexDisk\_Projects\Ontogenez\BehaviorData\ изучи.
 
 **Claude:** Прочитал структуру sphynx (`+sphynx/` с 13 пакетами, 9 GUI-вкладок, статус из `docs/TODO.md`) и Ontogenez BehaviorData (pipeline 1_Raw/2_Combined/3_DLC/4_Preset/5_Behavior + `Ontogenez - Main.csv` на 582 строки). Пресеты сделаны на 37 когорт (A9A10..A56, C1C2..C35C36); 2_Combined/3_DLC/5_Behavior пусты — DLC ещё не прогонялся. Изменений не вносил.
+
+---
+
+## 2026-05-12 — резка Ontogenez
+
+**Юзер:** нужно разрезать видео из 1_Raw/ → 2_Combined/. Один CSV-row = одна посадка. Имя из колонки Example, для пустых — DEV_<Mouse_id>_<Trial>. Плоско. Резать ffmpeg-ом (юзер поставил).
+
+**Уточнения:**
+- Шаблон имени = `DEV_<Mouse_id>_<Trial>.mp4` для всех 577 валидных строк (15 hand-filled подтвердили этот вид).
+- 2_Combined плоско.
+- ffmpeg по `/c/ffmpeg/bin/ffmpeg.exe`.
+
+**Claude:** Написал `tools/cut_ontogenez_clips.sh` (pilot/all/dryrun). Метод — гибрид `-ss start_s` + `-vf select=between(n,0,count-1)`, гарантирует точное число кадров (PSNR первого кадра output vs frame fs source = inf). На пилоте 5/5 клипов получили ровно ожидаемое nb_frames. Запустил полный прогон 577 клипов в background, мониторю.
+
+**Юзер (поправка):** не 5 битых строк в CSV, а 4. И C33 5T (start=9373) — реально режется до конца видео.
+
+**Claude:** Прав, 4 не 5 (581 data-row - 4 broken = 577). Дорезал DEV_C33_5T.mp4 на 247 кадров (источник имеет 9619 кадров, не 9633 — резал до фактического конца). Main-run завершился: ok=572 new + 5 skipped (пилот) + 0 fail. Итого в 2_Combined/ 578 клипов, 46 мин.
+
+---
+
+## 2026-05-12 — 4_Preset: cohort -> per-session
+
+**Юзер:** в 4_Preset/ маски сделаны для big-видео (cohort-level), naming правильное но плохое. Надо подделать недостающие — чтобы 1 видео из 2_Combined = 1 маска в 4_Preset, ID идентичные.
+
+**Уточнения:**
+- 15 second-order источников (D*/F*/G*) — cohort-preset нет, юзер сделает руками; пропустить сейчас.
+- Per-session плоско: `4_Preset/DEV_<mouse>_<trial>_Preset.mat`.
+- Оригиналы перенести в `4_Preset/_originals/`.
+
+**Claude:** Сделано. 37 cohort перенесены в `_originals/`, клонировано 405 per-session (1:1 с A*/C* видео). 3 orphan (C34 5T, C33 6T, C34 6T) удалил. 174 D/F/G клипов в 2_Combined без preset — ждут твоих cohort масок.
+
+## 2026-05-12 - Brainstorm Project subsystem (пауза до перезагрузки)
+
+Брейнштормим дизайн Project subsystem на `Sphynx-GUI-dev`. Кода ещё не было, только дизайн.
+
+Что одобрено (Sections 1-5 в `docs/superpowers/specs/2026-05-12-project-subsystem-design.md`):
+1. Модель данных ProjectState + JSON schema (Root, Description, ExperimentType, NamePattern, Folders, Defaults, Mice, Log)
+2. UI Project tab (Tab 0): controls слева, mice table + activity log справа
+3. Реестр `+sphynx/+experiments/` (один файл на тип эксперимента)
+4. Listener-based propagation (ProjectState handle с событием Changed)
+5. Что каждая существующая вкладка делает в onProjectChanged()
+
+Что осталось (Sections 6-8):
+6. CreatePreset unfreezing scope (как читать defaults без затирания user input)
+7. Backward compat (старые проекты без JSON; уже сконвертированные H:\Dataset)
+8. Testing approach
+
+Когда вернёшься — скажи "продолжаем дизайн Project subsystem", я прочитаю файл и пойду с Section 6.
+
