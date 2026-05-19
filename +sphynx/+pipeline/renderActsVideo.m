@@ -95,13 +95,16 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
     presSpacingMul = optNum(feat, pres, 'presSpacingMul', 1.0);
     presTrajMul    = optNum(feat, pres, 'presTrajMul', 1.0);
     if pres
-        trajColor = [0 0.30 0];   trajLW = 3.5 * presTrajMul;
-        zoneLW = 2.5;   zoneAlpha = 0.10;
-        speedFont = round(38 * presScale);
-        subFont   = round(34 * presScale);   % Speed_act / Zone / Acts:
-        actsFont  = round(48 * presScale);   % act item names (2x prev)
-        panelDy   = round(54 * presScale * presSpacingMul); % Speed/.../Zone step
-        actsDy    = round(64 * presScale * presSpacingMul); % acts list step
+        % Baseline = user-approved look (2026-05-19): font60, trajectory
+        % LW 5.25, label spacing x1.5, zone alpha 0.075. Knobs default to
+        % 1.0 so the GUI checkbox alone reproduces exactly this.
+        trajColor = [0 0.30 0];   trajLW = 5.25 * presTrajMul;
+        zoneLW = 2.5;   zoneAlpha = 0.075;
+        speedFont = round(48 * presScale);
+        subFont   = round(43 * presScale);   % Speed_act / Zone / Acts:
+        actsFont  = round(60 * presScale);   % act item names
+        panelDy   = round(101 * presScale * presSpacingMul); % Speed/.../Zone step
+        actsDy    = round(120 * presScale * presSpacingMul); % acts list step
         if isfield(feat, 'presZoneAlpha') && isnumeric(feat.presZoneAlpha) ...
                 && isscalar(feat.presZoneAlpha) && feat.presZoneAlpha >= 0
             zoneAlpha = feat.presZoneAlpha;

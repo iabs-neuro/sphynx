@@ -1,12 +1,12 @@
 function render_mss_presentation_clip()
-% Reproduce the Analyze Session behavior video for MSS_H33_2D_1T in
-% presentation mode. Runs analyzeSession once, then renders several
-% SHORT (5 s) sample clips at different presentation font scales so the
-% user can pick a font size.
+% Final deliverables for the MSS_H33_2D_1T presentation slide:
+%   1. <stem>_presentation_60s.mp4 - Analyze Session behavior video,
+%      first 60 s, presentation styling (baked baseline = approved look).
+%   2. <stem>_original_60s.mp4 - the SAME first N frames of the raw
+%      source video, no overlay, for synchronous side-by-side playback.
 %
 % Mirrors AnalyzeSessionTabController.runAnalyze: defaultConfig + DLC +
-% preset + custom acts library, headless. (The Analyze pipeline does not
-% consume *_PreprocessSettings.mat; per-part params come from the preset.)
+% preset + custom acts library, headless.
 
     base   = 'C:\Users\User\YandexDisk\_Projects\MSS';
     video  = fullfile(base, 'BehaviorData', '2_Combined', 'MSS_H33_2D_1T.mp4');
@@ -14,6 +14,7 @@ function render_mss_presentation_clip()
         'MSS_H33_2D_1TDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv');
     preset = fullfile(base, 'diploma', 'MSS_H33_2D_1T', 'MSS_H33_2D_1T_Preset.mat');
     lib    = fullfile(base, 'diploma', 'MSS_acts_library.mat');
+    ffmpeg = 'C:\ffmpeg\bin\ffmpeg.exe';
 
     outDir = fullfile(base, 'BehaviorData', 'Analyze_out', 'MSS_H33_2D_1T');
     if ~isfolder(outDir); mkdir(outDir); end
@@ -22,6 +23,7 @@ function render_mss_presentation_clip()
     assert(isfile(dlc),    'missing dlc: %s',    dlc);
     assert(isfile(preset), 'missing preset: %s', preset);
     assert(isfile(lib),    'missing acts library: %s', lib);
+    assert(isfile(ffmpeg), 'missing ffmpeg: %s', ffmpeg);
 
     cfg = sphynx.pipeline.defaultConfig();
     cfg.paths.dlc        = dlc;
@@ -38,37 +40,36 @@ function render_mss_presentation_clip()
         numel(result.Acts), result.n_frames);
 
     fps    = result.Options.FrameRate;
-    durSec = 5;
+    durSec = 60;
     startF = 1;
     endF   = min(result.n_frames, startF + round(durSec * fps) - 1);
-    fprintf('fps=%.3f  range=[%d %d]  (%.1f s)\n', ...
-        fps, startF, endF, (endF - startF + 1) / fps);
+    nFr    = endF - startF + 1;
+    fprintf('fps=%.3f  range=[%d %d]  (%d frames, %.1f s)\n', ...
+        fps, startF, endF, nFr, nFr / fps);
 
-    % Font chosen: font60 -> presScale 1.25 (fixed). Sweep:
-    %   mul   in {1.5, 2.0}  applied to BOTH trajectory LW and spacing
-    %   alpha in {0.075, 0.05, 0.03}  zone-fill transparency
-    presScale = 1.25;
-    muls   = [1.5 2.0];
-    alphas = [0.075 0.05 0.03];
-    for mul = muls
-        for a = alphas
-            name = sprintf('MSS_H33_2D_1T_pres_mul%02d_a%03d.mp4', ...
-                round(mul*10), round(a*1000));
-            feat = struct('trajectory', true, 'velocity', true, ...
-                          'actsList', true, 'zones', true, ...
-                          'presentation', true, 'presScale', presScale, ...
-                          'presSpacingMul', mul, 'presTrajMul', mul, ...
-                          'presZoneAlpha', a);
-            fprintf('--- mul=%.1f (trajLW=%.2f) alpha=%.3f -> %s\n', ...
-                mul, 3.5*mul, a, name);
-            outPath = sphynx.pipeline.renderActsVideo(result, video, outDir, ...
-                'Range', [startF endF], ...
-                'Features', feat, ...
-                'OutputName', name, ...
-                'ProgressFcn', @(v, m) fprintf('  %3.0f%% %s\n', 100*v, m));
-            fprintf('  DONE -> %s\n', outPath);
-        end
+    % --- 1. Presentation clip (baked baseline = approved look) ----------
+    presName = 'MSS_H33_2D_1T_presentation_60s.mp4';
+    feat = struct('trajectory', true, 'velocity', true, ...
+                  'actsList', true, 'zones', true, 'presentation', true);
+    fprintf('--- presentation -> %s\n', presName);
+    presPath = sphynx.pipeline.renderActsVideo(result, video, outDir, ...
+        'Range', [startF endF], ...
+        'Features', feat, ...
+        'OutputName', presName, ...
+        'ProgressFcn', @(v, m) fprintf('  %3.0f%% %s\n', 100*v, m));
+    fprintf('  DONE -> %s\n', presPath);
+
+    % --- 2. Plain original, same first nFr frames -----------------------
+    origPath = fullfile(outDir, 'MSS_H33_2D_1T_original_60s.mp4');
+    cmd = sprintf(['"%s" -y -i "%s" -frames:v %d ' ...
+        '-c:v libx264 -crf 18 -preset veryfast -an "%s"'], ...
+        ffmpeg, video, nFr, origPath);
+    fprintf('--- original (ffmpeg, %d frames) -> %s\n', nFr, origPath);
+    [st, out] = system(cmd);
+    if st ~= 0
+        error('ffmpeg failed (%d):\n%s', st, out);
     end
+    fprintf('  DONE -> %s\n', origPath);
 
     fprintf('ALL DONE in %s\n', outDir);
 end

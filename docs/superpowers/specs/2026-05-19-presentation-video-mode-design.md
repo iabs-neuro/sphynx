@@ -53,6 +53,14 @@ LW x), `presZoneAlpha` (explicit zone-fill FaceAlpha). Read via local
 `optNum` helper. Sample sweep: spacing/traj x {1.5, 2.0} crossed with
 zone alpha {0.075, 0.05, 0.03}.
 
+Iteration 4 (2026-05-19, final): user picked mul15_a075. Baked the
+approved look into the presentation baseline (trajLW 5.25, zone alpha
+0.075, fonts 48/43/60, steps 101/120) so the GUI "For presentation"
+checkbox alone reproduces it with no knobs. Knobs retained as
+multiplicative overrides (default 1.0). Final deliverables: 60 s
+presentation clip + 60 s plain original (ffmpeg, same first N frames)
+for synchronous slide playback.
+
 ## Part B — produce the MSS clip
 
 Headless `matlab -batch`: load preset `MSS_H33_2D_1T_Preset.mat`, DLC
