@@ -37,7 +37,8 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
 
     % Resolve feature flags. Explicit Features struct overrides Overlay.
     fdef = struct('trajectory', true, 'velocity', true, ...
-                  'actsList', true, 'zones', true);
+                  'actsList', true, 'zones', true, ...
+                  'presentation', false);
     if strcmp(p.Results.Overlay, 'minimal')
         fdef = structfun(@(~) false, fdef, 'UniformOutput', false);
     end
@@ -80,6 +81,19 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
     end
     actNames = {result.Acts.ActName};
     actColors = lines(max(1, nActs));
+
+    % Visual style. `presentation` swaps three elements to a bolder,
+    % cleaner look for slide decks; everything else is unchanged.
+    pres = isfield(feat, 'presentation') && feat.presentation;
+    if pres
+        trajColor   = [0 0.30 0];   trajLW   = 3.5;
+        zoneFill    = false;        zoneLW   = 2.5;
+        actsFont    = 24;           actsDy   = 44;
+    else
+        trajColor   = [0.10 0.50 0.90]; trajLW = 1.2;
+        zoneFill    = true;         zoneLW   = 1.2;
+        actsFont    = 15;           actsDy   = 26;
+    end
 
     % Body parts
     bps = result.BodyPartsTraces;
@@ -191,9 +205,14 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
                 && ~isempty(activeZoneMaskByFrame{f})
             B = bwboundaries(activeZoneMaskByFrame{f});
             for bb = 1:numel(B)
-                fill(ax, B{bb}(:,2), B{bb}(:,1), [1 0.7 0], ...
-                    'FaceAlpha', 0.20, 'EdgeColor', [1 0.5 0], ...
-                    'LineWidth', 1.2);
+                if zoneFill
+                    fill(ax, B{bb}(:,2), B{bb}(:,1), [1 0.7 0], ...
+                        'FaceAlpha', 0.20, 'EdgeColor', [1 0.5 0], ...
+                        'LineWidth', zoneLW);
+                else
+                    plot(ax, B{bb}(:,2), B{bb}(:,1), '-', ...
+                        'Color', [1 0.5 0], 'LineWidth', zoneLW);
+                end
             end
         end
 
@@ -201,7 +220,7 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
         if feat.trajectory && ~isempty(centerX)
             t1 = range(1); t2 = min(f, numel(centerX));
             plot(ax, centerX(t1:t2), centerY(t1:t2), '-', ...
-                'Color', [0.10 0.50 0.90], 'LineWidth', 1.2);
+                'Color', trajColor, 'LineWidth', trajLW);
         end
 
         % Body part dots — always (BA-style).
@@ -256,9 +275,10 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
         end
         if feat.actsList
             text(ax, x0, y0, 'Acts:', ...
-                'Color', 'w', 'FontSize', 16, 'FontWeight', 'bold', ...
+                'Color', 'w', 'FontSize', max(16, actsFont), ...
+                'FontWeight', 'bold', ...
                 'BackgroundColor', [0 0 0 0.55]);
-            y0 = y0 + dy;
+            y0 = y0 + actsDy;
             % Skip acts that already appear under Speed_act / Zone.
             shownInfo = [{speedActMap{f}}, spatialList];
             shownInfo = shownInfo(~cellfun(@isempty, shownInfo));
@@ -267,10 +287,10 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
                 k = active(j);
                 if any(strcmp(actNames{k}, shownInfo)); continue; end
                 text(ax, x0 + 18, y0, actNames{k}, ...
-                    'Color', actColors(k, :), 'FontSize', 15, ...
+                    'Color', actColors(k, :), 'FontSize', actsFont, ...
                     'FontWeight', 'bold', 'Interpreter', 'none', ...
                     'BackgroundColor', [0 0 0 0.55]);
-                y0 = y0 + dy - 4;
+                y0 = y0 + actsDy - 4;
             end
         end
 

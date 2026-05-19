@@ -49,6 +49,7 @@ classdef AnalyzeSessionTabController < handle
         MainVideoVelocityCheckbox
         MainVideoActsListCheckbox
         MainVideoZonesCheckbox
+        MainVideoPresentationCheckbox
 
         % Output options — per-act videos
         ActsVideoListBox
@@ -164,7 +165,8 @@ classdef AnalyzeSessionTabController < handle
                 'trajectory', obj.MainVideoTrajectoryCheckbox.Value, ...
                 'velocity',   obj.MainVideoVelocityCheckbox.Value, ...
                 'actsList',   obj.MainVideoActsListCheckbox.Value, ...
-                'zones',      obj.MainVideoZonesCheckbox.Value);
+                'zones',      obj.MainVideoZonesCheckbox.Value, ...
+                'presentation', obj.MainVideoPresentationCheckbox.Value);
         end
 
         function renderActsVideos(obj)
@@ -383,7 +385,8 @@ classdef AnalyzeSessionTabController < handle
                 'trajectory', obj.MainVideoTrajectoryCheckbox.Value, ...
                 'velocity',   obj.MainVideoVelocityCheckbox.Value, ...
                 'actsList',   obj.MainVideoActsListCheckbox.Value, ...
-                'zones',      obj.MainVideoZonesCheckbox.Value);
+                'zones',      obj.MainVideoZonesCheckbox.Value, ...
+                'presentation', obj.MainVideoPresentationCheckbox.Value);
             v = obj.ActsVideoListBox.Value;
             if ischar(v); v = {v}; end
             s.actsVideo = struct( ...
@@ -404,6 +407,7 @@ classdef AnalyzeSessionTabController < handle
                 if isfield(m, 'velocity');   obj.MainVideoVelocityCheckbox.Value   = m.velocity; end
                 if isfield(m, 'actsList');   obj.MainVideoActsListCheckbox.Value   = m.actsList; end
                 if isfield(m, 'zones');      obj.MainVideoZonesCheckbox.Value      = m.zones; end
+                if isfield(m, 'presentation'); obj.MainVideoPresentationCheckbox.Value = m.presentation; end
             end
             if isfield(s, 'actsVideo')
                 a = s.actsVideo;
@@ -507,8 +511,8 @@ classdef AnalyzeSessionTabController < handle
             % --- Main video panel ------------------------------------
             mvPanel = uipanel(opts, 'Title', 'Main video');
             mvPanel.Layout.Row = 1;
-            mvGrid = uigridlayout(mvPanel, [4, 4]);
-            mvGrid.RowHeight = {26, 26, 26, 26};
+            mvGrid = uigridlayout(mvPanel, [5, 4]);
+            mvGrid.RowHeight = {26, 26, 26, 26, 26};
             mvGrid.ColumnWidth = {'1x', 70, '1x', 70};
             mvGrid.RowSpacing = 3;
             mvGrid.ColumnSpacing = 4;
@@ -538,6 +542,14 @@ classdef AnalyzeSessionTabController < handle
             obj.MainVideoZonesCheckbox = uicheckbox(mvGrid, ...
                 'Text', 'Current zones', 'Value', true, ...
                 'Tooltip', 'Highlight zones containing the animal');
+
+            obj.MainVideoPresentationCheckbox = uicheckbox(mvGrid, ...
+                'Text', 'For presentation', 'Value', false, ...
+                'Tooltip', ['Presentation styling: dark-green thick ' ...
+                'trajectory, zone outlines (no fill), larger spaced ' ...
+                'acts list']);
+            obj.MainVideoPresentationCheckbox.Layout.Row = 5;
+            obj.MainVideoPresentationCheckbox.Layout.Column = [1 4];
 
             % --- Acts videos panel -----------------------------------
             avPanel = uipanel(opts, 'Title', 'Acts videos (per-act)');
