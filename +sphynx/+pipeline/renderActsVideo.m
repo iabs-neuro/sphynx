@@ -85,14 +85,26 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
     % Visual style. `presentation` swaps three elements to a bolder,
     % cleaner look for slide decks; everything else is unchanged.
     pres = isfield(feat, 'presentation') && feat.presentation;
+    % Optional uniform scale for presentation text (lets sample clips
+    % sweep font sizes without code edits). 1.0 = the tuned baseline.
+    presScale = 1.0;
+    if pres && isfield(feat, 'presScale') && isnumeric(feat.presScale) ...
+            && isscalar(feat.presScale) && feat.presScale > 0
+        presScale = feat.presScale;
+    end
     if pres
-        trajColor   = [0 0.30 0];   trajLW   = 3.5;
-        zoneFill    = false;        zoneLW   = 2.5;
-        actsFont    = 24;           actsDy   = 44;
+        trajColor = [0 0.30 0];   trajLW = 3.5;
+        zoneLW = 2.5;   zoneAlpha = 0.10;
+        speedFont = round(38 * presScale);
+        subFont   = round(34 * presScale);   % Speed_act / Zone / Acts:
+        actsFont  = round(48 * presScale);   % act item names (2x prev)
+        panelDy   = round(54 * presScale);   % Speed/Speed_act/Zone step
+        actsDy    = round(64 * presScale);   % acts list step
     else
-        trajColor   = [0.10 0.50 0.90]; trajLW = 1.2;
-        zoneFill    = true;         zoneLW   = 1.2;
-        actsFont    = 15;           actsDy   = 26;
+        trajColor = [0.10 0.50 0.90]; trajLW = 1.2;
+        zoneLW = 1.2;   zoneAlpha = 0.20;
+        speedFont = 18;  subFont = 16;  actsFont = 15;
+        panelDy   = 26;  actsDy  = 26;
     end
 
     % Body parts
@@ -205,14 +217,9 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
                 && ~isempty(activeZoneMaskByFrame{f})
             B = bwboundaries(activeZoneMaskByFrame{f});
             for bb = 1:numel(B)
-                if zoneFill
-                    fill(ax, B{bb}(:,2), B{bb}(:,1), [1 0.7 0], ...
-                        'FaceAlpha', 0.20, 'EdgeColor', [1 0.5 0], ...
-                        'LineWidth', zoneLW);
-                else
-                    plot(ax, B{bb}(:,2), B{bb}(:,1), '-', ...
-                        'Color', [1 0.5 0], 'LineWidth', zoneLW);
-                end
+                fill(ax, B{bb}(:,2), B{bb}(:,1), [1 0.7 0], ...
+                    'FaceAlpha', zoneAlpha, 'EdgeColor', [1 0.5 0], ...
+                    'LineWidth', zoneLW);
             end
         end
 
@@ -244,20 +251,20 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
         %     freezing
         %     object1
         %     ...
-        x0 = 12;       % left margin
-        y0 = 28;       % first baseline
-        dy = 26;       % line height
+        x0 = 12;          % left margin
+        y0 = 28;          % first baseline
+        dy = panelDy;     % line height (Speed/Speed_act/Zone)
         if feat.velocity && ~isempty(centerVel) && f <= numel(centerVel) ...
                 && isfinite(centerVel(f))
             text(ax, x0, y0, sprintf('Speed: %.1f cm/s', centerVel(f)), ...
-                'Color', 'w', 'FontSize', 18, 'FontWeight', 'bold', ...
+                'Color', 'w', 'FontSize', speedFont, 'FontWeight', 'bold', ...
                 'BackgroundColor', [0 0 0 0.55]);
             y0 = y0 + dy;
             spAct = '';
             if f <= numel(speedActMap); spAct = speedActMap{f}; end
             if isempty(spAct); spAct = '—'; end
             text(ax, x0, y0, sprintf('Speed_act: %s', spAct), ...
-                'Color', 'w', 'FontSize', 16, 'FontWeight', 'bold', ...
+                'Color', 'w', 'FontSize', subFont, 'FontWeight', 'bold', ...
                 'Interpreter', 'none', ...
                 'BackgroundColor', [0 0 0 0.55]);
             y0 = y0 + dy;
@@ -268,14 +275,14 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
             zname = '—';
             if ~isempty(spatialList); zname = strjoin(spatialList, ', '); end
             text(ax, x0, y0, sprintf('Zone: %s', zname), ...
-                'Color', 'w', 'FontSize', 16, 'FontWeight', 'bold', ...
+                'Color', 'w', 'FontSize', subFont, 'FontWeight', 'bold', ...
                 'Interpreter', 'none', ...
                 'BackgroundColor', [0 0 0 0.55]);
             y0 = y0 + dy;
         end
         if feat.actsList
             text(ax, x0, y0, 'Acts:', ...
-                'Color', 'w', 'FontSize', max(16, actsFont), ...
+                'Color', 'w', 'FontSize', subFont, ...
                 'FontWeight', 'bold', ...
                 'BackgroundColor', [0 0 0 0.55]);
             y0 = y0 + actsDy;
@@ -286,7 +293,7 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
             for j = 1:numel(active)
                 k = active(j);
                 if any(strcmp(actNames{k}, shownInfo)); continue; end
-                text(ax, x0 + 18, y0, actNames{k}, ...
+                text(ax, x0 + max(18, round(actsFont * 0.5)), y0, actNames{k}, ...
                     'Color', actColors(k, :), 'FontSize', actsFont, ...
                     'FontWeight', 'bold', 'Interpreter', 'none', ...
                     'BackgroundColor', [0 0 0 0.55]);

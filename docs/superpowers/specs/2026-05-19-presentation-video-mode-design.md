@@ -26,16 +26,25 @@ toggle that switches three visual elements to a cleaner/bolder style.
 
 ### A3. renderActsVideo restyle (only when `feat.presentation == true`)
 Local style vars chosen once before the frame loop; draw code branches
-on them (no duplicated draw blocks). Only these three change; the
-Speed/Speed_act/Zone text panel and text backgrounds are untouched.
+on them (no duplicated draw blocks). Text backgrounds (black boxes)
+are untouched; everything else scales per the table below.
 
-| Element | Default | Presentation |
+| Element | Default | Presentation (presScale=1.0) |
 |---|---|---|
-| Trajectory | Color [0.10 0.50 0.90], LineWidth 1.2 | Color [0 0.30 0] (dark green), LineWidth 3.5 |
-| Zones | filled boundary (fill, FaceAlpha 0.20, EdgeColor [1 0.5 0], LW 1.2) | border only: plot boundary, Color [1 0.5 0], LineWidth 2.5, no fill |
-| Acts list | header/items FontSize 15-16, line step dy=26 (items dy-4) | FontSize 24, line step dy=44 |
+| Trajectory | Color [0.10 0.50 0.90], LW 1.2 | Color [0 0.30 0] (dark green), LW 3.5 |
+| Zones | fill, FaceAlpha 0.20, EdgeColor [1 0.5 0], LW 1.2 | fill, FaceAlpha 0.10, LW 2.5 |
+| Speed text | FontSize 18 | FontSize 38 |
+| Speed_act / Zone / "Acts:" | FontSize 16 | FontSize 34 |
+| Act item names | FontSize 15 | FontSize 48 |
+| Panel line step (Speed/Speed_act/Zone) | dy 26 | 54 |
+| Acts list step | 26 | 64 |
 
-Values are a first pass; tunable by eye after viewing the clip.
+Iteration 2 (2026-05-19, user feedback): zones keep fill but at
+FaceAlpha 0.10; ALL panel text enlarged (not just acts list); spacing
+enlarged. Added optional numeric `feat.presScale` (default 1.0) that
+uniformly scales every presentation font + step, so sample clips can
+sweep sizes without code edits. Default (non-presentation) appearance
+is byte-identical to before. Values still tunable by eye.
 
 ## Part B — produce the MSS clip
 
@@ -52,5 +61,5 @@ trajectory+velocity+actsList+zones+presentation. Output:
 - Visual acceptance of the clip is on the user.
 
 ## Out of scope
-- No change to Speed/Speed_act/Zone panel, frame background, per-act videos.
+- No change to text background boxes, video frame itself, per-act videos.
 - No new toolbox dependency.
