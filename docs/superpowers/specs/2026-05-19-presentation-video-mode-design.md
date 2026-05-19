@@ -46,6 +46,13 @@ uniformly scales every presentation font + step, so sample clips can
 sweep sizes without code edits. Default (non-presentation) appearance
 is byte-identical to before. Values still tunable by eye.
 
+Iteration 3 (2026-05-19): font choice = font60 (presScale 1.25). Added
+three more optional knobs (all default 1.0 / built-in, presentation
+only): `presSpacingMul` (label spacing x), `presTrajMul` (trajectory
+LW x), `presZoneAlpha` (explicit zone-fill FaceAlpha). Read via local
+`optNum` helper. Sample sweep: spacing/traj x {1.5, 2.0} crossed with
+zone alpha {0.075, 0.05, 0.03}.
+
 ## Part B — produce the MSS clip
 
 Headless `matlab -batch`: load preset `MSS_H33_2D_1T_Preset.mat`, DLC

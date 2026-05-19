@@ -85,21 +85,27 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
     % Visual style. `presentation` swaps three elements to a bolder,
     % cleaner look for slide decks; everything else is unchanged.
     pres = isfield(feat, 'presentation') && feat.presentation;
-    % Optional uniform scale for presentation text (lets sample clips
-    % sweep font sizes without code edits). 1.0 = the tuned baseline.
-    presScale = 1.0;
-    if pres && isfield(feat, 'presScale') && isnumeric(feat.presScale) ...
-            && isscalar(feat.presScale) && feat.presScale > 0
-        presScale = feat.presScale;
-    end
+    % Optional presentation tuning knobs (let sample clips sweep without
+    % code edits; all default to the tuned baseline when absent):
+    %   presScale      - uniform font/step scale (1.0 baseline)
+    %   presSpacingMul - extra multiplier on label spacing only
+    %   presTrajMul    - extra multiplier on trajectory line width
+    %   presZoneAlpha  - explicit zone-fill FaceAlpha override
+    presScale      = optNum(feat, pres, 'presScale', 1.0);
+    presSpacingMul = optNum(feat, pres, 'presSpacingMul', 1.0);
+    presTrajMul    = optNum(feat, pres, 'presTrajMul', 1.0);
     if pres
-        trajColor = [0 0.30 0];   trajLW = 3.5;
+        trajColor = [0 0.30 0];   trajLW = 3.5 * presTrajMul;
         zoneLW = 2.5;   zoneAlpha = 0.10;
         speedFont = round(38 * presScale);
         subFont   = round(34 * presScale);   % Speed_act / Zone / Acts:
         actsFont  = round(48 * presScale);   % act item names (2x prev)
-        panelDy   = round(54 * presScale);   % Speed/Speed_act/Zone step
-        actsDy    = round(64 * presScale);   % acts list step
+        panelDy   = round(54 * presScale * presSpacingMul); % Speed/.../Zone step
+        actsDy    = round(64 * presScale * presSpacingMul); % acts list step
+        if isfield(feat, 'presZoneAlpha') && isnumeric(feat.presZoneAlpha) ...
+                && isscalar(feat.presZoneAlpha) && feat.presZoneAlpha >= 0
+            zoneAlpha = feat.presZoneAlpha;
+        end
     else
         trajColor = [0.10 0.50 0.90]; trajLW = 1.2;
         zoneLW = 1.2;   zoneAlpha = 0.20;
@@ -312,6 +318,15 @@ end
 
 function closeIfValid(h)
     if ~isempty(h) && isvalid(h); close(h); end
+end
+
+function v = optNum(feat, enabled, name, default)
+    % Read an optional positive scalar numeric tuning knob from `feat`.
+    v = default;
+    if enabled && isfield(feat, name) && isnumeric(feat.(name)) ...
+            && isscalar(feat.(name)) && feat.(name) > 0
+        v = feat.(name);
+    end
 end
 
 function out = mergeStruct(defaults, override)
