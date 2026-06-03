@@ -9,6 +9,9 @@ function n = correctedFrameCount(numFrames, durationS, frameRate)
 %   accurate for any video where duration and frame rate are reliable).
 %   Otherwise return `numFrames` unchanged.
 %
+%   The same logic also covers the symmetric case where `numFrames`
+%   is much larger than `Duration*FrameRate` (e.g. a corrupt header).
+%
 %   If the fallback cannot be computed (durationS or frameRate <= 0,
 %   or NaN), return the original `numFrames` unchanged -- caller decides
 %   how to handle.
@@ -24,6 +27,9 @@ function n = correctedFrameCount(numFrames, durationS, frameRate)
         return;
     end
     relErr = abs(numFrames - fallback) / max(fallback, 1);
+    % 5% threshold catches gross VideoReader bugs (NumFrames=2 for VFR
+    % h264 is ~100% off) while tolerating frame-count rounding drift
+    % between Duration*FrameRate and the true frame count.
     if relErr > 0.05
         n = fallback;
     else
