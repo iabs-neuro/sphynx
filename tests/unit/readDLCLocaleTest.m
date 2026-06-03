@@ -22,9 +22,35 @@ function testReadsDotDecimalsCleanly(testCase)
     verifyEqual(testCase, out.likelihood(1, 1), 0.987, 'AbsTol', 1e-6);
 end
 
+function testStillCleanUnderRuLocale(testCase)
+    % Switch the JVM default locale to RU before parsing. readmatrix
+    % consults the host locale to decide which character is the
+    % thousands separator unless DecimalSeparator is forced. This test
+    % proves the fix at readDLC.m:59 -- forcing '.' -- holds even
+    % when the host locale would otherwise misparse.
+
+    origLocale = java.util.Locale.getDefault();
+    cleanerLoc = onCleanup(@() java.util.Locale.setDefault(origLocale)); %#ok<NASGU>
+    java.util.Locale.setDefault(java.util.Locale('ru', 'RU'));
+
+    csv = makeTempDlcCsv();
+    cleanerFile = onCleanup(@() delete(csv)); %#ok<NASGU>
+
+    out = sphynx.io.readDLC(csv);
+
+    verifyFalse(testCase, any(isnan(out.X(:))), ...
+        'X has NaN under RU locale -- fix at readDLC.m:59 was bypassed');
+    verifyFalse(testCase, any(isnan(out.Y(:))), ...
+        'Y has NaN under RU locale -- fix at readDLC.m:59 was bypassed');
+    verifyEqual(testCase, out.X(1, 1),         100.5,  'AbsTol', 1e-6);
+    verifyEqual(testCase, out.Y(1, 1),         200.25, 'AbsTol', 1e-6);
+    verifyEqual(testCase, out.likelihood(1, 1), 0.987, 'AbsTol', 1e-6);
+end
+
 function csv = makeTempDlcCsv()
     csv = [tempname, '.csv'];
     fid = fopen(csv, 'w');
+    assert(fid >= 0, 'Could not create temp file: %s', csv);
     fprintf(fid, 'scorer,DLC,DLC,DLC,DLC,DLC,DLC\n');
     fprintf(fid, 'bodyparts,nose,nose,nose,tail,tail,tail\n');
     fprintf(fid, 'coords,x,y,likelihood,x,y,likelihood\n');
