@@ -71,6 +71,7 @@ classdef CreatePresetApp < handle
         ObjectsListBox
         ObjectPickModeDropDown
         ObjectClassField          % text edit for class label (S8)
+        CopyNField                % numeric edit for Copy x N count (S2)
         % Zones
         ZonesStrategyDropDown
         WallWidthField
@@ -320,6 +321,45 @@ classdef CreatePresetApp < handle
                 app.State.objects(k).class = val;
             end
             app.status(sprintf('Assigned class "%s" to %d objects', val, numel(idx)));
+        end
+
+        function copyObjectsN(app)
+            % COPYOBJECTSN  Duplicate the single selected object N times,
+            % placing copies on a row/grid layout (S2).
+            idx = app.getSelectedObjectIdx();
+            if numel(idx) ~= 1
+                app.status('Copy x N requires exactly 1 object selected');
+                return;
+            end
+            src = app.State.objects(idx);
+            n = round(app.CopyNField.Value);
+            pxlPerCm = app.State.pxlPerCm;
+            if isnan(pxlPerCm) || pxlPerCm <= 0
+                app.status('Calibrate pxlPerCm first');
+                return;
+            end
+            stepPx = 30 * pxlPerCm;     % 30 cm offset
+            offs = sphynx.preset.gridOffsets(n, stepPx);
+            newIdx = [];
+            for k = 1:n
+                cp = src;
+                cp.border_x = src.border_x + offs(k, 1);
+                cp.border_y = src.border_y + offs(k, 2);
+                cp.mask = imfill(sphynx.preset.maskFromBorder( ...
+                    app.State.height, app.State.width, cp.border_x, cp.border_y), 'holes');
+                cp.type = sprintf('Object%d', numel(app.State.objects) + 1);
+                if isempty(app.State.objects)
+                    app.State.objects = cp;
+                else
+                    app.State.objects(end + 1) = cp;
+                end
+                newIdx(end + 1) = numel(app.State.objects); %#ok<AGROW>
+            end
+            app.refreshObjectsList();
+            app.refreshMoveTargets();
+            app.setSelectedObjectIdx(newIdx);
+            app.refreshPreview();
+            app.status(sprintf('Copied %d times; %d new objects', n, n));
         end
 
         function addZones(app)
@@ -1163,8 +1203,8 @@ end
 function buildObjectsPanel(app)
     nGeom = 3;       % Polygon / Circle / Ellipse
     nCols = nGeom + 4;
-    g = uigridlayout(app.ObjectsPanel, [4, nCols]);
-    g.RowHeight = {28, '1x', 28, 28};
+    g = uigridlayout(app.ObjectsPanel, [5, nCols]);
+    g.RowHeight = {28, '1x', 28, 28, 28};
     g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {70}, {'fit'}, {60}];
     g.ColumnSpacing = 4;
 
@@ -1227,6 +1267,18 @@ function buildObjectsPanel(app)
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.assignClassToSelected());
     bAssign.Layout.Row = 4; bAssign.Layout.Column = nGeom + 4;
+
+    % Row 5: Copy x N controls (S2)
+    lblCopy = uilabel(g, 'Text', 'Copy:');
+    lblCopy.Layout.Row = 5; lblCopy.Layout.Column = 1;
+    app.CopyNField = uieditfield(g, 'numeric', 'Value', 5, ...
+        'Limits', [1 20], 'RoundFractionalValues', 'on');
+    app.CopyNField.Layout.Row = 5;
+    app.CopyNField.Layout.Column = [2, nGeom + 3];
+    bCopyN = uibutton(g, 'Text', 'Copy x N', ...
+        'BackgroundColor', semanticColor('action'), ...
+        'ButtonPushedFcn', @(~,~) app.copyObjectsN());
+    bCopyN.Layout.Row = 5; bCopyN.Layout.Column = nGeom + 4;
 end
 
 function onArenaGeometryToggle(app, src)
