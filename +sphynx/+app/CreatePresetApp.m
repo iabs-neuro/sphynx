@@ -92,6 +92,10 @@ classdef CreatePresetApp < handle
         LogTextArea
         % State
         State
+        % Guard flag: true while setSelectedObjectIdx or refreshObjectsList
+        % is writing to ObjectsListBox.Value, so onObjectsListBoxChanged
+        % short-circuits and avoids a double refreshPreview (C1).
+        UpdatingListboxFromState = false
     end
 
     methods
@@ -194,19 +198,26 @@ classdef CreatePresetApp < handle
         end
 
         function removeSelectedObject(app)
-            if isempty(app.State.objects); return; end
-            idx = app.getSelectedObjectIdx(); if isempty(idx); return; end
-            idx = idx(1);
-            removed = app.State.objects(idx).type;
-            app.State.objects(idx) = [];
+            % I1: remove ALL selected objects in one shot (spec: vector delete).
+            idx = app.getSelectedObjectIdx();
+            if isempty(idx)
+                app.status('No objects selected');
+                return;
+            end
+            n = numel(app.State.objects);
+            keep = setdiff(1:n, idx);
+            app.State.objects = app.State.objects(keep);
+            % Renumber remaining objects to maintain Object1..ObjectN.
             for k = 1:numel(app.State.objects)
                 app.State.objects(k).type = sprintf('Object%d', k);
             end
+            app.setSelectedObjectIdx([]);
             app.refreshObjectsList();
             app.refreshPreview();
             onZoneStrategyChanged(app);
             app.refreshMoveTargets();
-            sphynx.util.log('info', '[App] removed %s; %d remain', removed, numel(app.State.objects));
+            sphynx.util.log('info', '[App] removed %d object(s); %d remain', ...
+                numel(idx), numel(app.State.objects));
         end
 
         function replaceSelectedObject(app)
@@ -552,13 +563,21 @@ classdef CreatePresetApp < handle
 
         function setSelectedObjectIdx(app, idx)
             % Accept numeric vector; clamp, dedup, sort; sync listbox + preview.
+            % I4: guard against non-numeric / NaN inputs.
+            if ~isnumeric(idx); idx = []; end
+            idx = idx(:);
+            idx = idx(~isnan(idx));
             n = numel(app.State.objects);
             idx = idx(idx >= 1 & idx <= n);
             idx = unique(idx(:));   % sort + dedup, column vector
             app.State.selectedObjectIdx = idx;
             if isempty(app.ObjectsListBox) || ~isvalid(app.ObjectsListBox)
+                app.refreshPreview();
                 return;
             end
+            % C1: set guard so onObjectsListBoxChanged short-circuits.
+            app.UpdatingListboxFromState = true;
+            cleaner = onCleanup(@() app.resetListboxFlag()); %#ok<NASGU>
             if isempty(idx) || isempty(app.ObjectsListBox.Items)
                 app.ObjectsListBox.Value = {};
             else
@@ -567,22 +586,30 @@ classdef CreatePresetApp < handle
             app.refreshPreview();
         end
 
+        function resetListboxFlag(app)
+            app.UpdatingListboxFromState = false;
+        end
+
         function onObjectsListBoxChanged(app, ~)
-            % Convert listbox Value (cell of strings) to numeric indices.
+            % C1: short-circuit when we are the ones writing to the listbox.
+            if app.UpdatingListboxFromState; return; end
             if isempty(app.ObjectsListBox) || ~isvalid(app.ObjectsListBox)
                 return;
             end
+            % I2: convert listbox Value -> numeric indices, then route
+            % through setSelectedObjectIdx (single normalization point).
             val = app.ObjectsListBox.Value;
-            if ischar(val); val = {val}; end  % single-select compat guard
-            items = app.ObjectsListBox.Items;
-            idx = zeros(1, numel(val));
-            for i = 1:numel(val)
-                pos = find(strcmp(items, val{i}), 1);
-                if ~isempty(pos); idx(i) = pos; end
+            if isempty(val)
+                idx = [];
+            else
+                if ischar(val); val = {val}; end  % single-select compat guard
+                idx = zeros(0, 1);
+                for k = 1:numel(val)
+                    hit = find(strcmp(app.ObjectsListBox.Items, val{k}), 1);
+                    if ~isempty(hit); idx(end+1, 1) = hit; end %#ok<AGROW>
+                end
             end
-            idx = idx(idx > 0);
-            app.State.selectedObjectIdx = unique(idx(:));
-            app.refreshPreview();
+            app.setSelectedObjectIdx(idx);
         end
     end
 
@@ -701,6 +728,7 @@ classdef CreatePresetApp < handle
         end
 
         function refreshObjectsList(app)
+            % I3: use getSelectedObjectIdx() — no duplicated clamping logic.
             if isempty(app.State.objects)
                 app.ObjectsListBox.Items = {};
                 app.ObjectsListBox.Value = {};
@@ -709,14 +737,14 @@ classdef CreatePresetApp < handle
             items = arrayfun(@(o) sprintf('%s (%s)', o.type, o.geometry), ...
                 app.State.objects, 'UniformOutput', false);
             app.ObjectsListBox.Items = items;
-            % Restore selection from state (clamp to valid range)
-            validIdx = app.State.selectedObjectIdx(...
-                app.State.selectedObjectIdx >= 1 & ...
-                app.State.selectedObjectIdx <= numel(app.State.objects));
-            if isempty(validIdx)
+            % C1: guard so writing Value doesn't fire onObjectsListBoxChanged.
+            idx = app.getSelectedObjectIdx();
+            app.UpdatingListboxFromState = true;
+            cleaner = onCleanup(@() app.resetListboxFlag()); %#ok<NASGU>
+            if isempty(idx)
                 app.ObjectsListBox.Value = {};
             else
-                app.ObjectsListBox.Value = items(validIdx);
+                app.ObjectsListBox.Value = items(idx);
             end
         end
 
@@ -1759,13 +1787,10 @@ function pivot = computeSharedPivot(app)
     end
 end
 
-function drawState(ax, S, drawZones, selectedIdx)
-    % Used by Make plot; ax is a regular figure axes (not uiaxes), so
-    % patch + FaceAlpha works correctly here.
-    %
-    %   selectedIdx  optional numeric vector of selected object indices;
-    %                those objects get an amber/yellow outline overlay.
-    if nargin < 4; selectedIdx = []; end
+function drawState(ax, S, drawZones)
+    % Pure export function — draws arena, objects, and (optionally) zones.
+    % C2: selectedIdx parameter removed; yellow overlay belongs only in
+    % refreshPreviewAxes (the live preview), not in saved-plot exports.
     imshow(S.frame, 'Parent', ax);
     hold(ax, 'on');
     if drawZones && ~isempty(S.zones)
@@ -1780,13 +1805,6 @@ function drawState(ax, S, drawZones, selectedIdx)
     for k = 1:numel(S.objects)
         plot(ax, S.objects(k).border_x(:), S.objects(k).border_y(:), '-', ...
             'Color', [0 0.7 0], 'LineWidth', 1.5);
-    end
-    % Yellow outline overlay for selected objects
-    for k = selectedIdx(:)'
-        if k >= 1 && k <= numel(S.objects)
-            plot(ax, S.objects(k).border_x(:), S.objects(k).border_y(:), '-', ...
-                'Color', [1 0.85 0], 'LineWidth', 2);
-        end
     end
     hold(ax, 'off');
 end

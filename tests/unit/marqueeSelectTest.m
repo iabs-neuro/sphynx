@@ -28,3 +28,11 @@ function testMultipleInside(testCase)
     idx = sphynx.preset.marqueeSelect(cents, rect);
     verifyEqual(testCase, idx, [1; 2; 3]);
 end
+
+function testNoMatchReturnsEmpty(testCase)
+    % I5: All centroids strictly outside the rect -> empty result (col vector).
+    cents = [100 100; 200 200; 300 300];
+    rect = [0 0 10 10];
+    idx = sphynx.preset.marqueeSelect(cents, rect);
+    verifyEqual(testCase, idx, zeros(0, 1));
+end
