@@ -48,6 +48,7 @@ classdef PreprocessTabController < handle
         RegionsListBox
         RegionsAppliesDropDown
         RegionsScopeDropDown    % per-region scope (experiment | session)
+        RegionsShapeDropdown    % polygon | circle
 
         % Embedded video viewer
         VideoPanel
@@ -1177,9 +1178,9 @@ classdef PreprocessTabController < handle
         function buildRegionsPanelInline(obj, parent)
             obj.RegionsPanel = uipanel(parent, 'Title', 'Manual exclusion regions');
             obj.RegionsPanel.Layout.Row = 3;
-            rg = uigridlayout(obj.RegionsPanel, [2, 6]);
+            rg = uigridlayout(obj.RegionsPanel, [2, 7]);
             rg.RowHeight = {28, '1x'};
-            rg.ColumnWidth = {110, 130, 100, 70, 70, '1x'};
+            rg.ColumnWidth = {110, 130, 100, 80, 70, 70, '1x'};
             rg.Padding = [4 4 4 4];
             rg.RowSpacing = 4;
             rg.ColumnSpacing = 4;
@@ -1191,6 +1192,9 @@ classdef PreprocessTabController < handle
                 'Items', {'all'}, 'Value', 'all');
             obj.RegionsScopeDropDown = uidropdown(rg, ...
                 'Items', {'experiment', 'session'}, 'Value', 'experiment');
+            obj.RegionsShapeDropdown = uidropdown(rg, ...
+                'Items', {'polygon', 'circle'}, 'Value', 'polygon', ...
+                'Tooltip', 'Shape to draw for new exclusion region');
             uibutton(rg, 'Text', 'Delete', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.deleteSelectedRegion());
@@ -1201,7 +1205,7 @@ classdef PreprocessTabController < handle
 
             obj.RegionsListBox = uilistbox(rg, 'Items', {});
             obj.RegionsListBox.Layout.Row = 2;
-            obj.RegionsListBox.Layout.Column = [1 6];
+            obj.RegionsListBox.Layout.Column = [1 7];
         end
 
         function buildLogInline(obj, parent)
@@ -1308,9 +1312,9 @@ classdef PreprocessTabController < handle
             % Manual regions panel
             obj.RegionsPanel = uipanel(obj.RightGrid, 'Title', 'Manual exclusion regions');
             obj.RegionsPanel.Layout.Row = 6;
-            rg = uigridlayout(obj.RegionsPanel, [2, 6]);
+            rg = uigridlayout(obj.RegionsPanel, [2, 7]);
             rg.RowHeight = {28, '1x'};
-            rg.ColumnWidth = {110, 130, 100, 70, 70, '1x'};
+            rg.ColumnWidth = {110, 130, 100, 80, 70, 70, '1x'};
             rg.Padding = [4 4 4 4];
             rg.RowSpacing = 4;
             rg.ColumnSpacing = 4;
@@ -1332,19 +1336,25 @@ classdef PreprocessTabController < handle
             obj.RegionsScopeDropDown.Layout.Row = 1;
             obj.RegionsScopeDropDown.Layout.Column = 3;
 
+            obj.RegionsShapeDropdown = uidropdown(rg, ...
+                'Items', {'polygon', 'circle'}, 'Value', 'polygon', ...
+                'Tooltip', 'Shape to draw for new exclusion region');
+            obj.RegionsShapeDropdown.Layout.Row = 1;
+            obj.RegionsShapeDropdown.Layout.Column = 4;
+
             bDel = uibutton(rg, 'Text', 'Delete', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.deleteSelectedRegion());
-            bDel.Layout.Row = 1; bDel.Layout.Column = 4;
+            bDel.Layout.Row = 1; bDel.Layout.Column = 5;
 
             bClear = uibutton(rg, 'Text', 'Clear', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.clearAllRegions());
-            bClear.Layout.Row = 1; bClear.Layout.Column = 5;
+            bClear.Layout.Row = 1; bClear.Layout.Column = 6;
 
             obj.RegionsListBox = uilistbox(rg, 'Items', {});
             obj.RegionsListBox.Layout.Row = 2;
-            obj.RegionsListBox.Layout.Column = [1 6];
+            obj.RegionsListBox.Layout.Column = [1 7];
 
             % Log
             obj.LogTextArea = uitextarea(obj.RightGrid, 'Editable', 'off', ...
@@ -1592,26 +1602,47 @@ classdef PreprocessTabController < handle
             if ~isempty(obj.RegionsScopeDropDown)
                 scope = obj.RegionsScopeDropDown.Value;
             end
-            % Open a temporary figure to draw the polygon.
-            fig = figure('Name', sprintf('Draw exclusion region (applies to: %s, scope: %s)', applies, scope), ...
+            shape = 'polygon';
+            if ~isempty(obj.RegionsShapeDropdown) && isvalid(obj.RegionsShapeDropdown)
+                shape = obj.RegionsShapeDropdown.Value;
+            end
+            % Open a temporary figure to draw the region.
+            fig = figure('Name', sprintf('Draw exclusion region (%s, applies to: %s, scope: %s)', shape, applies, scope), ...
                 'NumberTitle', 'off');
             cleaner = onCleanup(@() safeClose(fig));
             ax = axes(fig); %#ok<LAXES>
             imshow(obj.State.frame, 'Parent', ax);
-            title(ax, sprintf('Click to add vertices, double-click to finish'), ...
-                'Interpreter', 'none');
+            switch shape
+                case 'circle'
+                    title(ax, 'Click center then drag to set radius, double-click to confirm', ...
+                        'Interpreter', 'none');
+                otherwise
+                    title(ax, 'Click to add vertices, double-click to finish', ...
+                        'Interpreter', 'none');
+            end
             % Render existing experiment-scope regions semi-transparent so
             % the user notices alignment problems.
             obj.drawExistingRegionsOn(ax);
             try
-                h = drawpolygon(ax);
+                switch shape
+                    case 'circle'
+                        h = drawcircle(ax);
+                    otherwise
+                        h = drawpolygon(ax);
+                end
             catch ME
-                obj.applog('error', 'drawpolygon failed: %s', ME.message);
+                obj.applog('error', 'draw%s failed: %s', shape, ME.message);
                 return;
             end
             wait(h);  % blocks until the user double-clicks
             if ~isvalid(h); return; end
-            verts = h.Position;
+            if strcmp(shape, 'circle')
+                cx = h.Center(1); cy = h.Center(2); r = h.Radius;
+                ang = linspace(0, 2*pi, 60)';
+                verts = [cx + r*cos(ang), cy + r*sin(ang)];
+            else
+                verts = h.Position;
+            end
             if isempty(verts) || size(verts, 1) < 3
                 obj.applog('warn', 'Region needs >= 3 vertices');
                 return;
