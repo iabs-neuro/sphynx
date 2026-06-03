@@ -70,6 +70,7 @@ classdef CreatePresetApp < handle
         ObjectGeometryButtons     % cell array of state buttons (Polygon/Circle/Ellipse)
         ObjectsListBox
         ObjectPickModeDropDown
+        ObjectClassField          % text edit for class label (S8)
         % Zones
         ZonesStrategyDropDown
         WallWidthField
@@ -306,6 +307,21 @@ classdef CreatePresetApp < handle
             app.applog('info', 'Renamed %s -> %s', oldName, app.State.objects(idx).type);
         end
 
+        function assignClassToSelected(app)
+            % ASSIGNCLASSTOSELECTED  Write ObjectClassField value into the
+            % class field of every currently-selected object (S8).
+            idx = app.getSelectedObjectIdx();
+            if isempty(idx)
+                app.status('No objects selected');
+                return;
+            end
+            val = app.ObjectClassField.Value;
+            for k = idx(:)'
+                app.State.objects(k).class = val;
+            end
+            app.status(sprintf('Assigned class "%s" to %d objects', val, numel(idx)));
+        end
+
         function addZones(app)
             % Auto-refit masks first so committed zones reflect the
             % current (possibly transformed) geometry.
@@ -393,7 +409,7 @@ classdef CreatePresetApp < handle
             % DELETEALLOBJECTS  Wipe every object. Zones lose their object
             % zones via the same auto-clear contract.
             app.State.objects = struct('type', {}, 'geometry', {}, ...
-                'border_x', {}, 'border_y', {}, 'mask', {});
+                'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
             app.refreshObjectsList();
             app.clearZones();
             app.refreshPreview();
@@ -415,7 +431,7 @@ classdef CreatePresetApp < handle
             % stay so the user can re-pick geometry on the same video).
             app.State.arena = [];
             app.State.objects = struct('type', {}, 'geometry', {}, ...
-                'border_x', {}, 'border_y', {}, 'mask', {});
+                'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
             app.State.zones = struct('name', {}, 'type', {}, 'maskfilled', {});
             app.State.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
             app.State.zoneStrategies = {};
@@ -801,7 +817,7 @@ classdef CreatePresetApp < handle
             ArenaAndObjects = struct( ...
                 'type', {}, 'geometry', {}, 'maskborder', {}, 'maskfilled', {}, ...
                 'border_x', {}, 'border_y', {}, ...
-                'border_separate_x', {}, 'border_separate_y', {});
+                'border_separate_x', {}, 'border_separate_y', {}, 'class', {});
             ArenaAndObjects(1).type = 'Arena';
             ArenaAndObjects(1).geometry = app.State.arena.geometry;
             ArenaAndObjects(1).maskfilled = single(app.State.arena.mask);
@@ -809,6 +825,7 @@ classdef CreatePresetApp < handle
             ArenaAndObjects(1).border_y = app.State.arena.border_y;
             ArenaAndObjects(1).border_separate_x = app.State.arena.border_separate_x;
             ArenaAndObjects(1).border_separate_y = app.State.arena.border_separate_y;
+            ArenaAndObjects(1).class = '';
             for k = 1:numel(app.State.objects)
                 idx = k + 1;
                 ArenaAndObjects(idx).type = app.State.objects(k).type;
@@ -816,6 +833,7 @@ classdef CreatePresetApp < handle
                 ArenaAndObjects(idx).maskfilled = single(app.State.objects(k).mask);
                 ArenaAndObjects(idx).border_x = app.State.objects(k).border_x;
                 ArenaAndObjects(idx).border_y = app.State.objects(k).border_y;
+                ArenaAndObjects(idx).class = getFieldOr(app.State.objects(k), 'class', '');
             end
         end
     end
@@ -841,7 +859,7 @@ classdef CreatePresetApp < handle
             s.objectGeometry = 'Polygon';
             s.arena = [];
             s.objects = struct('type', {}, 'geometry', {}, 'border_x', {}, 'border_y', {}, ...
-                                'border_separate_x', {}, 'border_separate_y', {}, 'mask', {});
+                                'border_separate_x', {}, 'border_separate_y', {}, 'mask', {}, 'class', {});
             s.zones = struct('name', {}, 'type', {}, 'maskfilled', {});
             s.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
             s.zoneStrategies = {};   % short tags appended on each Add to set
@@ -1104,8 +1122,8 @@ end
 function buildObjectsPanel(app)
     nGeom = 3;       % Polygon / Circle / Ellipse
     nCols = nGeom + 4;
-    g = uigridlayout(app.ObjectsPanel, [3, nCols]);
-    g.RowHeight = {28, '1x', 28};
+    g = uigridlayout(app.ObjectsPanel, [4, nCols]);
+    g.RowHeight = {28, '1x', 28, 28};
     g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {70}, {'fit'}, {60}];
     g.ColumnSpacing = 4;
 
@@ -1157,6 +1175,17 @@ function buildObjectsPanel(app)
         'Tooltip', 'Remove all objects (and dependent object zones)', ...
         'ButtonPushedFcn', @(~,~) app.deleteAllObjects());
     bDelAll.Layout.Row = 3; bDelAll.Layout.Column = nGeom + 4;   % flush right
+
+    % Row 4: class label + edit field + assign button (S8)
+    lblClass = uilabel(g, 'Text', 'Class:');
+    lblClass.Layout.Row = 4; lblClass.Layout.Column = 1;
+    app.ObjectClassField = uieditfield(g, 'Value', '');
+    app.ObjectClassField.Layout.Row = 4;
+    app.ObjectClassField.Layout.Column = [2, nGeom + 3];
+    bAssign = uibutton(g, 'Text', 'Assign to selected', ...
+        'BackgroundColor', semanticColor('action'), ...
+        'ButtonPushedFcn', @(~,~) app.assignClassToSelected());
+    bAssign.Layout.Row = 4; bAssign.Layout.Column = nGeom + 4;
 end
 
 function onArenaGeometryToggle(app, src)
@@ -1519,13 +1548,14 @@ function pickPresetStart(app)
         end
         % Objects — assemble each one by field-by-field assignment too
         objs = struct('type', {}, 'geometry', {}, 'border_x', {}, ...
-                      'border_y', {}, 'mask', {});
+                      'border_y', {}, 'mask', {}, 'class', {});
         for k = 2:numel(AAO)
             o.type     = AAO(k).type;
             o.geometry = AAO(k).geometry;
             o.border_x = AAO(k).border_x;
             o.border_y = AAO(k).border_y;
             o.mask     = logical(AAO(k).maskfilled);
+            o.class    = getFieldOr(AAO(k), 'class', '');  % backward-compat (S8)
             if isempty(objs)
                 objs = o;
             else

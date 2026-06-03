@@ -130,6 +130,7 @@ function arena = readArenaGeometry(frame, geometry, varargin)
 
     arena.type = 'Arena';
     arena.geometry = geometry;
+    arena.class = '';
     arena.border_separate_x = {};
     arena.border_separate_y = {};
 
