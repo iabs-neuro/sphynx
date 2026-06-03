@@ -195,8 +195,8 @@ classdef CreatePresetApp < handle
 
         function removeSelectedObject(app)
             if isempty(app.State.objects); return; end
-            idx = find(strcmp(app.ObjectsListBox.Items, app.ObjectsListBox.Value), 1);
-            if isempty(idx); return; end
+            idx = app.getSelectedObjectIdx(); if isempty(idx); return; end
+            idx = idx(1);
             removed = app.State.objects(idx).type;
             app.State.objects(idx) = [];
             for k = 1:numel(app.State.objects)
@@ -211,8 +211,8 @@ classdef CreatePresetApp < handle
 
         function replaceSelectedObject(app)
             if isempty(app.State.objects); app.status('No object selected'); return; end
-            idx = find(strcmp(app.ObjectsListBox.Items, app.ObjectsListBox.Value), 1);
-            if isempty(idx); app.status('No object selected'); return; end
+            idx = app.getSelectedObjectIdx(); if isempty(idx); app.status('No object selected'); return; end
+            idx = idx(1);
             geometry = app.State.objectGeometry;
             try
                 obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry);
@@ -282,8 +282,8 @@ classdef CreatePresetApp < handle
 
         function renameSelectedObject(app)
             if isempty(app.State.objects); app.status('No object selected'); return; end
-            idx = find(strcmp(app.ObjectsListBox.Items, app.ObjectsListBox.Value), 1);
-            if isempty(idx); app.status('No object selected'); return; end
+            idx = app.getSelectedObjectIdx(); if isempty(idx); app.status('No object selected'); return; end
+            idx = idx(1);
             oldName = app.State.objects(idx).type;
             answer = inputdlg(sprintf('New name for %s:', oldName), 'Rename object', 1, {oldName});
             if isempty(answer) || isempty(strtrim(answer{1})); return; end
@@ -542,6 +542,48 @@ classdef CreatePresetApp < handle
                 app.status(sprintf('NextFrame failed: %s', ME.message));
             end
         end
+
+        function idx = getSelectedObjectIdx(app)
+            % Return selected object indices clamped to currently-valid range.
+            n = numel(app.State.objects);
+            idx = app.State.selectedObjectIdx;
+            idx = idx(idx >= 1 & idx <= n);
+        end
+
+        function setSelectedObjectIdx(app, idx)
+            % Accept numeric vector; clamp, dedup, sort; sync listbox + preview.
+            n = numel(app.State.objects);
+            idx = idx(idx >= 1 & idx <= n);
+            idx = unique(idx(:));   % sort + dedup, column vector
+            app.State.selectedObjectIdx = idx;
+            if isempty(app.ObjectsListBox) || ~isvalid(app.ObjectsListBox)
+                return;
+            end
+            if isempty(idx) || isempty(app.ObjectsListBox.Items)
+                app.ObjectsListBox.Value = {};
+            else
+                app.ObjectsListBox.Value = app.ObjectsListBox.Items(idx);
+            end
+            app.refreshPreview();
+        end
+
+        function onObjectsListBoxChanged(app, ~)
+            % Convert listbox Value (cell of strings) to numeric indices.
+            if isempty(app.ObjectsListBox) || ~isvalid(app.ObjectsListBox)
+                return;
+            end
+            val = app.ObjectsListBox.Value;
+            if ischar(val); val = {val}; end  % single-select compat guard
+            items = app.ObjectsListBox.Items;
+            idx = zeros(1, numel(val));
+            for i = 1:numel(val)
+                pos = find(strcmp(items, val{i}), 1);
+                if ~isempty(pos); idx(i) = pos; end
+            end
+            idx = idx(idx > 0);
+            app.State.selectedObjectIdx = unique(idx(:));
+            app.refreshPreview();
+        end
     end
 
     % ========== UI builders =================================================
@@ -645,13 +687,10 @@ classdef CreatePresetApp < handle
                     'k-', 'LineWidth', 2);
             end
             % Objects with selection highlight
-            selIdx = -1;
-            if ~isempty(app.ObjectsListBox) && ~isempty(app.ObjectsListBox.Value)
-                selIdx = find(strcmp(app.ObjectsListBox.Items, app.ObjectsListBox.Value), 1);
-            end
+            selIdxVec = app.getSelectedObjectIdx();
             for k = 1:numel(app.State.objects)
-                if k == selIdx
-                    lw = 3.5; col = [1 0.5 0];
+                if ismember(k, selIdxVec)
+                    lw = 3.5; col = [1 0.85 0];   % amber/yellow for selected
                 else
                     lw = 1.5; col = [0 0.7 0];
                 end
@@ -670,6 +709,15 @@ classdef CreatePresetApp < handle
             items = arrayfun(@(o) sprintf('%s (%s)', o.type, o.geometry), ...
                 app.State.objects, 'UniformOutput', false);
             app.ObjectsListBox.Items = items;
+            % Restore selection from state (clamp to valid range)
+            validIdx = app.State.selectedObjectIdx(...
+                app.State.selectedObjectIdx >= 1 & ...
+                app.State.selectedObjectIdx <= numel(app.State.objects));
+            if isempty(validIdx)
+                app.ObjectsListBox.Value = {};
+            else
+                app.ObjectsListBox.Value = items(validIdx);
+            end
         end
 
         function refreshZonesCount(app)  %#ok<MANU>
@@ -769,6 +817,7 @@ classdef CreatePresetApp < handle
             s.zones = struct('name', {}, 'type', {}, 'maskfilled', {});
             s.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
             s.zoneStrategies = {};   % short tags appended on each Add to set
+            s.selectedObjectIdx = [];   % vector of object indices (S1 foundation)
         end
     end
 end
@@ -1058,7 +1107,8 @@ function buildObjectsPanel(app)
     bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 4;
 
     app.ObjectsListBox = uilistbox(g, 'Items', {}, ...
-        'ValueChangedFcn', @(~,~) app.refreshPreview());
+        'Multiselect', 'on', ...
+        'ValueChangedFcn', @(~,evt) app.onObjectsListBoxChanged(evt));
     app.ObjectsListBox.Layout.Row = 2; app.ObjectsListBox.Layout.Column = [1 nCols];
 
     bRemove = uibutton(g, 'Text', 'Remove', ...
@@ -1709,9 +1759,13 @@ function pivot = computeSharedPivot(app)
     end
 end
 
-function drawState(ax, S, drawZones)
+function drawState(ax, S, drawZones, selectedIdx)
     % Used by Make plot; ax is a regular figure axes (not uiaxes), so
     % patch + FaceAlpha works correctly here.
+    %
+    %   selectedIdx  optional numeric vector of selected object indices;
+    %                those objects get an amber/yellow outline overlay.
+    if nargin < 4; selectedIdx = []; end
     imshow(S.frame, 'Parent', ax);
     hold(ax, 'on');
     if drawZones && ~isempty(S.zones)
@@ -1726,6 +1780,13 @@ function drawState(ax, S, drawZones)
     for k = 1:numel(S.objects)
         plot(ax, S.objects(k).border_x(:), S.objects(k).border_y(:), '-', ...
             'Color', [0 0.7 0], 'LineWidth', 1.5);
+    end
+    % Yellow outline overlay for selected objects
+    for k = selectedIdx(:)'
+        if k >= 1 && k <= numel(S.objects)
+            plot(ax, S.objects(k).border_x(:), S.objects(k).border_y(:), '-', ...
+                'Color', [1 0.85 0], 'LineWidth', 2);
+        end
     end
     hold(ax, 'off');
 end
