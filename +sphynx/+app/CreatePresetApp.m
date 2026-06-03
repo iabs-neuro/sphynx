@@ -88,6 +88,8 @@ classdef CreatePresetApp < handle
         PreviewPanel
         PreviewAxes
         FrameIndexLabel
+        FramePickerNField
+        FramePickerDropdown
         % Move/rotate
         MoveTargetDropDown
         MoveStepField
@@ -129,6 +131,9 @@ classdef CreatePresetApp < handle
                 if ~isempty(app.VideoPathField); app.VideoPathField.Value = path; end
                 if ~isempty(app.FrameIndexLabel)
                     app.FrameIndexLabel.Text = sprintf('Frame %d / %d', 1, app.State.numFrames);
+                end
+                if ~isempty(app.FramePickerNField) && isvalid(app.FramePickerNField)
+                    app.rebuildFramePickerDropdown();
                 end
                 app.refreshPreview();
                 app.refreshPreviewTitle();
@@ -640,17 +645,52 @@ classdef CreatePresetApp < handle
 
         function nextFrame(app)
             if isempty(app.State.videoPath); app.status('Load video first'); return; end
+            if isempty(app.FramePickerDropdown) || ~isvalid(app.FramePickerDropdown)
+                return;
+            end
+            items = app.FramePickerDropdown.Items;
+            if isempty(items); return; end
+            curIdx = find(strcmp(items, app.FramePickerDropdown.Value), 1);
+            if isempty(curIdx); curIdx = 0; end
+            nextIdx = mod(curIdx, numel(items)) + 1;
+            app.FramePickerDropdown.Value = items{nextIdx};
+            app.pickFrame();
+        end
+
+        function pickFrame(app)
+            if isempty(app.State.videoPath); return; end
+            sel = app.FramePickerDropdown.Value;
+            parts = strsplit(sel, '/');
+            k = str2double(parts{1});
+            N = str2double(parts{2});
+            app.State.frameIndex = max(1, round(app.State.numFrames * k / N));
             try
-                step = max(round(app.State.numFrames / 20), 1);
-                app.State.frameIndex = mod(app.State.frameIndex + step - 1, max(app.State.numFrames,1)) + 1;
-                app.State.frame = sphynx.preset.readFrameAt(app.State.videoPath, ...
-                    app.State.frameIndex, app.State.frameRate);
+                app.State.frame = sphynx.preset.readFrameAt( ...
+                    app.State.videoPath, app.State.frameIndex, app.State.frameRate);
                 app.refreshPreview();
                 if ~isempty(app.FrameIndexLabel)
-                    app.FrameIndexLabel.Text = sprintf('Frame %d / %d', app.State.frameIndex, app.State.numFrames);
+                    app.FrameIndexLabel.Text = sprintf('Frame %d / %d', ...
+                        app.State.frameIndex, app.State.numFrames);
                 end
             catch ME
-                app.status(sprintf('NextFrame failed: %s', ME.message));
+                app.status(sprintf('Frame pick failed: %s', ME.message));
+            end
+        end
+
+        function rebuildFramePickerDropdown(app)
+            if isempty(app.State.numFrames) || isnan(app.State.numFrames); return; end
+            if isempty(app.FramePickerNField) || ~isvalid(app.FramePickerNField); return; end
+            N = app.FramePickerNField.Value;
+            items = arrayfun(@(k) sprintf('%d/%d', k, N), 1:N, 'UniformOutput', false);
+            old = '';
+            if ~isempty(app.FramePickerDropdown) && isvalid(app.FramePickerDropdown)
+                old = app.FramePickerDropdown.Value;
+            end
+            app.FramePickerDropdown.Items = items;
+            if ismember(old, items)
+                app.FramePickerDropdown.Value = old;
+            else
+                app.FramePickerDropdown.Value = items{1};
             end
         end
 
@@ -1009,11 +1049,11 @@ function buildCreateTab(app)
     app.PreviewAxes = uiaxes(pg);
     app.PreviewAxes.XTick = []; app.PreviewAxes.YTick = [];
 
-    % Row 2: nav (Next frame + frame label + target dropdown + step)
+    % Row 2: nav (Next frame + frame label + N field + dropdown + target dropdown + step)
     navPanel = uipanel(app.RightGrid);
-    cg = uigridlayout(navPanel, [1, 6]);
+    cg = uigridlayout(navPanel, [1, 9]);
     cg.RowHeight = {'1x'};   % stretch to fit panel height — vertically centered
-    cg.ColumnWidth = {'fit', 110, 'fit', 'fit', 'fit', 60};
+    cg.ColumnWidth = {'fit', 110, 'fit', 50, 120, 'fit', 'fit', 'fit', 60};
     cg.ColumnSpacing = 4;
     cg.Padding = [4 4 4 4];
     bNext = uibutton(cg, 'Text', 'Next frame', ...
@@ -1022,14 +1062,23 @@ function buildCreateTab(app)
     bNext.Layout.Row = 1; bNext.Layout.Column = 1;
     app.FrameIndexLabel = uilabel(cg, 'Text', 'Frame -- / --');
     app.FrameIndexLabel.Layout.Row = 1; app.FrameIndexLabel.Layout.Column = 2;
+    lblN = uilabel(cg, 'Text', 'N:');
+    lblN.Layout.Row = 1; lblN.Layout.Column = 3;
+    app.FramePickerNField = uieditfield(cg, 'numeric', 'Value', 20, ...
+        'Limits', [2 200], 'RoundFractionalValues', 'on', ...
+        'ValueChangedFcn', @(~,~) app.rebuildFramePickerDropdown());
+    app.FramePickerNField.Layout.Row = 1; app.FramePickerNField.Layout.Column = 4;
+    app.FramePickerDropdown = uidropdown(cg, 'Items', {'1/20'}, 'Value', '1/20', ...
+        'ValueChangedFcn', @(~,~) app.pickFrame());
+    app.FramePickerDropdown.Layout.Row = 1; app.FramePickerDropdown.Layout.Column = 5;
     lblTarget = uilabel(cg, 'Text', 'Target:');
-    lblTarget.Layout.Row = 1; lblTarget.Layout.Column = 3;
+    lblTarget.Layout.Row = 1; lblTarget.Layout.Column = 6;
     app.MoveTargetDropDown = uidropdown(cg, 'Items', {'Arena'}, 'Value', 'Arena');
-    app.MoveTargetDropDown.Layout.Row = 1; app.MoveTargetDropDown.Layout.Column = 4;
+    app.MoveTargetDropDown.Layout.Row = 1; app.MoveTargetDropDown.Layout.Column = 7;
     lblStep = uilabel(cg, 'Text', 'Step:');
-    lblStep.Layout.Row = 1; lblStep.Layout.Column = 5;
+    lblStep.Layout.Row = 1; lblStep.Layout.Column = 8;
     app.MoveStepField = uieditfield(cg, 'numeric', 'Value', 5, 'Limits', [0.1, 200]);
-    app.MoveStepField.Layout.Row = 1; app.MoveStepField.Layout.Column = 6;
+    app.MoveStepField.Layout.Row = 1; app.MoveStepField.Layout.Column = 9;
 
     % Row 3: arrow + rotate buttons
     movePanel = uipanel(app.RightGrid);
