@@ -55,7 +55,10 @@ function out = readDLC(csvPath, varargin)
     end
 
     % Now read the data table (skip the 3 header rows)
-    data = readmatrix(csvPath, 'NumHeaderLines', 3);
+    % Force '.' as decimal separator. DLC CSVs always use '.', but
+    % readmatrix on RU-locale Windows can misparse '.' as a thousands
+    % separator, yielding NaN columns that crash downstream filters.
+    data = readmatrix(csvPath, 'NumHeaderLines', 3, 'DecimalSeparator', '.');
     % Column 1 is frame index; subsequent triplets are x, y, likelihood per part.
     nFrames = size(data, 1);
 
