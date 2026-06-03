@@ -503,6 +503,20 @@ classdef CreatePresetApp < handle
 
         function moveTarget(app, dirVec)
             step = app.MoveStepField.Value;
+            target = app.MoveTargetDropDown.Value;
+            if strcmp(target, '<selection>')
+                idx = app.getSelectedObjectIdx();
+                if isempty(idx); return; end
+                delta = dirVec * step;
+                for k = idx(:)'
+                    app.State.objects(k).border_x = app.State.objects(k).border_x + delta(1);
+                    app.State.objects(k).border_y = app.State.objects(k).border_y + delta(2);
+                end
+                app.invalidateZonesOnTransform();
+                app.refreshPreview();
+                return;
+            end
+            % existing single-target path
             tIdx = currentTargetIdx(app);
             if isnan(tIdx); return; end
             applyTransformToTarget(app, tIdx, dirVec * step, 0);
@@ -512,6 +526,29 @@ classdef CreatePresetApp < handle
 
         function rotateTarget(app, sign)
             stepDeg = app.MoveStepField.Value;
+            target = app.MoveTargetDropDown.Value;
+            if strcmp(target, '<selection>')
+                idx = app.getSelectedObjectIdx();
+                if isempty(idx); return; end
+                % Pool centroid = mean of all selected objects' border points
+                allX = []; allY = [];
+                for k = idx(:)'
+                    allX = [allX; app.State.objects(k).border_x(:)]; %#ok<AGROW>
+                    allY = [allY; app.State.objects(k).border_y(:)]; %#ok<AGROW>
+                end
+                centroid = [mean(allX), mean(allY)];
+                angleRad = deg2rad(sign * stepDeg);
+                for k = idx(:)'
+                    [xR, yR] = sphynx.preset.rotateAroundCentroid( ...
+                        app.State.objects(k).border_x, app.State.objects(k).border_y, ...
+                        centroid, angleRad);
+                    app.State.objects(k).border_x = xR;
+                    app.State.objects(k).border_y = yR;
+                end
+                app.invalidateZonesOnTransform();
+                app.refreshPreview();
+                return;
+            end
             tIdx = currentTargetIdx(app);
             if isnan(tIdx); return; end
             applyTransformToTarget(app, tIdx, [0 0], sign * stepDeg);
@@ -542,6 +579,9 @@ classdef CreatePresetApp < handle
 
         function refreshMoveTargets(app)
             items = {'All', 'Arena'};
+            if numel(app.State.selectedObjectIdx) >= 2
+                items{end+1} = '<selection>';
+            end
             for k = 1:numel(app.State.objects)
                 items{end+1} = app.State.objects(k).type; %#ok<AGROW>
             end
@@ -599,6 +639,7 @@ classdef CreatePresetApp < handle
             else
                 app.ObjectsListBox.Value = app.ObjectsListBox.Items(idx);
             end
+            app.refreshMoveTargets();
             app.refreshPreview();
         end
 
