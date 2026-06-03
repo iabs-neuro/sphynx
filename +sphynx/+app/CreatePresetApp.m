@@ -79,6 +79,7 @@ classdef CreatePresetApp < handle
         CornerTypeDropDown
         NumStripsField
         StripDirDropDown
+        CenterDiameterCmField
         ObjectZoneWidthField
         ZonesCountLabel
         % Save / plot
@@ -885,10 +886,11 @@ classdef CreatePresetApp < handle
                 Options.GoodVideoFrameGray = app.State.frame(:, :, 1);
             end
             Options.ObjectsNumber = numel(app.State.objects);
-            Options.WallWidthCm     = app.WallWidthField.Value;
-            Options.MiddleWidthCm   = app.MiddleWidthField.Value;
-            Options.NumStrips       = app.NumStripsField.Value;
-            Options.StripDirection  = app.StripDirDropDown.Value;
+            Options.WallWidthCm       = app.WallWidthField.Value;
+            Options.MiddleWidthCm     = app.MiddleWidthField.Value;
+            Options.NumStrips         = app.NumStripsField.Value;
+            Options.StripDirection    = app.StripDirDropDown.Value;
+            Options.CenterDiameterCm  = app.CenterDiameterCmField.Value;
             Options.ObjectZoneWidthCm = app.ObjectZoneWidthField.Value;
             % Save the cm distances the user typed during calibration so
             % that loading this preset later can restore the same values
@@ -1324,7 +1326,7 @@ function buildZonesPanel(app)
     lblStrat = uilabel(g, 'Text', 'Strategy:');
     lblStrat.Layout.Row = 1; lblStrat.Layout.Column = 1;
     app.ZonesStrategyDropDown = uidropdown(g, ...
-        'Items', {'corners-walls-center', 'strips', 'circle-rings', 'none'}, ...
+        'Items', {'corners-walls-center', 'strips', 'circle-rings', 'circle-with-center', 'none'}, ...
         'ValueChangedFcn', @(~,~) onZoneStrategyChanged(app));
     app.ZonesStrategyDropDown.Layout.Row = 1; app.ZonesStrategyDropDown.Layout.Column = [2 4];
     bInfo = uibutton(g, 'Text', 'INFO', ...
@@ -1349,6 +1351,11 @@ function buildZonesPanel(app)
     lblDir.Layout.Row = 3; lblDir.Layout.Column = 3;
     app.StripDirDropDown = uidropdown(g, 'Items', {'horizontal','vertical'});
     app.StripDirDropDown.Layout.Row = 3; app.StripDirDropDown.Layout.Column = 4;
+    lblCtrDiam = uilabel(g, 'Text', 'Center diameter, cm:');
+    lblCtrDiam.Layout.Row = 3; lblCtrDiam.Layout.Column = 5;
+    app.CenterDiameterCmField = uieditfield(g, 'numeric', 'Value', 20, ...
+        'Limits', [0.1, Inf]);
+    app.CenterDiameterCmField.Layout.Row = 3; app.CenterDiameterCmField.Layout.Column = 6;
 
     lblObjZone = uilabel(g, 'Text', 'Obj zone:');
     lblObjZone.Layout.Row = 4; lblObjZone.Layout.Column = 1;
@@ -1419,11 +1426,12 @@ end
 
 function onZoneStrategyChanged(app)
     s = app.ZonesStrategyDropDown.Value;
-    app.WallWidthField.Enable    = enableIfAny(s, {'corners-walls-center', 'circle-rings'});
-    app.MiddleWidthField.Enable  = enableIfAny(s, {'circle-rings'});
-    app.NumStripsField.Enable    = enableIfAny(s, {'strips'});
-    app.StripDirDropDown.Enable  = enableIfAny(s, {'strips'});
-    app.ObjectZoneWidthField.Enable = toOnOff(~isempty(app.State.objects));
+    app.WallWidthField.Enable         = enableIfAny(s, {'corners-walls-center', 'circle-rings'});
+    app.MiddleWidthField.Enable       = enableIfAny(s, {'circle-rings'});
+    app.NumStripsField.Enable         = enableIfAny(s, {'strips'});
+    app.StripDirDropDown.Enable       = enableIfAny(s, {'strips'});
+    app.CenterDiameterCmField.Enable  = enableIfAny(s, {'circle-with-center'});
+    app.ObjectZoneWidthField.Enable   = toOnOff(~isempty(app.State.objects));
 end
 
 function v = enableIfAny(s, list)
@@ -1706,6 +1714,11 @@ function pickPresetStart(app)
         if isfield(preset.Options, 'MiddleWidthCm')
             app.MiddleWidthField.Value = preset.Options.MiddleWidthCm;
         end
+        if isfield(preset.Options, 'CenterDiameterCm')
+            app.CenterDiameterCmField.Value = preset.Options.CenterDiameterCm;
+        else
+            app.CenterDiameterCmField.Value = 20;
+        end
     end
 
     app.refreshMoveTargets();
@@ -1774,6 +1787,10 @@ function Z = computeZonesFromUI(app)
                     'PixelsPerCm', app.State.pxlPerCm, ...
                     'WallWidthCm', wallCm, ...
                     'MiddleWidthCm', app.MiddleWidthField.Value);
+            case 'circle-with-center'
+                Z = sphynx.preset.buildZonesCircleCenter(app.State.arena.mask, ...
+                    'PixelsPerCm', app.State.pxlPerCm, ...
+                    'CenterDiameterCm', app.CenterDiameterCmField.Value);
             case 'none'
                 Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, 'Strategy', 'none');
         end
@@ -2133,6 +2150,8 @@ function txt = helpZonesText()
         '  strips : split arena into N equal-width strips.';
         '  circle-rings : concentric rings (wall + middle1.. + center)';
         '       for round arenas. Wall and Middle widths in cm.';
+        '  circle-with-center : two-zone split for round arenas:';
+        '       center disc + wall annulus. Center diameter in cm.';
         '  none : no spatial subdivision.';
         '';
         '"Preview zones" shows the proposed partition on the preview';
