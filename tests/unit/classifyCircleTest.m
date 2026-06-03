@@ -4,9 +4,11 @@ end
 
 function testSmallArenaWallAndCenter(testCase)
     % R=30 cm, wall=10 cm, mid=20 cm (default minC=10 cm).
-    % wall+mid = radius exactly (30 cm). With epsilon-relaxed boundary,
-    % middle1 now fits (new behavior). center is absent because no pixels
-    % remain past wall+middle1 at maxDist. This is the expected new behavior.
+    % In pixels: wallW=20, midW=40, cumW after middle1=60.
+    % bwdist of a discrete circle of r=60 px yields maxDist ~= 60.0083 px
+    % (rasterization rounds inward at the center pixel), so a tiny sliver
+    % of pixels with distFromOutside > 60 remains. Center IS present and
+    % this is deterministic for a given bwdist on this exact mask.
     H = 200; W = 200; pxlPerCm = 2;
     arenaMask = makeCircleMask(H, W, 100, 100, 30 * pxlPerCm);
     zones = sphynx.zones.classifyCircle(arenaMask, ...
@@ -16,8 +18,8 @@ function testSmallArenaWallAndCenter(testCase)
     names = {zones.name};
     verifyTrue(testCase, ismember('wall', names));
     verifyTrue(testCase, ismember('middle1', names));
-    % center may or may not be present depending on rasterization at the
-    % exact boundary; we do not assert either way.
+    % maxDist = 60.0083 > cumW = 60, so a center sliver exists deterministically.
+    verifyTrue(testCase, ismember('center', names));
 end
 
 function testLargeArenaWithMiddleRings(testCase)
@@ -85,6 +87,11 @@ function testBoundary92cmArenaKeepsMiddleAndCenter(testCase)
     % wallW+midW+minC = 12+24+10 = 46 cm = arena radius exactly.
     % Old behavior: middle1 sometimes dropped due to float boundary.
     % New behavior: {wall, middle1, center} always returned.
+    %
+    % NOTE: this scenario already passed under old code (the boundary
+    % math worked out at pxlPerCm=5). Kept as a regression-doc test
+    % pinning the user's exact repro; the actual fix is gated by
+    % `testCenterAlwaysAddedEvenIfNarrow`.
     H = 600; W = 600; pxlPerCm = 5;
     arenaMask = makeCircleMask(H, W, 300, 300, 46 * pxlPerCm);
     zones = sphynx.zones.classifyCircle(arenaMask, ...
@@ -103,6 +110,11 @@ function testEllipseThinMinorAxisStillProducesCenter(testCase)
     % Minor radius = 30 cm, so maxDist ~= 30 cm.
     % wallW+midW+minC = 46 > 30 -> old behavior returned only wall.
     % New behavior: {wall, center} (center fills 30-12=18 cm wide).
+    %
+    % NOTE: this scenario did NOT pass under old code (center was dropped
+    % when narrower than MinCenterCm). Kept as a regression-doc test
+    % pinning the user's exact repro; the actual fix is gated by
+    % `testCenterAlwaysAddedEvenIfNarrow`.
     H = 600; W = 600; pxlPerCm = 5;
     [X, Y] = meshgrid(1:W, 1:H);
     arenaMask = ((X - 300) / (45 * pxlPerCm)).^2 + ...

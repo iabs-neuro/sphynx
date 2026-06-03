@@ -7,13 +7,15 @@ function zones = classifyCircle(arenaMask, varargin)
 %     middle1  - next ring inward of width MiddleWidthCm
 %     middle2  - next ring inward of width MiddleWidthCm
 %     ...
-%     center   - innermost remaining disk, if >= MinCenterCm radius
+%     center   - innermost remaining region (always added if non-empty)
 %
 %   Name-value parameters:
 %     PixelsPerCm    (required) - calibration scale
 %     WallWidthCm    (default 10)
 %     MiddleWidthCm  (default 20)
-%     MinCenterCm    (default 10) - minimum center radius to keep
+%     MinCenterCm    (default 10) - reserved for backward compatibility;
+%                                   currently accepted but has no effect
+%                                   on emitted zones
 %
 %   Behavior (updated 2026-06-03):
 %     - Wall is always returned (no early return).
@@ -44,12 +46,10 @@ function zones = classifyCircle(arenaMask, varargin)
     pxlPerCm = p.Results.PixelsPerCm;
     wallW = p.Results.WallWidthCm * pxlPerCm;
     midW  = p.Results.MiddleWidthCm * pxlPerCm;
-    minC  = p.Results.MinCenterCm * pxlPerCm;
-
     arenaMask = arenaMask > 0;
 
     % Padded distance transform handles arena touching frame edges
-    pad = max(round(wallW + midW * 4 + minC + 10), 20);
+    pad = max(round(wallW + midW * 4 + 10), 20);
     paddedMask = padarray(arenaMask, [pad pad], false, 'both');
     distFromOutside = bwdist(~paddedMask);
     maxDist = max(distFromOutside(:)); % effective arena "radius"
@@ -65,12 +65,12 @@ function zones = classifyCircle(arenaMask, varargin)
 
     % Greedy middles: add a ring whenever there is at least midW worth
     % of space past the current cumulative width. Relaxed boundary
-    % (epsilon = 0.5 px) tolerates rasterization slop on exact
+    % (rastSlop = 0.5 px) tolerates rasterization slop on exact
     % wall+mid+minC == radius arenas.
-    eps = 0.5;
+    rastSlop = 0.5;
     cumW = wallW;
     middleIdx = 1;
-    while cumW + midW <= maxDist + eps
+    while cumW + midW <= maxDist + rastSlop
         nextCumW = cumW + midW;
         ring = paddedMask & distFromOutside > cumW & distFromOutside <= nextCumW;
         if any(ring(:))
