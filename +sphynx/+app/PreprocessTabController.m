@@ -49,6 +49,9 @@ classdef PreprocessTabController < handle
         RegionsAppliesDropDown
         RegionsScopeDropDown    % per-region scope (experiment | session)
         RegionsShapeDropdown    % polygon | circle
+        RegionsAutoRingChk      % checkbox: auto-add ring outside arena
+        RegionsAutoRingWidthField  % numeric field: ring width in cm
+        RegionsAddRingBtn       % button: Add ring
 
         % Embedded video viewer
         VideoPanel
@@ -1178,13 +1181,14 @@ classdef PreprocessTabController < handle
         function buildRegionsPanelInline(obj, parent)
             obj.RegionsPanel = uipanel(parent, 'Title', 'Manual exclusion regions');
             obj.RegionsPanel.Layout.Row = 3;
-            rg = uigridlayout(obj.RegionsPanel, [2, 7]);
-            rg.RowHeight = {28, '1x'};
+            rg = uigridlayout(obj.RegionsPanel, [3, 7]);
+            rg.RowHeight = {28, 28, '1x'};
             rg.ColumnWidth = {110, 130, 100, 80, 70, 70, '1x'};
             rg.Padding = [4 4 4 4];
             rg.RowSpacing = 4;
             rg.ColumnSpacing = 4;
 
+            % Row 1: manual shape controls
             uibutton(rg, 'Text', 'Add region', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.addManualRegion());
@@ -1203,8 +1207,25 @@ classdef PreprocessTabController < handle
                 'ButtonPushedFcn', @(~,~) obj.clearAllRegions());
             uilabel(rg, 'Text', '');
 
+            % Row 2: auto exclusion ring controls
+            obj.RegionsAutoRingChk = uicheckbox(rg, ...
+                'Text', 'Auto-add ring outside arena', ...
+                'Tooltip', 'Compute an exclusion ring of N cm outside the arena boundary');
+            obj.RegionsAutoRingChk.Layout.Row = 2; obj.RegionsAutoRingChk.Layout.Column = 1;
+            obj.RegionsAutoRingWidthField = uieditfield(rg, 'numeric', ...
+                'Value', 5, 'Limits', [0.1 100], ...
+                'Tooltip', 'Ring width in cm');
+            obj.RegionsAutoRingWidthField.Layout.Row = 2; obj.RegionsAutoRingWidthField.Layout.Column = 2;
+            lblCm = uilabel(rg, 'Text', 'cm');
+            lblCm.Layout.Row = 2; lblCm.Layout.Column = 3;
+            obj.RegionsAddRingBtn = uibutton(rg, 'Text', 'Add ring', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.addAutoExclusionRing());
+            obj.RegionsAddRingBtn.Layout.Row = 2; obj.RegionsAddRingBtn.Layout.Column = 4;
+
+            % Row 3: list box spanning all columns
             obj.RegionsListBox = uilistbox(rg, 'Items', {});
-            obj.RegionsListBox.Layout.Row = 2;
+            obj.RegionsListBox.Layout.Row = 3;
             obj.RegionsListBox.Layout.Column = [1 7];
         end
 
@@ -1312,13 +1333,14 @@ classdef PreprocessTabController < handle
             % Manual regions panel
             obj.RegionsPanel = uipanel(obj.RightGrid, 'Title', 'Manual exclusion regions');
             obj.RegionsPanel.Layout.Row = 6;
-            rg = uigridlayout(obj.RegionsPanel, [2, 7]);
-            rg.RowHeight = {28, '1x'};
+            rg = uigridlayout(obj.RegionsPanel, [3, 7]);
+            rg.RowHeight = {28, 28, '1x'};
             rg.ColumnWidth = {110, 130, 100, 80, 70, 70, '1x'};
             rg.Padding = [4 4 4 4];
             rg.RowSpacing = 4;
             rg.ColumnSpacing = 4;
 
+            % Row 1: manual shape controls
             bAdd = uibutton(rg, 'Text', 'Add region', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.addManualRegion());
@@ -1352,8 +1374,25 @@ classdef PreprocessTabController < handle
                 'ButtonPushedFcn', @(~,~) obj.clearAllRegions());
             bClear.Layout.Row = 1; bClear.Layout.Column = 6;
 
+            % Row 2: auto exclusion ring controls
+            obj.RegionsAutoRingChk = uicheckbox(rg, ...
+                'Text', 'Auto-add ring outside arena', ...
+                'Tooltip', 'Compute an exclusion ring of N cm outside the arena boundary');
+            obj.RegionsAutoRingChk.Layout.Row = 2; obj.RegionsAutoRingChk.Layout.Column = 1;
+            obj.RegionsAutoRingWidthField = uieditfield(rg, 'numeric', ...
+                'Value', 5, 'Limits', [0.1 100], ...
+                'Tooltip', 'Ring width in cm');
+            obj.RegionsAutoRingWidthField.Layout.Row = 2; obj.RegionsAutoRingWidthField.Layout.Column = 2;
+            lblCmD = uilabel(rg, 'Text', 'cm');
+            lblCmD.Layout.Row = 2; lblCmD.Layout.Column = 3;
+            obj.RegionsAddRingBtn = uibutton(rg, 'Text', 'Add ring', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.addAutoExclusionRing());
+            obj.RegionsAddRingBtn.Layout.Row = 2; obj.RegionsAddRingBtn.Layout.Column = 4;
+
+            % Row 3: list box spanning all columns
             obj.RegionsListBox = uilistbox(rg, 'Items', {});
-            obj.RegionsListBox.Layout.Row = 2;
+            obj.RegionsListBox.Layout.Row = 3;
             obj.RegionsListBox.Layout.Column = [1 7];
 
             % Log
@@ -1589,6 +1628,50 @@ classdef PreprocessTabController < handle
         function defaultSelected(obj)
             if isempty(obj.State.dlc); return; end
             obj.defaultPart(obj.State.currentBodyPart);
+        end
+
+        % --- Auto exclusion ring ----------------------------------------------
+        function addAutoExclusionRing(obj)
+            % ADDAUTOEXCLUSIONRING  Compute a ring N cm outside the arena
+            % boundary and add each connected component as a manual region.
+            %
+            % Requires a loaded preset with ArenaAndObjects(1).maskfilled and
+            % Options.pxl2sm.
+            arenaMask = [];
+            pxlPerCm  = pickPxlPerCm(obj);
+            if ~isempty(obj.State.presetData)
+                pd = obj.State.presetData;
+                if isfield(pd, 'ArenaAndObjects') && ~isempty(pd.ArenaAndObjects) ...
+                        && isfield(pd.ArenaAndObjects(1), 'maskfilled')
+                    arenaMask = pd.ArenaAndObjects(1).maskfilled;
+                end
+            end
+            if isempty(arenaMask) || isempty(pxlPerCm)
+                obj.applog('warn', 'Load a preset with arena.maskfilled + pxl2sm first');
+                return;
+            end
+            widthCm = obj.RegionsAutoRingWidthField.Value;
+            widthPx = widthCm * pxlPerCm;
+            regions = sphynx.preprocess.arenaExclusionRing(arenaMask, widthPx);
+            if isempty(regions)
+                obj.applog('warn', 'Ring would be empty (widthCm=%.1f)', widthCm);
+                return;
+            end
+            applies = obj.RegionsAppliesDropDown.Value;
+            scope = 'experiment';
+            if ~isempty(obj.RegionsScopeDropDown)
+                scope = obj.RegionsScopeDropDown.Value;
+            end
+            nAdded = 0;
+            for k = 1:numel(regions)
+                reg = struct('vertices', regions(k).vertices, ...
+                    'appliesTo', applies, 'scope', scope);
+                obj.State.manualRegions(end + 1) = reg;
+                nAdded = nAdded + 1;
+            end
+            obj.refreshRegionsListBox();
+            obj.refreshPreview();
+            obj.applog('info', 'Added %d auto-ring region(s) (widthCm=%.1f)', nAdded, widthCm);
         end
 
         % --- Manual exclusion regions ----------------------------------------
