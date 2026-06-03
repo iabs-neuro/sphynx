@@ -22,7 +22,13 @@ function out = pickGoodFrame(videoPath, varargin)
 
     v = VideoReader(videoPath);
     out.frameRate = v.FrameRate;
-    out.numFrames = v.NumFrames;
+    rawCount = v.NumFrames;
+    out.numFrames = sphynx.preset.correctedFrameCount(rawCount, v.Duration, v.FrameRate);
+    if out.numFrames ~= rawCount
+        sphynx.util.log('warn', ...
+            '[pickGoodFrame] VideoReader.NumFrames=%g unreliable; using Duration*FrameRate=%d', ...
+            rawCount, out.numFrames);
+    end
     out.height = v.Height;
     out.width = v.Width;
 
