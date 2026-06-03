@@ -82,6 +82,15 @@ classdef CreatePresetApp < handle
         CenterDiameterCmField
         ObjectZoneWidthField
         ZonesCountLabel
+        % Auto-detect objects (S7)
+        AutoModeDropdown
+        AutoAlgorithmDropdown
+        AutoSensitivitySlider
+        AutoMinAreaField
+        AutoMaxAreaField
+        AutoRadiusMinField
+        AutoRadiusMaxField
+        AutoStartFromField
         % Save / plot
         PlotAllCheckbox
         % Preview
@@ -752,6 +761,64 @@ classdef CreatePresetApp < handle
             end
             app.setSelectedObjectIdx(idx);
         end
+
+        function runAutoDetect(app)
+            if isempty(app.State.frame) || isempty(app.State.arena) || isempty(app.State.arena.mask)
+                app.status('Need video + arena before auto-detect');
+                return;
+            end
+            cfg = struct( ...
+                'mode',         app.AutoModeDropdown.Value, ...
+                'algorithm',    app.AutoAlgorithmDropdown.Value, ...
+                'sensitivity',  app.AutoSensitivitySlider.Value, ...
+                'minAreaCm2',   app.AutoMinAreaField.Value, ...
+                'maxAreaCm2',   app.AutoMaxAreaField.Value, ...
+                'pxlPerCm',     app.State.pxlPerCm, ...
+                'radiusRangePx', [app.AutoRadiusMinField.Value, app.AutoRadiusMaxField.Value]);
+            % Guard NaN pxlPerCm -> area filters would reject everything
+            if isnan(cfg.pxlPerCm) || cfg.pxlPerCm <= 0
+                cfg.pxlPerCm = 1;   % treat as 1 px/cm (areas in px^2)
+            end
+            try
+                if size(app.State.frame, 3) == 3
+                    gray = rgb2gray(app.State.frame);
+                else
+                    gray = app.State.frame;
+                end
+                objs = sphynx.preset.autoDetectObjects(gray, app.State.arena.mask, cfg);
+                app.State.autoDetectedObjects = objs;
+                app.refreshPreview();
+                app.status(sprintf('Auto-detected %d objects (preview only; click Commit to add)', numel(objs)));
+            catch ME
+                app.status(sprintf('Auto-detect failed: %s', ME.message));
+            end
+        end
+
+        function commitAutoDetected(app)
+            if isempty(app.State.autoDetectedObjects)
+                app.status('Nothing to commit. Run Auto-detect first.');
+                return;
+            end
+            startNum = app.AutoStartFromField.Value;
+            newObjs = app.State.autoDetectedObjects;
+            for k = 1:numel(newObjs)
+                newObjs(k).type = sprintf('Object%d', startNum + k - 1);
+            end
+            if isempty(app.State.objects)
+                app.State.objects = newObjs;
+            else
+                for k = 1:numel(newObjs)
+                    app.State.objects(end + 1) = newObjs(k);
+                end
+            end
+            nAdded = numel(newObjs);
+            app.State.autoDetectedObjects = struct('type', {}, 'geometry', {}, ...
+                'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
+            app.refreshObjectsList();
+            app.refreshMoveTargets();
+            app.refreshPreview();
+            app.status(sprintf('Committed %d auto-detected objects', nAdded));
+        end
     end
 
     % ========== UI builders =================================================
@@ -864,6 +931,15 @@ classdef CreatePresetApp < handle
                 end
                 plot(ax, app.State.objects(k).border_x(:), app.State.objects(k).border_y(:), ...
                     '-', 'Color', col, 'LineWidth', lw);
+            end
+            % Auto-detected objects preview overlay (green dashed, before Commit)
+            if isfield(app.State, 'autoDetectedObjects') && ~isempty(app.State.autoDetectedObjects)
+                for k = 1:numel(app.State.autoDetectedObjects)
+                    ado = app.State.autoDetectedObjects(k);
+                    if isempty(ado.border_x); continue; end
+                    plot(ax, ado.border_x, ado.border_y, '--', ...
+                        'Color', [0 0.8 0], 'LineWidth', 1.5);
+                end
             end
             hold(ax, 'off');
         end
@@ -990,6 +1066,8 @@ classdef CreatePresetApp < handle
             s.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
             s.zoneStrategies = {};   % short tags appended on each Add to set
             s.selectedObjectIdx = [];   % vector of object indices (S1 foundation)
+            s.autoDetectedObjects = struct('type', {}, 'geometry', {}, ...
+                'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
         end
     end
 end
@@ -1008,7 +1086,7 @@ function buildCreateTab(app)
     leftScroll = uipanel(app.OuterGrid, 'BorderType', 'none', 'Scrollable', 'on');
     leftScroll.Layout.Column = 1;
 
-    app.LeftGrid = uigridlayout(leftScroll, [6, 1]);
+    app.LeftGrid = uigridlayout(leftScroll, [7, 1]);
     app.LeftGrid.Scrollable = 'on';   % belt-and-braces: also on the grid itself
     % Per-panel height = sum(rowHeights) + (n-1)*rowSpacing + 8 padding
     %                    + ~25 panel title bar. Row heights are 28 px
@@ -1017,9 +1095,10 @@ function buildCreateTab(app)
     %   Row 1 Load (100), Row 2 Calib (3 rows × 28 + spacing + padding +
     %   panel title ≈ 145), Row 3 Arena (2 rows × 28 + title ≈ 95),
     %   Row 4 Objects (180 fits ~4 listbox entries + buttons),
-    %   Row 5 Zones (245), Row 6 Save (75).
+    %   Row 5 Zones (245), Row 6 Save (75),
+    %   Row 7 Auto-detect (7 rows × 28 + title ≈ 250).
     % Tuned visually: Block 4 (Objects) at 200 -> listbox ≈ 80 px.
-    app.LeftGrid.RowHeight = {100, 145, 95, 200, 245, 75};
+    app.LeftGrid.RowHeight = {100, 145, 95, 200, 245, 75, 250};
     app.LeftGrid.RowSpacing = 4;
     app.LeftGrid.Padding = [4 4 4 4];
 
@@ -1036,6 +1115,7 @@ function buildCreateTab(app)
     buildObjectsPanel(app);
     buildZonesPanel(app);
     buildSavePanel(app);
+    buildAutoDetectPanel(app, app.LeftGrid);
 
     % Right column: preview + nav strip + move strip + log textarea
     app.RightGrid = uigridlayout(app.OuterGrid, [4, 1]);
@@ -1467,6 +1547,64 @@ function buildSavePanel(app)
         'BackgroundColor', semanticColor('info'), ...
         'ButtonPushedFcn', @(~,~) showHelp('Save', helpSaveText()));
     bInfo.Layout.Row = 1; bInfo.Layout.Column = 5;
+end
+
+function buildAutoDetectPanel(app, parent)
+    adPanel = uipanel(parent, 'Title', 'Auto-detect objects', ...
+        'FontSize', 14, 'FontWeight', 'bold');
+    ag = uigridlayout(adPanel, [7, 3]);
+    ag.RowHeight = repmat({28}, 1, 7);
+    ag.ColumnWidth = {180, '1x', 'fit'};
+
+    lblMode = uilabel(ag, 'Text', 'Mode:');
+    lblMode.Layout.Row = 1; lblMode.Layout.Column = 1;
+    app.AutoModeDropdown = uidropdown(ag, ...
+        'Items', {'free-form', 'all-circles', 'all-polygons', 'all-ellipses'}, ...
+        'Value', 'free-form');
+    app.AutoModeDropdown.Layout.Row = 1; app.AutoModeDropdown.Layout.Column = 2;
+
+    lblAlg = uilabel(ag, 'Text', 'Algorithm (circles):');
+    lblAlg.Layout.Row = 2; lblAlg.Layout.Column = 1;
+    app.AutoAlgorithmDropdown = uidropdown(ag, ...
+        'Items', {'threshold', 'hough'}, 'Value', 'threshold');
+    app.AutoAlgorithmDropdown.Layout.Row = 2; app.AutoAlgorithmDropdown.Layout.Column = 2;
+
+    lblSens = uilabel(ag, 'Text', 'Sensitivity:');
+    lblSens.Layout.Row = 3; lblSens.Layout.Column = 1;
+    app.AutoSensitivitySlider = uislider(ag, 'Limits', [0 1], 'Value', 0.5);
+    app.AutoSensitivitySlider.Layout.Row = 3; app.AutoSensitivitySlider.Layout.Column = 2;
+
+    lblMin = uilabel(ag, 'Text', 'Min area, cm^2:');
+    lblMin.Layout.Row = 4; lblMin.Layout.Column = 1;
+    app.AutoMinAreaField = uieditfield(ag, 'numeric', 'Value', 1, 'Limits', [0 1e6]);
+    app.AutoMinAreaField.Layout.Row = 4; app.AutoMinAreaField.Layout.Column = 2;
+
+    lblMax = uilabel(ag, 'Text', 'Max area, cm^2:');
+    lblMax.Layout.Row = 5; lblMax.Layout.Column = 1;
+    app.AutoMaxAreaField = uieditfield(ag, 'numeric', 'Value', 500, 'Limits', [0 1e6]);
+    app.AutoMaxAreaField.Layout.Row = 5; app.AutoMaxAreaField.Layout.Column = 2;
+
+    lblR = uilabel(ag, 'Text', 'Radius range, px (Hough):');
+    lblR.Layout.Row = 6; lblR.Layout.Column = 1;
+    rGrid = uigridlayout(ag, [1, 2]);
+    rGrid.Layout.Row = 6; rGrid.Layout.Column = 2;
+    rGrid.Padding = [0 0 0 0];
+    app.AutoRadiusMinField = uieditfield(rGrid, 'numeric', 'Value', 5);
+    app.AutoRadiusMaxField = uieditfield(rGrid, 'numeric', 'Value', 30);
+
+    lblStart = uilabel(ag, 'Text', 'Start numbering from:');
+    lblStart.Layout.Row = 7; lblStart.Layout.Column = 1;
+    app.AutoStartFromField = uieditfield(ag, 'numeric', 'Value', 1, ...
+        'Limits', [1 1e6], 'RoundFractionalValues', 'on');
+    app.AutoStartFromField.Layout.Row = 7; app.AutoStartFromField.Layout.Column = 2;
+
+    btnGrid = uigridlayout(ag, [1, 2]);
+    btnGrid.Layout.Row = 7; btnGrid.Layout.Column = 3;
+    btnGrid.Padding = [0 0 0 0];
+    uibutton(btnGrid, 'Text', 'Auto-detect', ...
+        'ButtonPushedFcn', @(~,~) app.runAutoDetect());
+    uibutton(btnGrid, 'Text', 'Commit', ...
+        'ButtonPushedFcn', @(~,~) app.commitAutoDetected());
 end
 
 % buildStatusPanel removed — status now goes to command-line log only.
