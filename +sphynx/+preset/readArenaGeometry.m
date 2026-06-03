@@ -26,6 +26,7 @@ function arena = readArenaGeometry(frame, geometry, varargin)
     addParameter(p, 'Points', []);
     addParameter(p, 'NumPointsPerSide', 1000);
     addParameter(p, 'PickMode', 'shape', @(s) any(strcmpi(s, {'shape', 'points'})));
+    addParameter(p, 'ExistingObjects', struct('border_x', {}, 'border_y', {}));
     parse(p, frame, geometry, varargin{:});
 
     [H, W, ~] = size(frame);
@@ -34,6 +35,17 @@ function arena = readArenaGeometry(frame, geometry, varargin)
     if isempty(p.Results.Points)
         fh = figure; ax = axes(fh); imshow(frame, 'Parent', ax); hold(ax, 'on');
         cleanup = onCleanup(@() closeIfValid(fh));
+        existing = p.Results.ExistingObjects;
+        if isstruct(existing)
+            for k = 1:numel(existing)
+                bx = existing(k).border_x;
+                by = existing(k).border_y;
+                if isempty(bx); continue; end
+                fill(ax, bx(:), by(:), [0.3 0.5 0.8], ...
+                    'FaceAlpha', 0.20, ...
+                    'EdgeColor', [0.1 0.3 0.6], 'EdgeAlpha', 0.8, 'LineWidth', 1);
+            end
+        end
         if strcmpi(p.Results.PickMode, 'points')
             % Legacy point-by-point picker via ginput. User clicks vertices,
             % presses Enter to commit. No drag-and-drop refinement.

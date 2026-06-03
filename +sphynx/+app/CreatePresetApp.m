@@ -168,7 +168,7 @@ classdef CreatePresetApp < handle
         function setArena(app, geometry, points)
             try
                 arena = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
-                    'Points', points);
+                    'Points', points, 'ExistingObjects', app.State.objects);
                 app.State.arena = arena;
                 app.applog('info', 'Arena: %s OK', geometry);
                 app.refreshPreview();
@@ -182,7 +182,8 @@ classdef CreatePresetApp < handle
 
         function addObject(app, geometry, points)
             try
-                obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry, 'Points', points);
+                obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
+                    'Points', points, 'ExistingObjects', app.State.objects);
                 obj.type = sprintf('Object%d', numel(app.State.objects) + 1);
                 if isempty(app.State.objects)
                     app.State.objects = obj;
@@ -228,7 +229,9 @@ classdef CreatePresetApp < handle
             idx = idx(1);
             geometry = app.State.objectGeometry;
             try
-                obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry);
+                otherIdx = setdiff(1:numel(app.State.objects), idx);
+                obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
+                    'ExistingObjects', app.State.objects(otherIdx));
                 obj.type = app.State.objects(idx).type;     % preserve label
                 app.State.objects(idx) = obj;
                 app.refreshObjectsList();
