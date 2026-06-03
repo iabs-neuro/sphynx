@@ -532,8 +532,8 @@ classdef CreatePresetApp < handle
             try
                 step = max(round(app.State.numFrames / 20), 1);
                 app.State.frameIndex = mod(app.State.frameIndex + step - 1, max(app.State.numFrames,1)) + 1;
-                v = VideoReader(app.State.videoPath);
-                app.State.frame = read(v, app.State.frameIndex);
+                app.State.frame = sphynx.preset.readFrameAt(app.State.videoPath, ...
+                    app.State.frameIndex, app.State.frameRate);
                 app.refreshPreview();
                 if ~isempty(app.FrameIndexLabel)
                     app.FrameIndexLabel.Text = sprintf('Frame %d / %d', app.State.frameIndex, app.State.numFrames);
