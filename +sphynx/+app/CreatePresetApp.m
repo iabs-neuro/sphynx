@@ -1095,8 +1095,8 @@ function buildCalibPanel(app)
     %   Row 1: Choose | mode | cm Y | val | cm X | val | Compute | INFO
     %   Row 2: result labels (Y: / X: / avg: / kcorr:)
     %   Row 3: Exp dropdown spanning the full width
-    g = uigridlayout(app.CalibPanel, [3 8]);
-    g.RowHeight = {28, 28, 28};
+    g = uigridlayout(app.CalibPanel, [4 8]);
+    g.RowHeight = {28, 28, 28, 28};
     g.ColumnWidth = {70, 80, 'fit', 50, 'fit', 50, 'fit', 50};
     g.ColumnSpacing = 4;
     g.RowSpacing = 4;
@@ -1143,6 +1143,12 @@ function buildCalibPanel(app)
                   'Freezing Track','New Track','Complex Context','OF_Obj','3DM','<New>'}, ...
         'ValueChangedFcn', @(s, ~) onExpTypeChanged(app, s));
     app.ExpTypeDropDown.Layout.Row = 3; app.ExpTypeDropDown.Layout.Column = [2 8];
+
+    % Row 4: 1-line calibration shortcut
+    bOneLine = uibutton(g, 'Text', 'Calibrate (1 line)', ...
+        'BackgroundColor', semanticColor('action'), ...
+        'ButtonPushedFcn', @(~,~) app.calibrateByOneLine());
+    bOneLine.Layout.Row = 4; bOneLine.Layout.Column = [1 8];
 end
 
 function onExpTypeChanged(app, src)
@@ -1480,6 +1486,34 @@ function onCalibrateCompute(app)
     app.setPixelsPerCm(pxlAvg, 'Y', pxlY, 'X', pxlX, 'KCorr', kcorr);
     app.status(sprintf('Calibrated: avg=%.2f, Y=%.2f, X=%.2f, X/Y diff=%.2f%%, kcorr=%.3f', ...
         pxlAvg, pxlY, pxlX, diffPct, kcorr));
+end
+
+function calibrateByOneLine(app)
+    if isempty(app.State.frame); app.status('Load video first'); return; end
+    try
+        fh = figure('Name', 'Calibrate: 1 line', 'NumberTitle', 'off');
+        cleaner = onCleanup(@() closeIfValid(fh)); %#ok<NASGU>
+        ax = axes(fh);
+        imshow(app.State.frame, 'Parent', ax);
+        title(ax, 'Draw a line of known length, then enter cm', 'Interpreter', 'none');
+        hL = drawline(ax);
+        wait(hL);
+        if ~isvalid(hL); app.status('Calibration cancelled'); return; end
+        P = hL.Position;
+        lengthPx = sqrt(sum(diff(P, 1, 1).^2));
+        cmStr = inputdlg('Line length in cm:', 'Calibrate', 1, {'10'});
+        if isempty(cmStr); app.status('Calibration cancelled'); return; end
+        cm = str2double(cmStr{1});
+        if isnan(cm) || cm <= 0
+            app.status('Invalid cm value');
+            return;
+        end
+        pxlPerCm = lengthPx / cm;
+        app.setPixelsPerCm(pxlPerCm, 'Y', pxlPerCm, 'X', pxlPerCm, 'KCorr', 1);
+        app.status(sprintf('Calibrated by 1 line: pxlPerCm=%.3f', pxlPerCm));
+    catch ME
+        app.status(sprintf('1-line calibration failed: %s', ME.message));
+    end
 end
 
 function onPickArena(app)
