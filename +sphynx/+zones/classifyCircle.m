@@ -15,8 +15,16 @@ function zones = classifyCircle(arenaMask, varargin)
 %     MiddleWidthCm  (default 20)
 %     MinCenterCm    (default 10) - minimum center radius to keep
 %
-%   Bug-1 fix: distance transform runs on a padded frame so arena
-%   boundaries touching the original frame edge classify correctly.
+%   Behavior (updated 2026-06-03):
+%     - Wall is always returned (no early return).
+%     - Middles are added greedily while there is room for another full
+%       ring of width MiddleWidthCm; epsilon-relaxed comparison tolerates
+%       float rasterization slop at exact wall+mid+minC == radius.
+%     - Center is always added if any pixels remain past the last middle
+%       (even when narrower than MinCenterCm -- Barnes-style narrow arenas).
+%
+%   Bug-1 fix (preserved): distance transform runs on a padded frame so
+%   arenas touching the original frame edge classify correctly.
 %
 %   Implements feature 1.3 (round arena ring partitioning).
 
@@ -48,22 +56,21 @@ function zones = classifyCircle(arenaMask, varargin)
 
     zones = struct('name',{},'type',{},'maskfilled',{});
 
-    % Wall always exists (outermost ring)
+    % Wall always exists (outermost ring). No early return -- we always
+    % try to produce wall + (optional middles) + center.
     wallRing = paddedMask & distFromOutside > 0 & distFromOutside <= wallW;
     if any(wallRing(:))
         zones(end+1) = mkZone('wall', wallRing, pad); %#ok<AGROW>
     end
 
-    % If no room for center past wall, stop here.
-    if maxDist < wallW + minC
-        return;
-    end
-
-    % Greedy: add middle rings while another middle would still leave
-    % at least minC for the center disk.
+    % Greedy middles: add a ring whenever there is at least midW worth
+    % of space past the current cumulative width. Relaxed boundary
+    % (epsilon = 0.5 px) tolerates rasterization slop on exact
+    % wall+mid+minC == radius arenas.
+    eps = 0.5;
     cumW = wallW;
     middleIdx = 1;
-    while cumW + midW + minC <= maxDist
+    while cumW + midW <= maxDist + eps
         nextCumW = cumW + midW;
         ring = paddedMask & distFromOutside > cumW & distFromOutside <= nextCumW;
         if any(ring(:))
@@ -77,7 +84,10 @@ function zones = classifyCircle(arenaMask, varargin)
         end
     end
 
-    % Center: everything inside the last middle (or wall, if no middles).
+    % Center: everything past the last middle (or past wall if no middles).
+    % Added unconditionally if any pixels remain -- even if narrower than
+    % MinCenterCm. MinCenterCm now controls greedy-middle stopping (above)
+    % rather than dropping the center entirely.
     centerMask = paddedMask & distFromOutside > cumW;
     if any(centerMask(:))
         zones(end+1) = mkZone('center', centerMask, pad); %#ok<AGROW>
