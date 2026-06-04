@@ -118,11 +118,8 @@ classdef CreatePresetApp < handle
         ManagerStatusLabel
         PendingShapeHandles    % cell array of drawXX handles
         PendingShapeGeometries % cell array of strings: geometry of each pending
-        % Auto-detect neighborhood (Fix 5)
+        % Auto-detect neighborhood
         AutoNeighborhoodField
-        % Uniform radius (Fix 6)
-        AutoUniformRadiusChk
-        AutoUniformRadiusField
         % Mirror listbox in Block 4 (Fix 7)
         ObjectsMirrorListBox
     end
@@ -879,9 +876,7 @@ classdef CreatePresetApp < handle
                 'pxlPerCm',     pxlPerCm, ...
                 'radiusRangePx', [app.AutoRadiusMinField.Value * pxlPerCm, ...
                                   app.AutoRadiusMaxField.Value * pxlPerCm], ...
-                'neighborhoodCm', app.AutoNeighborhoodField.Value, ...
-                'uniformRadius',  app.AutoUniformRadiusChk.Value, ...
-                'uniformRadiusPx', app.AutoUniformRadiusField.Value * pxlPerCm);
+                'neighborhoodCm', app.AutoNeighborhoodField.Value);
             try
                 if size(app.State.frame, 3) == 3
                     gray = rgb2gray(app.State.frame);
@@ -1160,6 +1155,54 @@ classdef CreatePresetApp < handle
             app.status(sprintf('Committed %d auto-detected objects', nAdded));
             app.focusManagerIfOpen();
         end
+
+        function alignDetectedRadii(app)
+            if ~isfield(app.State, 'autoDetectedObjects') || isempty(app.State.autoDetectedObjects)
+                app.status('No auto-detected objects to align');
+                app.focusManagerIfOpen();
+                return;
+            end
+            pxlPerCm = app.State.pxlPerCm;
+            if isnan(pxlPerCm) || pxlPerCm <= 0
+                app.status('Calibrate pxlPerCm first');
+                app.focusManagerIfOpen();
+                return;
+            end
+            % Mean radius across detected objects, in cm
+            radii = zeros(1, numel(app.State.autoDetectedObjects));
+            for k = 1:numel(app.State.autoDetectedObjects)
+                o = app.State.autoDetectedObjects(k);
+                cx = mean(o.border_x);
+                cy = mean(o.border_y);
+                radii(k) = mean(sqrt((o.border_x - cx).^2 + (o.border_y - cy).^2)) / pxlPerCm;
+            end
+            meanCm = mean(radii);
+            answer = inputdlg(sprintf('Detected mean radius: %.2f cm. Apply this (or edit) to all:', meanCm), ...
+                              'Align radii', 1, {sprintf('%.2f', meanCm)});
+            if isempty(answer); app.focusManagerIfOpen(); return; end
+            newR_cm = str2double(answer{1});
+            if isnan(newR_cm) || newR_cm <= 0
+                app.status('Invalid radius');
+                app.focusManagerIfOpen();
+                return;
+            end
+            newR_px = newR_cm * pxlPerCm;
+            ang = linspace(0, 2*pi, 60)';
+            for k = 1:numel(app.State.autoDetectedObjects)
+                o = app.State.autoDetectedObjects(k);
+                cx = mean(o.border_x);
+                cy = mean(o.border_y);
+                o.border_x = cx + newR_px * cos(ang);
+                o.border_y = cy + newR_px * sin(ang);
+                o.mask = imfill(sphynx.preset.maskFromBorder( ...
+                    app.State.height, app.State.width, o.border_x, o.border_y), 'holes');
+                o.geometry = 'Circle';
+                app.State.autoDetectedObjects(k) = o;
+            end
+            app.refreshManagerPreview();
+            app.status(sprintf('Aligned %d detected circles to r=%.2f cm', numel(radii), newR_cm));
+            app.focusManagerIfOpen();
+        end
     end
 
     % ========== UI builders =================================================
@@ -1208,16 +1251,21 @@ classdef CreatePresetApp < handle
 
         function focusManagerIfOpen(app)
             % Restore focus to the Objects Manager window after operations.
-            % For uifigure, figure() may not bring to front on all platforms;
-            % try WindowStyle + drawnow as fallback.
-            if ~isempty(app.ObjectsManagerFig) && isvalid(app.ObjectsManagerFig)
-                try
-                    app.ObjectsManagerFig.WindowStyle = 'normal';
-                    figure(app.ObjectsManagerFig);
-                catch
-                    % uifigure may not respond to figure() — use drawnow
-                    drawnow;
-                end
+            % Visibility cycle (off→on) forces uifigure to come to front on
+            % Windows in R2020a; figure() alone is unreliable for uifigure.
+            if isempty(app.ObjectsManagerFig) || ~isvalid(app.ObjectsManagerFig)
+                return;
+            end
+            try
+                % Visibility cycle: brief off+on tends to bring uifigure to front
+                % on Windows. Drawnow forces the repaint.
+                app.ObjectsManagerFig.Visible = 'off';
+                drawnow;
+                app.ObjectsManagerFig.Visible = 'on';
+                figure(app.ObjectsManagerFig);   % attempt focus shift
+                drawnow;
+            catch
+                % Best-effort -- focus management on uifigure in R2020a is brittle
             end
         end
 
@@ -2036,84 +2084,86 @@ end
 
 function buildAutoDetectControlsIn(app, parent)
     % Build auto-detect controls inside `parent` (uipanel in manager window).
-    % Rows: 1=Mode, 2=Alg, 3=Sensitivity, 4=MinArea, 5=MaxArea,
-    %       6=Radius range cm, 7=Uniform radius checkbox, 8=Uniform radius cm,
-    %       9=Neighborhood cm, 10=Start from, 11=buttons
-    ag = uigridlayout(parent, [11, 3]);
-    ag.RowHeight = repmat({28}, 1, 11);
+    % Rows: 1=Mode+INFO, 2=Algorithm, 3=Sensitivity, 4=Neighborhood,
+    %       5=MinArea, 6=MaxArea, 7=Radius range, 8=StartFrom, 9=buttons
+    ag = uigridlayout(parent, [9, 3]);
+    ag.RowHeight = repmat({28}, 1, 9);
     ag.ColumnWidth = {180, '1x', 'fit'};
 
+    % Row 1: Mode dropdown + INFO button
     lblMode = uilabel(ag, 'Text', 'Mode:');
     lblMode.Layout.Row = 1; lblMode.Layout.Column = 1;
     app.AutoModeDropdown = uidropdown(ag, ...
         'Items', {'free-form', 'all-circles', 'all-polygons', 'all-ellipses'}, ...
         'Value', 'free-form');
     app.AutoModeDropdown.Layout.Row = 1; app.AutoModeDropdown.Layout.Column = 2;
+    bInfo = uibutton(ag, 'Text', 'INFO', ...
+        'BackgroundColor', semanticColor('info'), ...
+        'ButtonPushedFcn', @(~,~) showHelp('Auto-detect', helpAutoDetectText()));
+    bInfo.Layout.Row = 1; bInfo.Layout.Column = 3;
 
+    % Row 2: Algorithm
     lblAlg = uilabel(ag, 'Text', 'Algorithm (circles):');
     lblAlg.Layout.Row = 2; lblAlg.Layout.Column = 1;
     app.AutoAlgorithmDropdown = uidropdown(ag, ...
         'Items', {'threshold', 'hough'}, 'Value', 'threshold');
     app.AutoAlgorithmDropdown.Layout.Row = 2; app.AutoAlgorithmDropdown.Layout.Column = 2;
 
+    % Row 3: Sensitivity slider
     lblSens = uilabel(ag, 'Text', 'Sensitivity:');
     lblSens.Layout.Row = 3; lblSens.Layout.Column = 1;
     app.AutoSensitivitySlider = uislider(ag, 'Limits', [0 1], 'Value', 0.5, ...
         'ValueChangingFcn', @(~,~) app.onSensitivityChanging());
     app.AutoSensitivitySlider.Layout.Row = 3; app.AutoSensitivitySlider.Layout.Column = 2;
 
-    lblMin = uilabel(ag, 'Text', 'Min area, cm^2:');
-    lblMin.Layout.Row = 4; lblMin.Layout.Column = 1;
-    app.AutoMinAreaField = uieditfield(ag, 'numeric', 'Value', 1, 'Limits', [0 1e6]);
-    app.AutoMinAreaField.Layout.Row = 4; app.AutoMinAreaField.Layout.Column = 2;
-
-    lblMax = uilabel(ag, 'Text', 'Max area, cm^2:');
-    lblMax.Layout.Row = 5; lblMax.Layout.Column = 1;
-    app.AutoMaxAreaField = uieditfield(ag, 'numeric', 'Value', 500, 'Limits', [0 1e6]);
-    app.AutoMaxAreaField.Layout.Row = 5; app.AutoMaxAreaField.Layout.Column = 2;
-
-    % Fix 6: Radius range in cm (converted to px in runAutoDetect)
-    lblR = uilabel(ag, 'Text', 'Radius range, cm:');
-    lblR.Layout.Row = 6; lblR.Layout.Column = 1;
-    rGrid = uigridlayout(ag, [1, 2]);
-    rGrid.Layout.Row = 6; rGrid.Layout.Column = 2;
-    rGrid.Padding = [0 0 0 0];
-    app.AutoRadiusMinField = uieditfield(rGrid, 'numeric', 'Value', 1);
-    app.AutoRadiusMaxField = uieditfield(rGrid, 'numeric', 'Value', 5);
-
-    % Fix 6: Uniform radius checkbox
-    app.AutoUniformRadiusChk = uicheckbox(ag, ...
-        'Text', 'Uniform radius (all-circles)', 'Value', false);
-    app.AutoUniformRadiusChk.Layout.Row = 7; app.AutoUniformRadiusChk.Layout.Column = [1 2];
-
-    % Fix 6: Uniform radius value in cm
-    lblUR = uilabel(ag, 'Text', 'Uniform radius, cm:');
-    lblUR.Layout.Row = 8; lblUR.Layout.Column = 1;
-    app.AutoUniformRadiusField = uieditfield(ag, 'numeric', 'Value', 2, 'Limits', [0.1 100]);
-    app.AutoUniformRadiusField.Layout.Row = 8; app.AutoUniformRadiusField.Layout.Column = 2;
-
-    % Fix 5: Neighborhood size in cm for adaptthresh (local lighting adaptation)
+    % Row 4: Neighborhood (moved up near Sensitivity)
     lblNh = uilabel(ag, 'Text', 'Neighborhood, cm:');
-    lblNh.Layout.Row = 9; lblNh.Layout.Column = 1;
+    lblNh.Layout.Row = 4; lblNh.Layout.Column = 1;
     app.AutoNeighborhoodField = uieditfield(ag, 'numeric', 'Value', 10, 'Limits', [0 100]);
-    app.AutoNeighborhoodField.Layout.Row = 9; app.AutoNeighborhoodField.Layout.Column = 2;
+    app.AutoNeighborhoodField.Layout.Row = 4; app.AutoNeighborhoodField.Layout.Column = 2;
 
+    % Row 5: Min area
+    lblMin = uilabel(ag, 'Text', 'Min area, cm^2:');
+    lblMin.Layout.Row = 5; lblMin.Layout.Column = 1;
+    app.AutoMinAreaField = uieditfield(ag, 'numeric', 'Value', 1, 'Limits', [0 1e6]);
+    app.AutoMinAreaField.Layout.Row = 5; app.AutoMinAreaField.Layout.Column = 2;
+
+    % Row 6: Max area (default 100 cm^2)
+    lblMax = uilabel(ag, 'Text', 'Max area, cm^2:');
+    lblMax.Layout.Row = 6; lblMax.Layout.Column = 1;
+    app.AutoMaxAreaField = uieditfield(ag, 'numeric', 'Value', 100, 'Limits', [0 1e6]);
+    app.AutoMaxAreaField.Layout.Row = 6; app.AutoMaxAreaField.Layout.Column = 2;
+
+    % Row 7: Radius range in cm (default 2..7; converted to px in runAutoDetect)
+    lblR = uilabel(ag, 'Text', 'Radius range, cm:');
+    lblR.Layout.Row = 7; lblR.Layout.Column = 1;
+    rGrid = uigridlayout(ag, [1, 2]);
+    rGrid.Layout.Row = 7; rGrid.Layout.Column = 2;
+    rGrid.Padding = [0 0 0 0];
+    app.AutoRadiusMinField = uieditfield(rGrid, 'numeric', 'Value', 2);
+    app.AutoRadiusMaxField = uieditfield(rGrid, 'numeric', 'Value', 7);
+
+    % Row 8: Start numbering
     lblStart = uilabel(ag, 'Text', 'Start numbering from:');
-    lblStart.Layout.Row = 10; lblStart.Layout.Column = 1;
+    lblStart.Layout.Row = 8; lblStart.Layout.Column = 1;
     app.AutoStartFromField = uieditfield(ag, 'numeric', 'Value', 1, ...
         'Limits', [1 1e6], 'RoundFractionalValues', 'on');
-    app.AutoStartFromField.Layout.Row = 10; app.AutoStartFromField.Layout.Column = 2;
+    app.AutoStartFromField.Layout.Row = 8; app.AutoStartFromField.Layout.Column = 2;
 
-    btnGrid = uigridlayout(ag, [1, 2]);
-    btnGrid.Layout.Row = 11; btnGrid.Layout.Column = [1 3];
-    btnGrid.ColumnWidth = {'1x', '1x'};
+    % Row 9: Action buttons (Auto-detect, Commit, Align radii)
+    btnGrid = uigridlayout(ag, [1, 3]);
+    btnGrid.Layout.Row = 9; btnGrid.Layout.Column = [1 3];
+    btnGrid.ColumnWidth = {'1x', '1x', '1x'};
     btnGrid.Padding = [0 0 0 0];
-    bDetect = uibutton(btnGrid, 'Text', 'Auto-detect', ...
+    uibutton(btnGrid, 'Text', 'Auto-detect', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.runAutoDetect());
-    bCommit = uibutton(btnGrid, 'Text', 'Commit', ...
+    uibutton(btnGrid, 'Text', 'Commit', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.commitAutoDetected());
+    uibutton(btnGrid, 'Text', 'Align radii', ...
+        'BackgroundColor', semanticColor('action'), ...
+        'ButtonPushedFcn', @(~,~) app.alignDetectedRadii());
 end
 
 % buildStatusPanel removed — status now goes to command-line log only.
@@ -2929,4 +2979,43 @@ function txt = helpSaveText()
         'Check "plot all zones" to ALSO save one PNG per individual';
         'zone (<videobase>_zone_<name>.png).';
     };
+end
+
+function txt = helpAutoDetectText()
+    txt = { ...
+        'AUTO-DETECT OBJECTS — find objects inside the arena.', ...
+        '', ...
+        'Mode:', ...
+        '  free-form     — any shape; each detected blob -> polygon outline.', ...
+        '  all-circles   — every blob is fit to a circle (or via Hough).', ...
+        '  all-polygons  — outlines reduced to polygons (~10 vertices).', ...
+        '  all-ellipses  — ellipse fit using regionprops axes.', ...
+        '', ...
+        'Algorithm (for all-circles):', ...
+        '  threshold — local adaptive threshold (adaptthresh)', ...
+        '              + connected components inside arena.', ...
+        '  hough     — Hough Circle Transform via imfindcircles.', ...
+        '              Best for circular objects with clear edges.', ...
+        '', ...
+        'Sensitivity (0..1): higher = more detections, more false positives.', ...
+        '  Threshold mode: passes to adaptthresh.', ...
+        '  Hough mode: passes to imfindcircles Sensitivity.', ...
+        '', ...
+        'Neighborhood, cm: window size for local thresholding.', ...
+        '  Smaller -> more locally adaptive (good for uneven lighting).', ...
+        '  Larger -> more global. 0 = auto (MATLAB default).', ...
+        '  Only used in threshold mode.', ...
+        '', ...
+        'Min/Max area, cm^2: filter detected blobs by area.', ...
+        'Radius range, cm: only for Hough mode — search range for circles.', ...
+        '', ...
+        'Buttons:', ...
+        '  Auto-detect    — runs detection, shows green dashed preview.', ...
+        '  Commit         — accepts preview, adds objects to the list.', ...
+        '  Align radii    — replace all detected circles with same radius', ...
+        '                   (default = mean of detected; you can edit).', ...
+        '', ...
+        'For BARNES holes: try mode all-circles + algorithm hough,', ...
+        'radius range 2..7 cm, sensitivity 0.9. Refine with Align radii.' ...
+        };
 end
