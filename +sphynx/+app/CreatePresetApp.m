@@ -110,6 +110,9 @@ classdef CreatePresetApp < handle
         % is writing to ObjectsListBox.Value, so onObjectsListBoxChanged
         % short-circuits and avoids a double refreshPreview (C1).
         UpdatingListboxFromState = false
+        % Objects manager window (Fix 3)
+        ObjectsManagerFig
+        ObjectsCountLabel
     end
 
     methods
@@ -123,6 +126,9 @@ classdef CreatePresetApp < handle
         function delete(app)
             if ~isempty(app.Figure) && isvalid(app.Figure)
                 close(app.Figure);
+            end
+            if ~isempty(app.ObjectsManagerFig) && isvalid(app.ObjectsManagerFig)
+                close(app.ObjectsManagerFig);
             end
         end
 
@@ -957,6 +963,27 @@ classdef CreatePresetApp < handle
             app.LogTextArea.Value = current;
         end
 
+        function showObjectsManager(app)
+            % Open (or bring to front) the Objects + Auto-detect manager window.
+            if ~isempty(app.ObjectsManagerFig) && isvalid(app.ObjectsManagerFig)
+                figure(app.ObjectsManagerFig);
+                return;
+            end
+            fh = uifigure('Name', 'Objects Manager', ...
+                'Position', [200 100 1100 700]);
+            app.ObjectsManagerFig = fh;
+            gl = uigridlayout(fh, [1, 2]);
+            gl.ColumnWidth = {'1x', 380};
+            gl.ColumnSpacing = 8;
+            gl.Padding = [8 8 8 8];
+            objPanel = uipanel(gl, 'Title', 'Objects', ...
+                'FontSize', 14, 'FontWeight', 'bold');
+            adPanel = uipanel(gl, 'Title', 'Auto-detect', ...
+                'FontSize', 14, 'FontWeight', 'bold');
+            buildObjectsControlsIn(app, objPanel);
+            buildAutoDetectControlsIn(app, adPanel);
+        end
+
         function refreshPreview(app)
             if isempty(app.State.frame); return; end
             ax = app.PreviewAxes;
@@ -1015,9 +1042,15 @@ classdef CreatePresetApp < handle
 
         function refreshObjectsList(app)
             % I3: use getSelectedObjectIdx() — no duplicated clamping logic.
+            % Guard: listbox may not exist if manager window is closed.
+            if isempty(app.ObjectsListBox) || ~isvalid(app.ObjectsListBox)
+                app.refreshObjectsCount();
+                return;
+            end
             if isempty(app.State.objects)
                 app.ObjectsListBox.Items = {};
                 app.ObjectsListBox.Value = {};
+                app.refreshObjectsCount();
                 return;
             end
             items = arrayfun(@(o) sprintf('%s (%s)', o.type, o.geometry), ...
@@ -1031,6 +1064,20 @@ classdef CreatePresetApp < handle
                 app.ObjectsListBox.Value = {};
             else
                 app.ObjectsListBox.Value = items(idx);
+            end
+            app.refreshObjectsCount();
+        end
+
+        function refreshObjectsCount(app)
+            % Update the compact summary label in the main left column.
+            if isempty(app.ObjectsCountLabel) || ~isvalid(app.ObjectsCountLabel)
+                return;
+            end
+            n = numel(app.State.objects);
+            if n == 0
+                app.ObjectsCountLabel.Text = '0 objects — click Manage to add/edit';
+            else
+                app.ObjectsCountLabel.Text = sprintf('%d object(s) — click Manage to add/edit', n);
             end
         end
 
@@ -1155,7 +1202,7 @@ function buildCreateTab(app)
     leftScroll = uipanel(app.OuterGrid, 'BorderType', 'none', 'Scrollable', 'on');
     leftScroll.Layout.Column = 1;
 
-    app.LeftGrid = uigridlayout(leftScroll, [7, 1]);
+    app.LeftGrid = uigridlayout(leftScroll, [6, 1]);
     app.LeftGrid.Scrollable = 'on';   % belt-and-braces: also on the grid itself
     % Per-panel height = sum(rowHeights) + (n-1)*rowSpacing + 8 padding
     %                    + ~25 panel title bar. Row heights are 28 px
@@ -1163,11 +1210,10 @@ function buildCreateTab(app)
     % Tuned visually from a screenshot:
     %   Row 1 Load (100), Row 2 Calib (3 rows × 28 + spacing + padding +
     %   panel title ≈ 145), Row 3 Arena (2 rows × 28 + title ≈ 95),
-    %   Row 4 Objects (180 fits ~4 listbox entries + buttons),
-    %   Row 5 Zones (245), Row 6 Save (75),
-    %   Row 7 Auto-detect (7 rows × 28 + title ≈ 250).
-    % Tuned visually: Block 4 (Objects) at 200 -> listbox ≈ 80 px.
-    app.LeftGrid.RowHeight = {100, 145, 95, 340, 245, 75, 290};
+    %   Row 4 Objects compact (label + button = 90),
+    %   Row 5 Zones (245), Row 6 Save (75).
+    %   Objects manager + Auto-detect are in a separate uifigure window.
+    app.LeftGrid.RowHeight = {100, 145, 95, 90, 245, 75};
     app.LeftGrid.RowSpacing = 4;
     app.LeftGrid.Padding = [4 4 4 4];
 
@@ -1181,10 +1227,9 @@ function buildCreateTab(app)
     buildLoadPanel(app);
     buildCalibPanel(app);
     buildArenaPanel(app);
-    buildObjectsPanel(app);
+    buildObjectsPanelCompact(app);
     buildZonesPanel(app);
     buildSavePanel(app);
-    buildAutoDetectPanel(app, app.LeftGrid);
 
     % Right column: preview + nav strip + move strip + log textarea
     app.RightGrid = uigridlayout(app.OuterGrid, [4, 1]);
@@ -1340,8 +1385,9 @@ function buildCalibPanel(app)
     lblExp = uilabel(g, 'Text', 'Exp:');
     lblExp.Layout.Row = 3; lblExp.Layout.Column = 1;
     app.ExpTypeDropDown = uidropdown(g, ...
-        'Items', {'Novelty OF','BowlsOpenField','NOL','Holes Track','Odor Track', ...
+        'Items', {'Barnes','Novelty OF','BowlsOpenField','NOL','Holes Track','Odor Track', ...
                   'Freezing Track','New Track','Complex Context','OF_Obj','3DM','<New>'}, ...
+        'Value', 'Barnes', ...
         'ValueChangedFcn', @(s, ~) onExpTypeChanged(app, s));
     app.ExpTypeDropDown.Layout.Row = 3; app.ExpTypeDropDown.Layout.Column = [2 8];
 end
@@ -1409,10 +1455,26 @@ function buildArenaPanel(app)
     bClear.Layout.Row = 2; bClear.Layout.Column = nGeom + 2;   % flush right
 end
 
-function buildObjectsPanel(app)
+function buildObjectsPanelCompact(app)
+    % Compact placeholder in the main left column: just a summary label
+    % and a button to open the full Objects Manager window.
+    g = uigridlayout(app.ObjectsPanel, [2, 1]);
+    g.RowHeight = {28, 28};
+    g.Padding = [4 4 4 4];
+    g.RowSpacing = 4;
+    app.ObjectsCountLabel = uilabel(g, ...
+        'Text', '0 objects — click Manage to add/edit');
+    bManage = uibutton(g, 'Text', 'Manage objects...', ...
+        'BackgroundColor', semanticColor('action'), ...
+        'ButtonPushedFcn', @(~,~) app.showObjectsManager());
+    bManage.Layout.Row = 2; bManage.Layout.Column = 1;
+end
+
+function buildObjectsControlsIn(app, parent)
+    % Full objects controls, rendered inside `parent` (used in manager window).
     nGeom = 3;       % Polygon / Circle / Ellipse
     nCols = nGeom + 4;
-    g = uigridlayout(app.ObjectsPanel, [5, nCols]);
+    g = uigridlayout(parent, [5, nCols]);
     g.RowHeight = {28, '1x', 28, 28, 28};
     g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {70}, {'fit'}, {60}];
     g.ColumnSpacing = 4;
@@ -1446,6 +1508,18 @@ function buildObjectsPanel(app)
         'Multiselect', 'on', ...
         'ValueChangedFcn', @(~,evt) app.onObjectsListBoxChanged(evt));
     app.ObjectsListBox.Layout.Row = 2; app.ObjectsListBox.Layout.Column = [1 nCols];
+    % Repopulate listbox with current objects (manager may be reopened).
+    if ~isempty(app.State.objects)
+        items = arrayfun(@(o) sprintf('%s (%s)', o.type, o.geometry), ...
+            app.State.objects, 'UniformOutput', false);
+        app.ObjectsListBox.Items = items;
+        idx = app.getSelectedObjectIdx();
+        app.UpdatingListboxFromState = true;
+        cleaner = onCleanup(@() app.resetListboxFlag()); %#ok<NASGU>
+        if ~isempty(idx)
+            app.ObjectsListBox.Value = items(idx);
+        end
+    end
 
     bRemove = uibutton(g, 'Text', 'Remove', ...
         'BackgroundColor', semanticColor('action'), ...
@@ -1618,10 +1692,9 @@ function buildSavePanel(app)
     bInfo.Layout.Row = 1; bInfo.Layout.Column = 5;
 end
 
-function buildAutoDetectPanel(app, parent)
-    adPanel = uipanel(parent, 'Title', 'Auto-detect objects', ...
-        'FontSize', 14, 'FontWeight', 'bold');
-    ag = uigridlayout(adPanel, [8, 3]);
+function buildAutoDetectControlsIn(app, parent)
+    % Build auto-detect controls inside `parent` (uipanel in manager window).
+    ag = uigridlayout(parent, [8, 3]);
     ag.RowHeight = repmat({28}, 1, 8);
     ag.ColumnWidth = {180, '1x', 'fit'};
 
@@ -1736,11 +1809,11 @@ function onCalibrateChoose(app)
         wait(hL);
         if ~isvalid(hL); clear cleanup; return; end
         P = hL.Position;
-        % Pack the single line as 4 points: (1,2) as line endpoints (Y=length),
-        % (3,4) duplicated so X==Y when Compute treats them.
-        app.State.calibPoints = [P(1,1) P(1,2); P(2,1) P(2,2); P(1,1) P(1,2); P(2,1) P(2,2)];
+        % Store only the 2 endpoints (2x2). onCalibrateCompute handles the
+        % 1-line branch directly without routing through pixelsPerCm.
+        app.State.calibPoints = P;   % 2x2 [x1 y1; x2 y2]
         clear cleanup;
-        app.status('Got 1 calibration line; now set cm (use cm Y field) and click "Compute"');
+        app.status('Got 1 calibration line; set total length in "cm Y" and click "Compute"');
     else
         title(ax, 'Click 4 points: Y-pair (1, 2), then X-pair (3, 4)', 'Interpreter', 'none');
         [xPts, yPts] = ginput(4);
@@ -1752,19 +1825,42 @@ function onCalibrateChoose(app)
 end
 
 function onCalibrateCompute(app)
-    if isempty(app.State.calibPoints) || size(app.State.calibPoints, 1) < 4
+    if isempty(app.State.calibPoints)
         app.status('Click "Choose" first');
         return;
     end
     mode = '4 points';
     if ~isempty(app.CalibModeDropDown); mode = app.CalibModeDropDown.Value; end
-    dY = app.DistanceYField.Value;
+
     if strcmpi(mode, '1 line')
-        dX = dY;
-    else
-        dX = app.DistanceXField.Value;
+        % Direct compute: no pixelsPerCm call — use Euclidean length directly.
+        P = app.State.calibPoints;
+        if size(P, 1) < 2; app.status('Need a 2-point line; click "Choose" first'); return; end
+        dxPx = P(2, 1) - P(1, 1);
+        dyPx = P(2, 2) - P(1, 2);
+        lengthPx = sqrt(dxPx^2 + dyPx^2);
+        totalCm = app.DistanceYField.Value;
+        if totalCm <= 0; app.status('Length must be > 0'); return; end
+        pxlPerCm = lengthPx / totalCm;
+        % Derive cm legs proportionally (for status display only).
+        dxCm = totalCm * abs(dxPx) / lengthPx;
+        dyCm = totalCm * abs(dyPx) / lengthPx;
+        % Uniform scaling: X = Y = pxlPerCm, kcorr = 1.
+        app.setPixelsPerCm(pxlPerCm, 'Y', pxlPerCm, 'X', pxlPerCm, 'KCorr', 1);
+        app.status(sprintf( ...
+            'Calibrated (1 line): pxlPerCm=%.3f | legs px [dx=%.1f dy=%.1f] cm [dx=%.2f dy=%.2f] | total %.1f px / %.1f cm', ...
+            pxlPerCm, dxPx, dyPx, dxCm, dyCm, lengthPx, totalCm));
+        return;
     end
-    [pxlAvg, kcorr, pxlY, pxlX, diffPct] = sphynx.preset.pixelsPerCm(app.State.frame, ...
+
+    % 4-point / 2-line path: need exactly 4 stored points.
+    if size(app.State.calibPoints, 1) < 4
+        app.status('Click "Choose" first (need 4 points)');
+        return;
+    end
+    dY = app.DistanceYField.Value;
+    dX = app.DistanceXField.Value;
+    [pxlAvg, kcorr, pxlY, pxlX, ~] = sphynx.preset.pixelsPerCm(app.State.frame, ...
         'Points', app.State.calibPoints, ...
         'DistancesCm', [dY, dX]);
     % Always pass actual Y and X so the labels show the raw measurements
