@@ -118,6 +118,13 @@ classdef CreatePresetApp < handle
         ManagerStatusLabel
         PendingShapeHandles    % cell array of drawXX handles
         PendingShapeGeometries % cell array of strings: geometry of each pending
+        % Auto-detect neighborhood (Fix 5)
+        AutoNeighborhoodField
+        % Uniform radius (Fix 6)
+        AutoUniformRadiusChk
+        AutoUniformRadiusField
+        % Mirror listbox in Block 4 (Fix 7)
+        ObjectsMirrorListBox
     end
 
     methods
@@ -243,11 +250,13 @@ classdef CreatePresetApp < handle
             end
             app.setSelectedObjectIdx([]);
             app.refreshObjectsList();
+            app.refreshManagerPreview();
             app.refreshPreview();
             onZoneStrategyChanged(app);
             app.refreshMoveTargets();
             sphynx.util.log('info', '[App] removed %d object(s); %d remain', ...
                 numel(idx), numel(app.State.objects));
+            app.focusManagerIfOpen();
         end
 
         function replaceSelectedObject(app)
@@ -263,10 +272,11 @@ classdef CreatePresetApp < handle
                 obj.type = app.State.objects(idx).type;     % preserve label
                 app.State.objects(idx) = obj;
                 app.refreshObjectsList();
+                app.refreshManagerPreview();
                 app.refreshPreview();
                 app.refreshMoveTargets();
                 sphynx.util.log('info', '[App] replaced %s with new %s', obj.type, geometry);
-                app.refocus();
+                app.focusManagerIfOpen();
             catch ME
                 app.status(sprintf('Replace failed: %s', ME.message));
             end
@@ -334,9 +344,11 @@ classdef CreatePresetApp < handle
             app.State.objects(idx).type = strtrim(answer{1});
             app.refreshObjectsList();
             app.refreshMoveTargets();
+            app.refreshManagerPreview();
             app.refreshPreview();
             app.invalidateZonesOnTransform();
             app.applog('info', 'Renamed %s -> %s', oldName, app.State.objects(idx).type);
+            app.focusManagerIfOpen();
         end
 
         function assignClassToSelected(app)
@@ -351,7 +363,9 @@ classdef CreatePresetApp < handle
             for k = idx(:)'
                 app.State.objects(k).class = val;
             end
+            app.refreshManagerPreview();
             app.status(sprintf('Assigned class "%s" to %d objects', val, numel(idx)));
+            app.focusManagerIfOpen();
         end
 
         function copyObjectsN(app)
@@ -456,8 +470,10 @@ classdef CreatePresetApp < handle
             app.refreshObjectsList();
             app.refreshMoveTargets();
             app.setSelectedObjectIdx(newIdx);
+            app.refreshManagerPreview();
             app.refreshPreview();
             app.status(sprintf('Committed %d copies', numel(newIdx)));
+            app.focusManagerIfOpen();
         end
 
         function addZones(app)
@@ -550,8 +566,10 @@ classdef CreatePresetApp < handle
                 'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
             app.refreshObjectsList();
             app.clearZones();
+            app.refreshManagerPreview();
             app.refreshPreview();
             app.status('Deleted all objects');
+            app.focusManagerIfOpen();
         end
 
         function refreshPreviewTitle(app)
@@ -847,18 +865,23 @@ classdef CreatePresetApp < handle
                 app.status('Need video + arena before auto-detect');
                 return;
             end
+            pxlPerCm = app.State.pxlPerCm;
+            % Guard NaN pxlPerCm -> area filters would reject everything
+            if isnan(pxlPerCm) || pxlPerCm <= 0
+                pxlPerCm = 1;   % treat as 1 px/cm (areas in px^2)
+            end
             cfg = struct( ...
                 'mode',         app.AutoModeDropdown.Value, ...
                 'algorithm',    app.AutoAlgorithmDropdown.Value, ...
                 'sensitivity',  app.AutoSensitivitySlider.Value, ...
                 'minAreaCm2',   app.AutoMinAreaField.Value, ...
                 'maxAreaCm2',   app.AutoMaxAreaField.Value, ...
-                'pxlPerCm',     app.State.pxlPerCm, ...
-                'radiusRangePx', [app.AutoRadiusMinField.Value, app.AutoRadiusMaxField.Value]);
-            % Guard NaN pxlPerCm -> area filters would reject everything
-            if isnan(cfg.pxlPerCm) || cfg.pxlPerCm <= 0
-                cfg.pxlPerCm = 1;   % treat as 1 px/cm (areas in px^2)
-            end
+                'pxlPerCm',     pxlPerCm, ...
+                'radiusRangePx', [app.AutoRadiusMinField.Value * pxlPerCm, ...
+                                  app.AutoRadiusMaxField.Value * pxlPerCm], ...
+                'neighborhoodCm', app.AutoNeighborhoodField.Value, ...
+                'uniformRadius',  app.AutoUniformRadiusChk.Value, ...
+                'uniformRadiusPx', app.AutoUniformRadiusField.Value * pxlPerCm);
             try
                 if size(app.State.frame, 3) == 3
                     gray = rgb2gray(app.State.frame);
@@ -867,8 +890,10 @@ classdef CreatePresetApp < handle
                 end
                 objs = sphynx.preset.autoDetectObjects(gray, app.State.arena.mask, cfg);
                 app.State.autoDetectedObjects = objs;
+                app.refreshManagerPreview();
                 app.refreshPreview();
                 app.status(sprintf('Auto-detected %d objects (preview only; click Commit to add)', numel(objs)));
+                app.focusManagerIfOpen();
             catch ME
                 app.status(sprintf('Auto-detect failed: %s', ME.message));
             end
@@ -961,13 +986,13 @@ classdef CreatePresetApp < handle
             try
                 switch geom
                     case 'Polygon'
-                        h = drawpolygon(app.ManagerAxes, 'Color', [0 0.6 0]);
+                        h = drawpolygon(app.ManagerAxes, 'Color', [0 0.6 0], 'LineWidth', 1);
                     case 'Circle'
-                        h = drawcircle(app.ManagerAxes, 'Color', [0 0.6 0]);
+                        h = drawcircle(app.ManagerAxes, 'Color', [0 0.6 0], 'LineWidth', 1);
                     case 'Ellipse'
-                        h = drawellipse(app.ManagerAxes, 'Color', [0 0.6 0]);
+                        h = drawellipse(app.ManagerAxes, 'Color', [0 0.6 0], 'LineWidth', 1);
                     otherwise
-                        h = drawpolygon(app.ManagerAxes, 'Color', [0 0.6 0]);
+                        h = drawpolygon(app.ManagerAxes, 'Color', [0 0.6 0], 'LineWidth', 1);
                 end
                 wait(h);
                 if ~isvalid(h)
@@ -978,6 +1003,7 @@ classdef CreatePresetApp < handle
                 app.PendingShapeGeometries{end+1} = geom;
                 app.ManagerStatusLabel.Text = sprintf('Pending: %d shape(s). Click + Add shape for next, or Commit pending.', ...
                     numel(app.PendingShapeHandles));
+                app.focusManagerIfOpen();
             catch ME
                 if ~isempty(app.ManagerStatusLabel) && isvalid(app.ManagerStatusLabel)
                     app.ManagerStatusLabel.Text = sprintf('Add shape failed: %s', ME.message);
@@ -1039,6 +1065,7 @@ classdef CreatePresetApp < handle
             if ~isempty(app.ManagerStatusLabel) && isvalid(app.ManagerStatusLabel)
                 app.ManagerStatusLabel.Text = sprintf('Committed %d shapes', nCommitted);
             end
+            app.focusManagerIfOpen();
         end
 
         function cancelPendingShapes(app)
@@ -1051,6 +1078,7 @@ classdef CreatePresetApp < handle
             if ~isempty(app.ManagerStatusLabel) && isvalid(app.ManagerStatusLabel)
                 app.ManagerStatusLabel.Text = 'Pending cleared';
             end
+            app.focusManagerIfOpen();
         end
 
         function orderObjectsBarnes(app)
@@ -1083,8 +1111,10 @@ classdef CreatePresetApp < handle
             rel = mod(angles - targetAng, 2*pi);
             [~, order] = sort(rel);
             reordered = app.State.objects(order);
-            for k = 1:numel(reordered)
-                reordered(k).type = sprintf('Object%d', k);
+            % order(1) is the target (rel_target = 0). Rename target + CW objects.
+            reordered(1).type = 'target';
+            for k = 2:numel(reordered)
+                reordered(k).type = sprintf('Object%d', k - 1);
             end
             app.State.objects = reordered;
             app.refreshObjectsList();
@@ -1092,7 +1122,8 @@ classdef CreatePresetApp < handle
             app.setSelectedObjectIdx(1);
             app.refreshManagerPreview();
             app.refreshPreview();
-            app.status(sprintf('Ordered %d objects CW from target', n));
+            app.status(sprintf('Ordered: target + %d objects CW around arena center', n - 1));
+            app.focusManagerIfOpen();
         end
 
         function onSensitivityChanging(app)
@@ -1124,8 +1155,10 @@ classdef CreatePresetApp < handle
                 'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
             app.refreshObjectsList();
             app.refreshMoveTargets();
+            app.refreshManagerPreview();
             app.refreshPreview();
             app.status(sprintf('Committed %d auto-detected objects', nAdded));
+            app.focusManagerIfOpen();
         end
     end
 
@@ -1170,6 +1203,21 @@ classdef CreatePresetApp < handle
             % Bring app figure back to front (after a log/status / external focus)
             if ~isempty(app.Figure) && isvalid(app.Figure)
                 figure(app.Figure);
+            end
+        end
+
+        function focusManagerIfOpen(app)
+            % Restore focus to the Objects Manager window after operations.
+            % For uifigure, figure() may not bring to front on all platforms;
+            % try WindowStyle + drawnow as fallback.
+            if ~isempty(app.ObjectsManagerFig) && isvalid(app.ObjectsManagerFig)
+                try
+                    app.ObjectsManagerFig.WindowStyle = 'normal';
+                    figure(app.ObjectsManagerFig);
+                catch
+                    % uifigure may not respond to figure() — use drawnow
+                    drawnow;
+                end
             end
         end
 
@@ -1278,6 +1326,17 @@ classdef CreatePresetApp < handle
         function refreshObjectsList(app)
             % I3: use getSelectedObjectIdx() — no duplicated clamping logic.
             % Guard: listbox may not exist if manager window is closed.
+            % Build items list for both listboxes
+            if isempty(app.State.objects)
+                mirrorItems = {};
+            else
+                mirrorItems = arrayfun(@(o) o.type, app.State.objects, 'UniformOutput', false);
+            end
+            % Mirror listbox in main Block 4 (Fix 7) — always sync regardless of manager
+            if ~isempty(app.ObjectsMirrorListBox) && isvalid(app.ObjectsMirrorListBox)
+                app.ObjectsMirrorListBox.Items = mirrorItems;
+            end
+            % Manager listbox — only if open
             if isempty(app.ObjectsListBox) || ~isvalid(app.ObjectsListBox)
                 app.refreshObjectsCount();
                 return;
@@ -1445,10 +1504,10 @@ function buildCreateTab(app)
     % Tuned visually from a screenshot:
     %   Row 1 Load (100), Row 2 Calib (3 rows × 28 + spacing + padding +
     %   panel title ≈ 145), Row 3 Arena (2 rows × 28 + title ≈ 95),
-    %   Row 4 Objects compact (label + button = 90),
+    %   Row 4 Objects compact (label + button + mirror listbox = 200),
     %   Row 5 Zones (245), Row 6 Save (75).
     %   Objects manager + Auto-detect are in a separate uifigure window.
-    app.LeftGrid.RowHeight = {100, 145, 95, 90, 245, 75};
+    app.LeftGrid.RowHeight = {100, 145, 95, 200, 245, 75};
     app.LeftGrid.RowSpacing = 4;
     app.LeftGrid.Padding = [4 4 4 4];
 
@@ -1691,10 +1750,10 @@ function buildArenaPanel(app)
 end
 
 function buildObjectsPanelCompact(app)
-    % Compact placeholder in the main left column: just a summary label
-    % and a button to open the full Objects Manager window.
-    g = uigridlayout(app.ObjectsPanel, [2, 1]);
-    g.RowHeight = {28, 28};
+    % Block 4: count label + Manage button + read-only mirror listbox.
+    % The listbox is kept in sync with state.objects via refreshObjectsList.
+    g = uigridlayout(app.ObjectsPanel, [3, 1]);
+    g.RowHeight = {28, 28, '1x'};
     g.Padding = [4 4 4 4];
     g.RowSpacing = 4;
     app.ObjectsCountLabel = uilabel(g, ...
@@ -1703,6 +1762,9 @@ function buildObjectsPanelCompact(app)
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.showObjectsManager());
     bManage.Layout.Row = 2; bManage.Layout.Column = 1;
+    % Read-only mirror listbox — same items as manager listbox (Fix 7)
+    app.ObjectsMirrorListBox = uilistbox(g, 'Items', {}, 'Enable', 'off');
+    app.ObjectsMirrorListBox.Layout.Row = 3; app.ObjectsMirrorListBox.Layout.Column = 1;
 end
 
 function buildObjectsListIn(app, parent)
@@ -1974,8 +2036,11 @@ end
 
 function buildAutoDetectControlsIn(app, parent)
     % Build auto-detect controls inside `parent` (uipanel in manager window).
-    ag = uigridlayout(parent, [8, 3]);
-    ag.RowHeight = repmat({28}, 1, 8);
+    % Rows: 1=Mode, 2=Alg, 3=Sensitivity, 4=MinArea, 5=MaxArea,
+    %       6=Radius range cm, 7=Uniform radius checkbox, 8=Uniform radius cm,
+    %       9=Neighborhood cm, 10=Start from, 11=buttons
+    ag = uigridlayout(parent, [11, 3]);
+    ag.RowHeight = repmat({28}, 1, 11);
     ag.ColumnWidth = {180, '1x', 'fit'};
 
     lblMode = uilabel(ag, 'Text', 'Mode:');
@@ -2007,22 +2072,40 @@ function buildAutoDetectControlsIn(app, parent)
     app.AutoMaxAreaField = uieditfield(ag, 'numeric', 'Value', 500, 'Limits', [0 1e6]);
     app.AutoMaxAreaField.Layout.Row = 5; app.AutoMaxAreaField.Layout.Column = 2;
 
-    lblR = uilabel(ag, 'Text', 'Radius range, px (Hough):');
+    % Fix 6: Radius range in cm (converted to px in runAutoDetect)
+    lblR = uilabel(ag, 'Text', 'Radius range, cm:');
     lblR.Layout.Row = 6; lblR.Layout.Column = 1;
     rGrid = uigridlayout(ag, [1, 2]);
     rGrid.Layout.Row = 6; rGrid.Layout.Column = 2;
     rGrid.Padding = [0 0 0 0];
-    app.AutoRadiusMinField = uieditfield(rGrid, 'numeric', 'Value', 5);
-    app.AutoRadiusMaxField = uieditfield(rGrid, 'numeric', 'Value', 30);
+    app.AutoRadiusMinField = uieditfield(rGrid, 'numeric', 'Value', 1);
+    app.AutoRadiusMaxField = uieditfield(rGrid, 'numeric', 'Value', 5);
+
+    % Fix 6: Uniform radius checkbox
+    app.AutoUniformRadiusChk = uicheckbox(ag, ...
+        'Text', 'Uniform radius (all-circles)', 'Value', false);
+    app.AutoUniformRadiusChk.Layout.Row = 7; app.AutoUniformRadiusChk.Layout.Column = [1 2];
+
+    % Fix 6: Uniform radius value in cm
+    lblUR = uilabel(ag, 'Text', 'Uniform radius, cm:');
+    lblUR.Layout.Row = 8; lblUR.Layout.Column = 1;
+    app.AutoUniformRadiusField = uieditfield(ag, 'numeric', 'Value', 2, 'Limits', [0.1 100]);
+    app.AutoUniformRadiusField.Layout.Row = 8; app.AutoUniformRadiusField.Layout.Column = 2;
+
+    % Fix 5: Neighborhood size in cm for adaptthresh (local lighting adaptation)
+    lblNh = uilabel(ag, 'Text', 'Neighborhood, cm:');
+    lblNh.Layout.Row = 9; lblNh.Layout.Column = 1;
+    app.AutoNeighborhoodField = uieditfield(ag, 'numeric', 'Value', 10, 'Limits', [0 100]);
+    app.AutoNeighborhoodField.Layout.Row = 9; app.AutoNeighborhoodField.Layout.Column = 2;
 
     lblStart = uilabel(ag, 'Text', 'Start numbering from:');
-    lblStart.Layout.Row = 7; lblStart.Layout.Column = 1;
+    lblStart.Layout.Row = 10; lblStart.Layout.Column = 1;
     app.AutoStartFromField = uieditfield(ag, 'numeric', 'Value', 1, ...
         'Limits', [1 1e6], 'RoundFractionalValues', 'on');
-    app.AutoStartFromField.Layout.Row = 7; app.AutoStartFromField.Layout.Column = 2;
+    app.AutoStartFromField.Layout.Row = 10; app.AutoStartFromField.Layout.Column = 2;
 
     btnGrid = uigridlayout(ag, [1, 2]);
-    btnGrid.Layout.Row = 8; btnGrid.Layout.Column = [1 3];
+    btnGrid.Layout.Row = 11; btnGrid.Layout.Column = [1 3];
     btnGrid.ColumnWidth = {'1x', '1x'};
     btnGrid.Padding = [0 0 0 0];
     bDetect = uibutton(btnGrid, 'Text', 'Auto-detect', ...
@@ -2658,22 +2741,23 @@ function h = createPendingROI(ax, geom, pos)
             % drawcircle Position is [cx, cy, r] but we store .Position as struct.
             % Safe fallback: create at default center derived from pos if numeric.
             if isstruct(pos)
-                h = drawcircle(ax, 'Center', pos.Center, 'Radius', pos.Radius, 'Color', [0 0.6 0]);
+                h = drawcircle(ax, 'Center', pos.Center, 'Radius', pos.Radius, ...
+                    'Color', [0 0.6 0], 'LineWidth', 1);
             else
-                h = drawcircle(ax, 'Color', [0 0.6 0]);
+                h = drawcircle(ax, 'Color', [0 0.6 0], 'LineWidth', 1);
             end
         case 'Ellipse'
             if isstruct(pos)
                 h = drawellipse(ax, 'Center', pos.Center, 'SemiAxes', pos.SemiAxes, ...
-                    'RotationAngle', pos.RotationAngle, 'Color', [0 0.6 0]);
+                    'RotationAngle', pos.RotationAngle, 'Color', [0 0.6 0], 'LineWidth', 1);
             else
-                h = drawellipse(ax, 'Color', [0 0.6 0]);
+                h = drawellipse(ax, 'Color', [0 0.6 0], 'LineWidth', 1);
             end
         otherwise  % Polygon
             if ~isempty(pos)
-                h = drawpolygon(ax, 'Position', pos, 'Color', [0 0.6 0]);
+                h = drawpolygon(ax, 'Position', pos, 'Color', [0 0.6 0], 'LineWidth', 1);
             else
-                h = drawpolygon(ax, 'Color', [0 0.6 0]);
+                h = drawpolygon(ax, 'Color', [0 0.6 0], 'LineWidth', 1);
             end
     end
 end

@@ -6,12 +6,15 @@ function objs = autoDetectObjects(gray, arenaMask, cfg)
 %   gray       HxW grayscale uint8/uint16/double
 %   arenaMask  HxW logical
 %   cfg fields (struct):
-%     mode         'free-form' | 'all-circles' | 'all-polygons' | 'all-ellipses'
-%     algorithm    'threshold' | 'hough'  (hough only for all-circles)
-%     sensitivity  0..1
+%     mode           'free-form' | 'all-circles' | 'all-polygons' | 'all-ellipses'
+%     algorithm      'threshold' | 'hough'  (hough only for all-circles)
+%     sensitivity    0..1
 %     minAreaCm2, maxAreaCm2  scalar
-%     pxlPerCm     scalar
-%     radiusRangePx  (hough only) [rMin rMax]
+%     pxlPerCm       scalar
+%     radiusRangePx  (hough only) [rMin rMax] in pixels
+%     neighborhoodCm (optional) adaptthresh neighborhood size in cm; 0=default
+%     uniformRadius  (optional) logical — override detected radius with uniformRadiusPx
+%     uniformRadiusPx (optional) uniform circle radius in pixels (all-circles only)
 %
 %   Returns struct array with fields type/geometry/border_x/border_y/mask/class.
 
@@ -35,6 +38,10 @@ function objs = autoDetectObjects(gray, arenaMask, cfg)
     if strcmp(cfg.mode, 'all-circles') && strcmp(cfg.algorithm, 'hough')
         [centers, radii] = imfindcircles(gray, cfg.radiusRangePx, ...
             'Sensitivity', cfg.sensitivity, 'ObjectPolarity', 'dark');
+        % Fix 6: apply uniform radius if requested
+        if isfield(cfg, 'uniformRadius') && cfg.uniformRadius && isfield(cfg, 'uniformRadiusPx')
+            radii(:) = cfg.uniformRadiusPx;
+        end
         for k = 1:size(centers, 1)
             cx = centers(k, 1); cy = centers(k, 2); r = radii(k);
             % Clamp to valid indices before centroid-in-arena check
@@ -71,7 +78,14 @@ function objs = autoDetectObjects(gray, arenaMask, cfg)
     floorFrac  = 1 - (1 - cfg.sensitivity) * 0.4;
     floorThresh = floorLevel / 255 * floorFrac;
 
-    threshMap = adaptthresh(gray, cfg.sensitivity);
+    % Fix 5: use NeighborhoodSize in cm for more local adaptation under uneven lighting.
+    % neighborhoodCm == 0 means use MATLAB default (global estimate).
+    if isfield(cfg, 'neighborhoodCm') && cfg.neighborhoodCm > 0
+        nhoodPx = max(3, 2*round(cfg.neighborhoodCm * cfg.pxlPerCm / 2) + 1);  % odd integer
+        threshMap = adaptthresh(gray, cfg.sensitivity, 'NeighborhoodSize', nhoodPx);
+    else
+        threshMap = adaptthresh(gray, cfg.sensitivity);
+    end
     % Use the stricter (lower) of adaptthresh and floor-based threshold so
     % that adaptthresh boundary artefacts on uniform backgrounds are suppressed.
     combinedThresh = min(threshMap, floorThresh);
@@ -109,7 +123,13 @@ function objs = autoDetectObjects(gray, arenaMask, cfg)
                 B = bwboundaries(compMask, 'noholes');
                 if isempty(B); continue; end
                 v = B{1};
-                [xc, yc, R] = sphynx.util.circleFit(v(:, 2), v(:, 1));
+                % Fix 6: uniform radius mode uses centroid + specified radius
+                if isfield(cfg, 'uniformRadius') && cfg.uniformRadius && isfield(cfg, 'uniformRadiusPx')
+                    xc = c(1); yc = c(2);
+                    R  = cfg.uniformRadiusPx;
+                else
+                    [xc, yc, R] = sphynx.util.circleFit(v(:, 2), v(:, 1));
+                end
                 ang = linspace(0, 2*pi, 60)';
                 bx = xc + R*cos(ang);
                 by = yc + R*sin(ang);
