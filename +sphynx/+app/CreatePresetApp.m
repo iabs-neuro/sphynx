@@ -120,8 +120,12 @@ classdef CreatePresetApp < handle
         PendingShapeGeometries % cell array of strings: geometry of each pending
         % Auto-detect neighborhood
         AutoNeighborhoodField
+        % Live sensitivity value display label (Fix 4)
+        AutoSensitivityValueLabel
         % Mirror listbox in Block 4 (Fix 7)
         ObjectsMirrorListBox
+        % Draft model: true while manager is open / has uncommitted edits (Fix 5)
+        ManagerSessionDirty = false
     end
 
     methods
@@ -285,8 +289,8 @@ classdef CreatePresetApp < handle
             app.refitAllMasks();
             Z = computeZonesFromUI(app);
             if isempty(Z); return; end
-            if ~isempty(app.State.objects)
-                Zobj = sphynx.preset.buildObjectZones(app.State.objects, ...
+            if ~isempty(app.State.savedObjects)
+                Zobj = sphynx.preset.buildObjectZones(app.State.savedObjects, ...
                     app.State.height, app.State.width, ...
                     'PixelsPerCm', app.State.pxlPerCm, ...
                     'ZoneWidthCm', app.ObjectZoneWidthField.Value);
@@ -309,6 +313,14 @@ classdef CreatePresetApp < handle
                     sphynx.preset.maskFromBorder(app.State.height, app.State.width, ...
                     obj.border_x, obj.border_y), 'holes');
                 app.State.objects(k) = obj;
+            end
+            % Also refit savedObjects masks (draft model: zones use savedObjects).
+            for k = 1:numel(app.State.savedObjects)
+                obj = app.State.savedObjects(k);
+                obj.mask = imfill(...
+                    sphynx.preset.maskFromBorder(app.State.height, app.State.width, ...
+                    obj.border_x, obj.border_y), 'holes');
+                app.State.savedObjects(k) = obj;
             end
         end
 
@@ -480,13 +492,14 @@ classdef CreatePresetApp < handle
             Z = computeZonesFromUI(app);
             if isempty(Z); return; end
             % Object zones — only if not already committed (dedup).
-            if ~isempty(app.State.objects)
+            % Uses savedObjects (draft model Fix 5).
+            if ~isempty(app.State.savedObjects)
                 hasObjectZones = false;
                 if ~isempty(app.State.zones)
                     hasObjectZones = any(startsWith(string({app.State.zones.name}), 'Object'));
                 end
                 if ~hasObjectZones
-                    Zobj = sphynx.preset.buildObjectZones(app.State.objects, ...
+                    Zobj = sphynx.preset.buildObjectZones(app.State.savedObjects, ...
                         app.State.height, app.State.width, ...
                         'PixelsPerCm', app.State.pxlPerCm, ...
                         'ZoneWidthCm', app.ObjectZoneWidthField.Value);
@@ -507,14 +520,14 @@ classdef CreatePresetApp < handle
                     Z = [Z, Zcorners];
                 end
             end
-            % Object centers (one per object)
-            if ~isempty(app.State.objects)
+            % Object centers (one per object). Uses savedObjects (draft model Fix 5).
+            if ~isempty(app.State.savedObjects)
                 hasCenters = false;
                 if ~isempty(app.State.zones)
                     hasCenters = any(endsWith(string({app.State.zones.name}), 'Center'));
                 end
                 if ~hasCenters
-                    Zcenters = objectCenterZones(app.State.objects);
+                    Zcenters = objectCenterZones(app.State.savedObjects);
                     Z = [Z, Zcenters];
                 end
             end
@@ -585,6 +598,9 @@ classdef CreatePresetApp < handle
             app.State.arena = [];
             app.State.objects = struct('type', {}, 'geometry', {}, ...
                 'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
+            app.State.savedObjects = struct('type', {}, 'geometry', {}, ...
+                'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
+            app.ManagerSessionDirty = false;
             app.State.zones = struct('name', {}, 'type', {}, 'maskfilled', {});
             app.State.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
             app.State.zoneStrategies = {};
@@ -597,6 +613,11 @@ classdef CreatePresetApp < handle
         function savePreset(app)
             if isempty(app.State.outDir); app.status('Set output dir'); return; end
             if isempty(app.State.arena); app.status('Define arena first'); return; end
+            % Draft model: auto-finish uncommitted manager edits before save.
+            if app.ManagerSessionDirty
+                app.status('Auto-finishing Objects Manager draft before save');
+                app.finishManager();
+            end
             try
                 Options = app.assembleOptions();
                 ArenaAndObjects = app.assembleArenaAndObjects();
@@ -633,13 +654,15 @@ classdef CreatePresetApp < handle
             autoSaveLayoutPlot(app, sessionDir, baseName);
 
             if plotAll && ~isempty(app.State.zones)
+                makePlotState = app.State;
+                makePlotState.objects = app.State.savedObjects;
                 for k = 1:numel(app.State.zones)
                     z = app.State.zones(k);
                     if isfield(z, 'type') && strcmp(z.type, 'point'); continue; end
                     fh2 = figure('Visible', 'off', 'Position', [100 100 800 600]);
                     cleanup2 = onCleanup(@() closeIfValid(fh2));
                     ax2 = axes(fh2);
-                    drawState(ax2, app.State, false);
+                    drawState(ax2, makePlotState, false);
                     if (isnumeric(z.maskfilled) || islogical(z.maskfilled))
                         hold(ax2, 'on');
                         drawZoneFilled(ax2, z, [0 0.5 1], 0.35);
@@ -1121,8 +1144,31 @@ classdef CreatePresetApp < handle
             app.focusManagerIfOpen();
         end
 
-        function onSensitivityChanging(app)
+        function updateAutoDetectEnableState(app)
+            % Enable/disable Hough vs threshold controls based on Mode + Algorithm.
+            if isempty(app.AutoModeDropdown); return; end
+            mode = app.AutoModeDropdown.Value;
+            isCircles = strcmp(mode, 'all-circles');
+            app.AutoAlgorithmDropdown.Enable = toOnOff(isCircles);
+            if isCircles
+                alg = app.AutoAlgorithmDropdown.Value;
+            else
+                alg = 'threshold';
+            end
+            isHough = isCircles && strcmp(alg, 'hough');
+            app.AutoNeighborhoodField.Enable = toOnOff(~isHough);
+            app.AutoRadiusMinField.Enable    = toOnOff(isHough);
+            app.AutoRadiusMaxField.Enable    = toOnOff(isHough);
+        end
+
+        function onSensitivityChanging(app, evt)
             % Debounced live slider: re-run auto-detect while user drags.
+            % Update live value label.
+            if ~isempty(app.AutoSensitivityValueLabel) && isvalid(app.AutoSensitivityValueLabel)
+                app.AutoSensitivityValueLabel.Text = sprintf('%.2f', evt.Value);
+            end
+            % Mirror slider Value so runAutoDetect reads the live value.
+            app.AutoSensitivitySlider.Value = evt.Value;
             if isempty(app.State.frame) || isempty(app.State.arena); return; end
             if isempty(app.State.arena.mask); return; end
             app.runAutoDetect();
@@ -1298,6 +1344,12 @@ classdef CreatePresetApp < handle
                 figure(app.ObjectsManagerFig);
                 return;
             end
+            if ~app.ManagerSessionDirty
+                % Fresh session: copy committed state to working copy so
+                % the manager starts from where the saved state left off.
+                app.State.objects = app.State.savedObjects;
+                app.ManagerSessionDirty = true;
+            end
             fh = uifigure('Name', 'Objects Manager', ...
                 'Position', [120 80 1400 750]);
             app.ObjectsManagerFig = fh;
@@ -1313,6 +1365,24 @@ classdef CreatePresetApp < handle
             buildObjectsListIn(app, listPanel);
             buildObjectsPickIn(app, previewPanel);
             buildAutoDetectControlsIn(app, adPanel);
+        end
+
+        function finishManager(app)
+            % Commit working copy (app.State.objects) to saved state and close manager.
+            app.State.savedObjects = app.State.objects;
+            app.ManagerSessionDirty = false;
+            if isfield(app.State, 'autoDetectedObjects')
+                app.State.autoDetectedObjects = struct('type', {}, 'geometry', {}, ...
+                    'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
+            end
+            app.refreshPreview();
+            app.refreshObjectsList();
+            app.refreshMoveTargets();
+            app.status(sprintf('Finished: %d object(s) committed', numel(app.State.savedObjects)));
+            if ~isempty(app.ObjectsManagerFig) && isvalid(app.ObjectsManagerFig)
+                delete(app.ObjectsManagerFig);
+            end
+            app.ObjectsManagerFig = [];
         end
 
         function refreshPreview(app)
@@ -1348,79 +1418,59 @@ classdef CreatePresetApp < handle
                 plot(ax, app.State.arena.border_x(:), app.State.arena.border_y(:), ...
                     'k-', 'LineWidth', 2);
             end
-            % Objects with selection highlight
-            selIdxVec = app.getSelectedObjectIdx();
-            for k = 1:numel(app.State.objects)
-                if ismember(k, selIdxVec)
-                    lw = 3.5; col = [1 0.85 0];   % amber/yellow for selected
-                else
-                    lw = 1.5; col = [0 0.7 0];
-                end
-                plot(ax, app.State.objects(k).border_x(:), app.State.objects(k).border_y(:), ...
-                    '-', 'Color', col, 'LineWidth', lw);
-            end
-            % Auto-detected objects preview overlay (green dashed, before Commit)
-            if isfield(app.State, 'autoDetectedObjects') && ~isempty(app.State.autoDetectedObjects)
-                for k = 1:numel(app.State.autoDetectedObjects)
-                    ado = app.State.autoDetectedObjects(k);
-                    if isempty(ado.border_x); continue; end
-                    plot(ax, ado.border_x, ado.border_y, '--', ...
-                        'Color', [0 0.8 0], 'LineWidth', 1.5);
-                end
+            % Objects — main panel shows SAVED state only (draft model Fix 5).
+            % Selection highlight and auto-detect overlay are manager-only.
+            savedObjs = app.State.savedObjects;
+            for k = 1:numel(savedObjs)
+                plot(ax, savedObjs(k).border_x(:), savedObjs(k).border_y(:), ...
+                    '-', 'Color', [0 0.7 0], 'LineWidth', 1.5);
             end
             hold(ax, 'off');
         end
 
         function refreshObjectsList(app)
             % I3: use getSelectedObjectIdx() — no duplicated clamping logic.
-            % Guard: listbox may not exist if manager window is closed.
-            % Build items list for both listboxes
-            if isempty(app.State.objects)
-                mirrorItems = {};
-            else
-                mirrorItems = arrayfun(@(o) o.type, app.State.objects, 'UniformOutput', false);
+            % Draft model (Fix 5): manager listbox = working state (objects);
+            %   mirror listbox in main panel = saved state (savedObjects).
+
+            % Manager listbox — working state
+            if ~isempty(app.ObjectsListBox) && isvalid(app.ObjectsListBox)
+                if isempty(app.State.objects)
+                    workingItems = {};
+                else
+                    workingItems = arrayfun(@(o) sprintf('%s (%s)', o.type, o.geometry), ...
+                        app.State.objects, 'UniformOutput', false);
+                end
+                app.UpdatingListboxFromState = true;
+                cleaner = onCleanup(@() app.resetListboxFlag()); %#ok<NASGU>
+                app.ObjectsListBox.Items = workingItems;
+                idx = app.getSelectedObjectIdx();
+                if isempty(idx)
+                    app.ObjectsListBox.Value = {};
+                else
+                    app.ObjectsListBox.Value = workingItems(idx);
+                end
             end
-            % Mirror listbox in main Block 4 (Fix 7) — always sync regardless of manager
+            % Mirror listbox in main Block 4 — saved state
             if ~isempty(app.ObjectsMirrorListBox) && isvalid(app.ObjectsMirrorListBox)
-                app.ObjectsMirrorListBox.Items = mirrorItems;
-            end
-            % Manager listbox — only if open
-            if isempty(app.ObjectsListBox) || ~isvalid(app.ObjectsListBox)
-                app.refreshObjectsCount();
-                return;
-            end
-            if isempty(app.State.objects)
-                app.ObjectsListBox.Items = {};
-                app.ObjectsListBox.Value = {};
-                app.refreshObjectsCount();
-                return;
-            end
-            items = arrayfun(@(o) sprintf('%s (%s)', o.type, o.geometry), ...
-                app.State.objects, 'UniformOutput', false);
-            app.ObjectsListBox.Items = items;
-            % C1: guard so writing Value doesn't fire onObjectsListBoxChanged.
-            idx = app.getSelectedObjectIdx();
-            app.UpdatingListboxFromState = true;
-            cleaner = onCleanup(@() app.resetListboxFlag()); %#ok<NASGU>
-            if isempty(idx)
-                app.ObjectsListBox.Value = {};
-            else
-                app.ObjectsListBox.Value = items(idx);
+                if isempty(app.State.savedObjects)
+                    savedItems = {};
+                else
+                    savedItems = arrayfun(@(o) o.type, app.State.savedObjects, 'UniformOutput', false);
+                end
+                app.ObjectsMirrorListBox.Items = savedItems;
             end
             app.refreshObjectsCount();
         end
 
         function refreshObjectsCount(app)
             % Update the compact summary label in the main left column.
+            % Shows SAVED count (draft model Fix 5).
             if isempty(app.ObjectsCountLabel) || ~isvalid(app.ObjectsCountLabel)
                 return;
             end
-            n = numel(app.State.objects);
-            if n == 0
-                app.ObjectsCountLabel.Text = '0 objects — click Manage to add/edit';
-            else
-                app.ObjectsCountLabel.Text = sprintf('%d object(s) — click Manage to add/edit', n);
-            end
+            n = numel(app.State.savedObjects);
+            app.ObjectsCountLabel.Text = sprintf('%d object(s) saved -- click Manage to add/edit', n);
         end
 
         function refreshZonesCount(app)  %#ok<MANU>
@@ -1459,7 +1509,7 @@ classdef CreatePresetApp < handle
             if size(app.State.frame, 3) >= 1
                 Options.GoodVideoFrameGray = app.State.frame(:, :, 1);
             end
-            Options.ObjectsNumber = numel(app.State.objects);
+            Options.ObjectsNumber = numel(app.State.savedObjects);
             Options.WallWidthCm       = app.WallWidthField.Value;
             Options.MiddleWidthCm     = app.MiddleWidthField.Value;
             Options.NumStrips         = app.NumStripsField.Value;
@@ -1486,14 +1536,15 @@ classdef CreatePresetApp < handle
             ArenaAndObjects(1).border_separate_x = app.State.arena.border_separate_x;
             ArenaAndObjects(1).border_separate_y = app.State.arena.border_separate_y;
             ArenaAndObjects(1).class = '';
-            for k = 1:numel(app.State.objects)
+            % Use savedObjects for serialization (draft model Fix 5).
+            for k = 1:numel(app.State.savedObjects)
                 idx = k + 1;
-                ArenaAndObjects(idx).type = app.State.objects(k).type;
-                ArenaAndObjects(idx).geometry = app.State.objects(k).geometry;
-                ArenaAndObjects(idx).maskfilled = single(app.State.objects(k).mask);
-                ArenaAndObjects(idx).border_x = app.State.objects(k).border_x;
-                ArenaAndObjects(idx).border_y = app.State.objects(k).border_y;
-                ArenaAndObjects(idx).class = getFieldOr(app.State.objects(k), 'class', '');
+                ArenaAndObjects(idx).type = app.State.savedObjects(k).type;
+                ArenaAndObjects(idx).geometry = app.State.savedObjects(k).geometry;
+                ArenaAndObjects(idx).maskfilled = single(app.State.savedObjects(k).mask);
+                ArenaAndObjects(idx).border_x = app.State.savedObjects(k).border_x;
+                ArenaAndObjects(idx).border_y = app.State.savedObjects(k).border_y;
+                ArenaAndObjects(idx).class = getFieldOr(app.State.savedObjects(k), 'class', '');
             end
         end
     end
@@ -1520,6 +1571,8 @@ classdef CreatePresetApp < handle
             s.arena = [];
             s.objects = struct('type', {}, 'geometry', {}, 'border_x', {}, 'border_y', {}, ...
                                 'border_separate_x', {}, 'border_separate_y', {}, 'mask', {}, 'class', {});
+            s.savedObjects = struct('type', {}, 'geometry', {}, 'border_x', {}, 'border_y', {}, ...
+                                    'mask', {}, 'class', {});
             s.zones = struct('name', {}, 'type', {}, 'maskfilled', {});
             s.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
             s.zoneStrategies = {};   % short tags appended on each Add to set
@@ -1890,8 +1943,8 @@ end
 
 function buildObjectsPickIn(app, parent)
     % Preview & pick column (column 2) of the 3-column Objects Manager.
-    g = uigridlayout(parent, [3, 1]);
-    g.RowHeight = {36, '1x', 30};
+    g = uigridlayout(parent, [4, 1]);
+    g.RowHeight = {36, '1x', 30, 40};
     g.Padding = [4 4 4 4];
     g.RowSpacing = 2;
 
@@ -1945,6 +1998,13 @@ function buildObjectsPickIn(app, parent)
     % --- Status bar ---
     app.ManagerStatusLabel = uilabel(g, 'Text', 'Ready. Pick geometry then click + Add shape.');
     app.ManagerStatusLabel.Layout.Row = 3;
+
+    % --- Finish button (row 4) ---
+    bFinish = uibutton(g, 'Text', 'Finish (commit all to preset)', ...
+        'FontSize', 14, 'FontWeight', 'bold', ...
+        'BackgroundColor', [0.4 0.85 0.4], ...
+        'ButtonPushedFcn', @(~,~) app.finishManager());
+    bFinish.Layout.Row = 4; bFinish.Layout.Column = 1;
 
     % Initialize pending state
     app.PendingShapeHandles    = {};
@@ -2084,42 +2144,45 @@ end
 
 function buildAutoDetectControlsIn(app, parent)
     % Build auto-detect controls inside `parent` (uipanel in manager window).
-    % Rows: 1=Mode+INFO, 2=Algorithm, 3=Sensitivity, 4=Neighborhood,
-    %       5=MinArea, 6=MaxArea, 7=Radius range, 8=StartFrom, 9=buttons
-    ag = uigridlayout(parent, [9, 3]);
-    ag.RowHeight = repmat({28}, 1, 9);
+    % Rows: 1=Mode, 2=Algorithm, 3=Sensitivity, 4=Neighborhood,
+    %       5=MinArea, 6=MaxArea, 7=Radius range, 8=StartFrom, 9=buttons, 10=INFO
+    ag = uigridlayout(parent, [10, 3]);
+    ag.RowHeight = repmat({28}, 1, 10);
     ag.ColumnWidth = {180, '1x', 'fit'};
 
-    % Row 1: Mode dropdown + INFO button
+    % Row 1: Mode dropdown
     lblMode = uilabel(ag, 'Text', 'Mode:');
     lblMode.Layout.Row = 1; lblMode.Layout.Column = 1;
     app.AutoModeDropdown = uidropdown(ag, ...
         'Items', {'free-form', 'all-circles', 'all-polygons', 'all-ellipses'}, ...
-        'Value', 'free-form');
+        'Value', 'free-form', ...
+        'ValueChangedFcn', @(~,~) app.updateAutoDetectEnableState());
     app.AutoModeDropdown.Layout.Row = 1; app.AutoModeDropdown.Layout.Column = 2;
-    bInfo = uibutton(ag, 'Text', 'INFO', ...
-        'BackgroundColor', semanticColor('info'), ...
-        'ButtonPushedFcn', @(~,~) showHelp('Auto-detect', helpAutoDetectText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = 3;
 
     % Row 2: Algorithm
     lblAlg = uilabel(ag, 'Text', 'Algorithm (circles):');
     lblAlg.Layout.Row = 2; lblAlg.Layout.Column = 1;
     app.AutoAlgorithmDropdown = uidropdown(ag, ...
-        'Items', {'threshold', 'hough'}, 'Value', 'threshold');
+        'Items', {'threshold', 'hough'}, 'Value', 'threshold', ...
+        'ValueChangedFcn', @(~,~) app.updateAutoDetectEnableState());
     app.AutoAlgorithmDropdown.Layout.Row = 2; app.AutoAlgorithmDropdown.Layout.Column = 2;
 
-    % Row 3: Sensitivity slider
+    % Row 3: Sensitivity slider + live value label
     lblSens = uilabel(ag, 'Text', 'Sensitivity:');
     lblSens.Layout.Row = 3; lblSens.Layout.Column = 1;
-    app.AutoSensitivitySlider = uislider(ag, 'Limits', [0 1], 'Value', 0.5, ...
-        'ValueChangingFcn', @(~,~) app.onSensitivityChanging());
-    app.AutoSensitivitySlider.Layout.Row = 3; app.AutoSensitivitySlider.Layout.Column = 2;
+    sensSub = uigridlayout(ag, [1, 2]);
+    sensSub.Layout.Row = 3; sensSub.Layout.Column = 2;
+    sensSub.ColumnWidth = {'1x', 50};
+    sensSub.Padding = [0 0 0 0];
+    sensSub.ColumnSpacing = 4;
+    app.AutoSensitivitySlider = uislider(sensSub, 'Limits', [0 1], 'Value', 0.75, ...
+        'ValueChangingFcn', @(~,evt) app.onSensitivityChanging(evt));
+    app.AutoSensitivityValueLabel = uilabel(sensSub, 'Text', '0.75');
 
     % Row 4: Neighborhood (moved up near Sensitivity)
     lblNh = uilabel(ag, 'Text', 'Neighborhood, cm:');
     lblNh.Layout.Row = 4; lblNh.Layout.Column = 1;
-    app.AutoNeighborhoodField = uieditfield(ag, 'numeric', 'Value', 10, 'Limits', [0 100]);
+    app.AutoNeighborhoodField = uieditfield(ag, 'numeric', 'Value', 5, 'Limits', [0 100]);
     app.AutoNeighborhoodField.Layout.Row = 4; app.AutoNeighborhoodField.Layout.Column = 2;
 
     % Row 5: Min area
@@ -2164,6 +2227,15 @@ function buildAutoDetectControlsIn(app, parent)
     uibutton(btnGrid, 'Text', 'Align radii', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.alignDetectedRadii());
+
+    % Row 10: INFO button (bottom, spanning all columns)
+    bInfo = uibutton(ag, 'Text', 'INFO', ...
+        'BackgroundColor', semanticColor('info'), ...
+        'ButtonPushedFcn', @(~,~) showHelp('Auto-detect', helpAutoDetectText()));
+    bInfo.Layout.Row = 10; bInfo.Layout.Column = [1 3];
+
+    % Initialize conditional enable state
+    app.updateAutoDetectEnableState();
 end
 
 % buildStatusPanel removed — status now goes to command-line log only.
@@ -2177,7 +2249,7 @@ function onZoneStrategyChanged(app)
     app.NumStripsField.Enable         = enableIfAny(s, {'strips'});
     app.StripDirDropDown.Enable       = enableIfAny(s, {'strips'});
     app.CenterDiameterCmField.Enable  = enableIfAny(s, {'circle-with-center'});
-    app.ObjectZoneWidthField.Enable   = toOnOff(~isempty(app.State.objects));
+    app.ObjectZoneWidthField.Enable   = toOnOff(~isempty(app.State.savedObjects));
 end
 
 function v = enableIfAny(s, list)
@@ -2467,6 +2539,8 @@ function pickPresetStart(app)
             clear o;
         end
         app.State.objects = objs;
+        app.State.savedObjects = objs;  % draft model: preset load sets both
+        app.ManagerSessionDirty = false;
         app.refreshObjectsList();
     end
 
@@ -2851,7 +2925,9 @@ function autoSaveLayoutPlot(app, sessionDir, baseName)
     fh = figure('Visible', 'off', 'Position', [100 100 1000 750]);
     cleanup = onCleanup(@() closeIfValid(fh));
     ax = axes(fh);
-    drawState(ax, app.State, true);
+    plotState = app.State;
+    plotState.objects = app.State.savedObjects;  % use committed objects for plots
+    drawState(ax, plotState, true);
     title(ax, sprintf('%s — combined layout', baseName), 'Interpreter', 'none');
     outPath = fullfile(sessionDir, sprintf('%s_layout.png', baseName));
     exportgraphics(ax, outPath);
@@ -2860,13 +2936,15 @@ end
 
 function savePerZonePlots(app, sessionDir, baseName)
     if isempty(app.State.zones); return; end
+    plotState = app.State;
+    plotState.objects = app.State.savedObjects;  % use committed objects for plots
     for k = 1:numel(app.State.zones)
         z = app.State.zones(k);
         if isfield(z, 'type') && strcmp(z.type, 'point'); continue; end
         fh = figure('Visible', 'off', 'Position', [100 100 1000 750]);
         cleanup = onCleanup(@() closeIfValid(fh)); %#ok<NASGU>
         ax = axes(fh);
-        drawState(ax, app.State, false);
+        drawState(ax, plotState, false);
         if (isnumeric(z.maskfilled) || islogical(z.maskfilled))
             hold(ax, 'on');
             drawZoneFilled(ax, z, [0 0.5 1], 0.35);
