@@ -28,6 +28,10 @@ function objs = autoDetectObjects(gray, arenaMask, cfg)
     minAreaPx = cfg.minAreaCm2 * (cfg.pxlPerCm^2);
     maxAreaPx = cfg.maxAreaCm2 * (cfg.pxlPerCm^2);
 
+    % 50% area cap: no single detected object may exceed 50% of arena area.
+    arenaArea    = sum(arenaMask(:));
+    maxAreaPxEff = min(maxAreaPx, arenaArea * 0.5);
+
     if strcmp(cfg.mode, 'all-circles') && strcmp(cfg.algorithm, 'hough')
         [centers, radii] = imfindcircles(gray, cfg.radiusRangePx, ...
             'Sensitivity', cfg.sensitivity, 'ObjectPolarity', 'dark');
@@ -43,10 +47,19 @@ function objs = autoDetectObjects(gray, arenaMask, cfg)
             mask = imfill(sphynx.preset.maskFromBorder( ...
                 H, W, bx, by), 'holes');
             area = sum(mask(:));
-            if area < minAreaPx || area > maxAreaPx; continue; end
+            if area < minAreaPx || area > maxAreaPxEff; continue; end
             objs(end + 1) = mkObj('Circle', bx, by, mask); %#ok<AGROW>
         end
         return;
+    end
+
+    % Erode arena mask by ~1 cm so detected objects don't touch the boundary.
+    % This prevents a darkened boundary ring from being returned as a blob.
+    erosionRadius = max(3, round(cfg.pxlPerCm));
+    arenaMaskEroded = imerode(arenaMask, strel('disk', erosionRadius));
+    if ~any(arenaMaskEroded(:))
+        % Fall back to unEroded mask if arena is too small for erosion
+        arenaMaskEroded = arenaMask;
     end
 
     % Compute arena-floor-based threshold to prevent adaptthresh boundary
@@ -63,14 +76,14 @@ function objs = autoDetectObjects(gray, arenaMask, cfg)
     % that adaptthresh boundary artefacts on uniform backgrounds are suppressed.
     combinedThresh = min(threshMap, floorThresh);
     binary = imbinarize(gray, combinedThresh);
-    % Objects are typically darker than the floor -> invert
-    binary = ~binary & arenaMask;
+    % Objects are typically darker than the floor -> invert; use eroded mask
+    binary = ~binary & arenaMaskEroded;
     binary = imopen(binary, strel('disk', 2));
     cc = bwconncomp(binary);
     stats = regionprops(cc, 'Centroid', 'Area', 'PixelIdxList', ...
         'MajorAxisLength', 'MinorAxisLength', 'Orientation');
     for k = 1:numel(stats)
-        if stats(k).Area < minAreaPx || stats(k).Area > maxAreaPx; continue; end
+        if stats(k).Area < minAreaPx || stats(k).Area > maxAreaPxEff; continue; end
         c = stats(k).Centroid;
         % Clamp centroid to valid indices before mask lookup
         cyIdx = max(1, min(H, round(c(2))));

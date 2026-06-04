@@ -113,6 +113,11 @@ classdef CreatePresetApp < handle
         % Objects manager window (Fix 3)
         ObjectsManagerFig
         ObjectsCountLabel
+        % Manager preview axes + pending-pick state
+        ManagerAxes
+        ManagerStatusLabel
+        PendingShapeHandles    % cell array of drawXX handles
+        PendingShapeGeometries % cell array of strings: geometry of each pending
     end
 
     methods
@@ -869,6 +874,234 @@ classdef CreatePresetApp < handle
             end
         end
 
+        function refreshManagerPreview(app)
+            % Redraw manager axes: frame + arena + objects + auto-detected.
+            % Pending ROIs are saved and restored after cla so they survive refresh.
+            if isempty(app.ManagerAxes) || ~isvalid(app.ManagerAxes); return; end
+            % Save pending positions before cla
+            pendingPositions = {};
+            pendingGeoms     = {};
+            if ~isempty(app.PendingShapeHandles)
+                for k = 1:numel(app.PendingShapeHandles)
+                    h = app.PendingShapeHandles{k};
+                    if isvalid(h)
+                        geomK = app.PendingShapeGeometries{k};
+                        switch geomK
+                            case 'Circle'
+                                pos = struct('Center', h.Center, 'Radius', h.Radius);
+                            case 'Ellipse'
+                                pos = struct('Center', h.Center, 'SemiAxes', h.SemiAxes, ...
+                                    'RotationAngle', h.RotationAngle);
+                            otherwise  % Polygon
+                                pos = h.Position;
+                        end
+                        pendingPositions{end+1} = pos; %#ok<AGROW>
+                        pendingGeoms{end+1}     = geomK; %#ok<AGROW>
+                    end
+                end
+            end
+            cla(app.ManagerAxes);
+            hold(app.ManagerAxes, 'on');
+            if ~isempty(app.State.frame)
+                imshow(app.State.frame, 'Parent', app.ManagerAxes);
+            end
+            % Arena overlay
+            if ~isempty(app.State.arena) && ~isempty(app.State.arena.border_x)
+                plot(app.ManagerAxes, app.State.arena.border_x, app.State.arena.border_y, '-', ...
+                    'Color', [0.85 0.55 0.10], 'LineWidth', 2);
+            end
+            % Existing objects (semi-transparent fill + number label)
+            for k = 1:numel(app.State.objects)
+                o = app.State.objects(k);
+                if isempty(o.border_x); continue; end
+                fill(app.ManagerAxes, o.border_x, o.border_y, [0.3 0.5 0.8], ...
+                    'FaceAlpha', 0.20, 'EdgeColor', [0.1 0.3 0.6], 'LineWidth', 1);
+                text(app.ManagerAxes, mean(o.border_x), mean(o.border_y), ...
+                    sprintf('%d', k), 'Color', 'w', 'FontWeight', 'bold', ...
+                    'HorizontalAlignment', 'center');
+            end
+            % Selected objects highlighted in yellow
+            selIdx = app.getSelectedObjectIdx();
+            for k = selIdx(:)'
+                o = app.State.objects(k);
+                if isempty(o.border_x); continue; end
+                plot(app.ManagerAxes, o.border_x, o.border_y, '-', ...
+                    'Color', [1 0.85 0], 'LineWidth', 2);
+            end
+            % Auto-detected preview (green dashed)
+            if isfield(app.State, 'autoDetectedObjects') && ~isempty(app.State.autoDetectedObjects)
+                for k = 1:numel(app.State.autoDetectedObjects)
+                    ado = app.State.autoDetectedObjects(k);
+                    if isempty(ado.border_x); continue; end
+                    plot(app.ManagerAxes, ado.border_x, ado.border_y, '--', ...
+                        'Color', [0 0.8 0], 'LineWidth', 1.5);
+                end
+            end
+            hold(app.ManagerAxes, 'off');
+            % Restore pending ROIs
+            app.PendingShapeHandles    = {};
+            app.PendingShapeGeometries = {};
+            for k = 1:numel(pendingPositions)
+                h = createPendingROI(app.ManagerAxes, pendingGeoms{k}, pendingPositions{k});
+                app.PendingShapeHandles{end+1}    = h;
+                app.PendingShapeGeometries{end+1} = pendingGeoms{k};
+            end
+        end
+
+        function addPendingShape(app)
+            if isempty(app.State.frame)
+                if ~isempty(app.ManagerStatusLabel) && isvalid(app.ManagerStatusLabel)
+                    app.ManagerStatusLabel.Text = 'Load video first';
+                end
+                return;
+            end
+            if isempty(app.ManagerAxes) || ~isvalid(app.ManagerAxes); return; end
+            geom = app.State.objectGeometry;
+            app.ManagerStatusLabel.Text = sprintf('Drawing %s — drag/click, double-click to finish', geom);
+            try
+                switch geom
+                    case 'Polygon'
+                        h = drawpolygon(app.ManagerAxes, 'Color', [0 0.6 0]);
+                    case 'Circle'
+                        h = drawcircle(app.ManagerAxes, 'Color', [0 0.6 0]);
+                    case 'Ellipse'
+                        h = drawellipse(app.ManagerAxes, 'Color', [0 0.6 0]);
+                    otherwise
+                        h = drawpolygon(app.ManagerAxes, 'Color', [0 0.6 0]);
+                end
+                wait(h);
+                if ~isvalid(h)
+                    app.ManagerStatusLabel.Text = 'Cancelled';
+                    return;
+                end
+                app.PendingShapeHandles{end+1}    = h;
+                app.PendingShapeGeometries{end+1} = geom;
+                app.ManagerStatusLabel.Text = sprintf('Pending: %d shape(s). Click + Add shape for next, or Commit pending.', ...
+                    numel(app.PendingShapeHandles));
+            catch ME
+                if ~isempty(app.ManagerStatusLabel) && isvalid(app.ManagerStatusLabel)
+                    app.ManagerStatusLabel.Text = sprintf('Add shape failed: %s', ME.message);
+                end
+            end
+        end
+
+        function commitPendingShapes(app)
+            if isempty(app.PendingShapeHandles)
+                if ~isempty(app.ManagerStatusLabel) && isvalid(app.ManagerStatusLabel)
+                    app.ManagerStatusLabel.Text = 'No pending shapes';
+                end
+                return;
+            end
+            nCommitted = 0;
+            for k = 1:numel(app.PendingShapeHandles)
+                h = app.PendingShapeHandles{k};
+                if ~isvalid(h); continue; end
+                geom = app.PendingShapeGeometries{k};
+                switch geom
+                    case 'Polygon'
+                        pts = h.Position;   % Nx2 [x y]
+                    case 'Circle'
+                        cx = h.Center(1); cy = h.Center(2); r = h.Radius;
+                        ang = linspace(0, 2*pi, 60)';
+                        pts = [cx + r*cos(ang), cy + r*sin(ang)];
+                    case 'Ellipse'
+                        cx = h.Center(1); cy = h.Center(2);
+                        a  = h.SemiAxes(1); b = h.SemiAxes(2);
+                        rot = deg2rad(h.RotationAngle);
+                        ang = linspace(0, 2*pi, 60)';
+                        xx = a*cos(ang); yy = b*sin(ang);
+                        pts = [cx + xx*cos(rot) - yy*sin(rot), ...
+                               cy + xx*sin(rot) + yy*cos(rot)];
+                    otherwise
+                        pts = h.Position;
+                end
+                try
+                    obj = sphynx.preset.readArenaGeometry(app.State.frame, geom, 'Points', pts);
+                    obj.type  = sprintf('Object%d', numel(app.State.objects) + 1);
+                    obj.class = '';
+                    if isempty(app.State.objects)
+                        app.State.objects = obj;
+                    else
+                        app.State.objects(end + 1) = obj;
+                    end
+                    nCommitted = nCommitted + 1;
+                    delete(h);
+                catch ME
+                    sphynx.util.log('warn', '[Manager] commit shape %d failed: %s', k, ME.message);
+                end
+            end
+            app.PendingShapeHandles    = {};
+            app.PendingShapeGeometries = {};
+            app.refreshObjectsList();
+            app.refreshMoveTargets();
+            app.refreshManagerPreview();
+            app.refreshPreview();
+            if ~isempty(app.ManagerStatusLabel) && isvalid(app.ManagerStatusLabel)
+                app.ManagerStatusLabel.Text = sprintf('Committed %d shapes', nCommitted);
+            end
+        end
+
+        function cancelPendingShapes(app)
+            for k = 1:numel(app.PendingShapeHandles)
+                h = app.PendingShapeHandles{k};
+                if isvalid(h); delete(h); end
+            end
+            app.PendingShapeHandles    = {};
+            app.PendingShapeGeometries = {};
+            if ~isempty(app.ManagerStatusLabel) && isvalid(app.ManagerStatusLabel)
+                app.ManagerStatusLabel.Text = 'Pending cleared';
+            end
+        end
+
+        function orderObjectsBarnes(app)
+            % Sort objects clockwise around arena center starting from selected target.
+            idx = app.getSelectedObjectIdx();
+            if numel(idx) ~= 1
+                app.status('Order by Barnes: select exactly 1 target object');
+                return;
+            end
+            if isempty(app.State.arena) || isempty(app.State.arena.border_x)
+                app.status('Order by Barnes: arena required');
+                return;
+            end
+            if numel(app.State.objects) < 2
+                app.status('Order by Barnes: need at least 2 objects');
+                return;
+            end
+            targetIdx = idx(1);
+            arenaCx = mean(app.State.arena.border_x);
+            arenaCy = mean(app.State.arena.border_y);
+            n = numel(app.State.objects);
+            angles = zeros(n, 1);
+            for k = 1:n
+                cx = mean(app.State.objects(k).border_x);
+                cy = mean(app.State.objects(k).border_y);
+                % atan2(y-down, x-right): in image coords this increases CW visually
+                angles(k) = atan2(cy - arenaCy, cx - arenaCx);
+            end
+            targetAng = angles(targetIdx);
+            rel = mod(angles - targetAng, 2*pi);
+            [~, order] = sort(rel);
+            reordered = app.State.objects(order);
+            for k = 1:numel(reordered)
+                reordered(k).type = sprintf('Object%d', k);
+            end
+            app.State.objects = reordered;
+            app.refreshObjectsList();
+            app.refreshMoveTargets();
+            app.setSelectedObjectIdx(1);
+            app.refreshManagerPreview();
+            app.refreshPreview();
+            app.status(sprintf('Ordered %d objects CW from target', n));
+        end
+
+        function onSensitivityChanging(app)
+            % Debounced live slider: re-run auto-detect while user drags.
+            if isempty(app.State.frame) || isempty(app.State.arena); return; end
+            if isempty(app.State.arena.mask); return; end
+            app.runAutoDetect();
+        end
+
         function commitAutoDetected(app)
             if isempty(app.State.autoDetectedObjects)
                 app.status('Nothing to commit. Run Auto-detect first.');
@@ -970,17 +1203,19 @@ classdef CreatePresetApp < handle
                 return;
             end
             fh = uifigure('Name', 'Objects Manager', ...
-                'Position', [200 100 1100 700]);
+                'Position', [120 80 1400 750]);
             app.ObjectsManagerFig = fh;
-            gl = uigridlayout(fh, [1, 2]);
-            gl.ColumnWidth = {'1x', 380};
+            gl = uigridlayout(fh, [1, 3]);
+            gl.ColumnWidth = {260, '1x', 300};
             gl.ColumnSpacing = 8;
             gl.Padding = [8 8 8 8];
-            objPanel = uipanel(gl, 'Title', 'Objects', ...
-                'FontSize', 14, 'FontWeight', 'bold');
-            adPanel = uipanel(gl, 'Title', 'Auto-detect', ...
-                'FontSize', 14, 'FontWeight', 'bold');
-            buildObjectsControlsIn(app, objPanel);
+
+            listPanel    = uipanel(gl, 'Title', 'Objects', 'FontSize', 13, 'FontWeight', 'bold');
+            previewPanel = uipanel(gl, 'Title', 'Preview & Pick', 'FontSize', 13, 'FontWeight', 'bold');
+            adPanel      = uipanel(gl, 'Title', 'Auto-detect', 'FontSize', 13, 'FontWeight', 'bold');
+
+            buildObjectsListIn(app, listPanel);
+            buildObjectsPickIn(app, previewPanel);
             buildAutoDetectControlsIn(app, adPanel);
         end
 
@@ -1470,45 +1705,20 @@ function buildObjectsPanelCompact(app)
     bManage.Layout.Row = 2; bManage.Layout.Column = 1;
 end
 
-function buildObjectsControlsIn(app, parent)
-    % Full objects controls, rendered inside `parent` (used in manager window).
-    nGeom = 3;       % Polygon / Circle / Ellipse
-    nCols = nGeom + 4;
-    g = uigridlayout(parent, [5, nCols]);
-    g.RowHeight = {28, '1x', 28, 28, 28};
-    g.ColumnWidth = [repmat({'fit'}, 1, nGeom), {'1x'}, {70}, {'fit'}, {60}];
+function buildObjectsListIn(app, parent)
+    % Listbox column (column 1) of the 3-column Objects Manager.
+    g = uigridlayout(parent, [7, 2]);
+    g.RowHeight = {'1x', 28, 28, 28, 28, 28, 28};
+    g.ColumnWidth = {'1x', '1x'};
+    g.Padding = [4 4 4 4];
+    g.RowSpacing = 4;
     g.ColumnSpacing = 4;
-
-    geometries = {'Polygon', 'Circle', 'Ellipse'};
-    app.ObjectGeometryButtons = cell(1, numel(geometries));
-    for i = 1:numel(geometries)
-        b = uibutton(g, 'state', 'Text', geometries{i}, ...
-            'BackgroundColor', semanticColor('geometry'), ...
-            'ValueChangedFcn', @(src, ~) onObjectGeometryToggle(app, src));
-        b.Layout.Row = 1; b.Layout.Column = i;
-        if i == 1; b.Value = true; end
-        app.ObjectGeometryButtons{i} = b;
-    end
-
-    app.ObjectPickModeDropDown = uidropdown(g, ...
-        'Items', {'shape', 'points'}, 'Value', 'shape', ...
-        'Tooltip', 'shape = drag-and-drop ROI; points = click vertices then ENTER');
-    app.ObjectPickModeDropDown.Layout.Row = 1;
-    app.ObjectPickModeDropDown.Layout.Column = nGeom + 2;
-    bAdd = uibutton(g, 'Text', '+ Add', ...
-        'BackgroundColor', semanticColor('action'), ...
-        'ButtonPushedFcn', @(~,~) onAddObject(app));
-    bAdd.Layout.Row = 1; bAdd.Layout.Column = nGeom + 3;
-    bInfo = uibutton(g, 'Text', 'INFO', ...
-        'BackgroundColor', semanticColor('info'), ...
-        'ButtonPushedFcn', @(~,~) showHelp('Objects', helpObjectsText()));
-    bInfo.Layout.Row = 1; bInfo.Layout.Column = nGeom + 4;
 
     app.ObjectsListBox = uilistbox(g, 'Items', {}, ...
         'Multiselect', 'on', ...
         'ValueChangedFcn', @(~,evt) app.onObjectsListBoxChanged(evt));
-    app.ObjectsListBox.Layout.Row = 2; app.ObjectsListBox.Layout.Column = [1 nCols];
-    % Repopulate listbox with current objects (manager may be reopened).
+    app.ObjectsListBox.Layout.Row = 1; app.ObjectsListBox.Layout.Column = [1 2];
+    % Repopulate listbox if manager reopened with existing objects.
     if ~isempty(app.State.objects)
         items = arrayfun(@(o) sprintf('%s (%s)', o.type, o.geometry), ...
             app.State.objects, 'UniformOutput', false);
@@ -1524,44 +1734,114 @@ function buildObjectsControlsIn(app, parent)
     bRemove = uibutton(g, 'Text', 'Remove', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.removeSelectedObject());
-    bRemove.Layout.Row = 3; bRemove.Layout.Column = 1;
+    bRemove.Layout.Row = 2; bRemove.Layout.Column = 1;
     bReplace = uibutton(g, 'Text', 'Replace', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.replaceSelectedObject());
-    bReplace.Layout.Row = 3; bReplace.Layout.Column = 2;
+    bReplace.Layout.Row = 2; bReplace.Layout.Column = 2;
+
     bRename = uibutton(g, 'Text', 'Rename', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.renameSelectedObject());
-    bRename.Layout.Row = 3; bRename.Layout.Column = 3;
-
+    bRename.Layout.Row = 3; bRename.Layout.Column = 1;
     bDelAll = uibutton(g, 'Text', 'Delete all', ...
         'BackgroundColor', [0.92 0.55 0.55], ...
-        'Tooltip', 'Remove all objects (and dependent object zones)', ...
         'ButtonPushedFcn', @(~,~) app.deleteAllObjects());
-    bDelAll.Layout.Row = 3; bDelAll.Layout.Column = nGeom + 4;   % flush right
+    bDelAll.Layout.Row = 3; bDelAll.Layout.Column = 2;
 
-    % Row 4: class label + edit field + assign button (S8)
+    % Class assignment (row 4 label + 5 field+button)
     lblClass = uilabel(g, 'Text', 'Class:');
     lblClass.Layout.Row = 4; lblClass.Layout.Column = 1;
     app.ObjectClassField = uieditfield(g, 'Value', '');
-    app.ObjectClassField.Layout.Row = 4;
-    app.ObjectClassField.Layout.Column = [2, nGeom + 3];
+    app.ObjectClassField.Layout.Row = 4; app.ObjectClassField.Layout.Column = 2;
     bAssign = uibutton(g, 'Text', 'Assign to selected', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.assignClassToSelected());
-    bAssign.Layout.Row = 4; bAssign.Layout.Column = nGeom + 4;
+    bAssign.Layout.Row = 5; bAssign.Layout.Column = [1 2];
 
-    % Row 5: Copy x N controls (S2)
-    lblCopy = uilabel(g, 'Text', 'Copy:');
-    lblCopy.Layout.Row = 5; lblCopy.Layout.Column = 1;
+    % Copy x N (row 6 label+field)
+    lblCopy = uilabel(g, 'Text', 'Copy N:');
+    lblCopy.Layout.Row = 6; lblCopy.Layout.Column = 1;
     app.CopyNField = uieditfield(g, 'numeric', 'Value', 5, ...
         'Limits', [1 20], 'RoundFractionalValues', 'on');
-    app.CopyNField.Layout.Row = 5;
-    app.CopyNField.Layout.Column = [2, nGeom + 3];
+    app.CopyNField.Layout.Row = 6; app.CopyNField.Layout.Column = 2;
+
+    % Row 7: Copy x N button + Order by Barnes
     bCopyN = uibutton(g, 'Text', 'Copy x N', ...
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.copyObjectsN());
-    bCopyN.Layout.Row = 5; bCopyN.Layout.Column = nGeom + 4;
+    bCopyN.Layout.Row = 7; bCopyN.Layout.Column = 1;
+    bOrder = uibutton(g, 'Text', 'Order Barnes', ...
+        'BackgroundColor', semanticColor('action'), ...
+        'Tooltip', 'Renumber objects CW around arena center from selected target', ...
+        'ButtonPushedFcn', @(~,~) app.orderObjectsBarnes());
+    bOrder.Layout.Row = 7; bOrder.Layout.Column = 2;
+end
+
+function buildObjectsPickIn(app, parent)
+    % Preview & pick column (column 2) of the 3-column Objects Manager.
+    g = uigridlayout(parent, [3, 1]);
+    g.RowHeight = {36, '1x', 30};
+    g.Padding = [4 4 4 4];
+    g.RowSpacing = 2;
+
+    % --- Toolbar row ---
+    tb = uigridlayout(g, [1, 8]);
+    tb.Layout.Row = 1;
+    tb.RowHeight = {28};
+    tb.ColumnWidth = {'fit', 'fit', 'fit', 90, 100, 105, 105, '1x'};
+    tb.ColumnSpacing = 4;
+    tb.Padding = [0 0 0 0];
+
+    geometries = {'Polygon', 'Circle', 'Ellipse'};
+    app.ObjectGeometryButtons = cell(1, numel(geometries));
+    for i = 1:numel(geometries)
+        b = uibutton(tb, 'state', 'Text', geometries{i}, ...
+            'BackgroundColor', semanticColor('geometry'), ...
+            'ValueChangedFcn', @(src, ~) onObjectGeometryToggle(app, src));
+        b.Layout.Row = 1; b.Layout.Column = i;
+        if i == 1; b.Value = true; end
+        app.ObjectGeometryButtons{i} = b;
+    end
+
+    app.ObjectPickModeDropDown = uidropdown(tb, ...
+        'Items', {'shape', 'points'}, 'Value', 'shape', ...
+        'Tooltip', 'shape = drag-and-drop ROI; points = click vertices then ENTER');
+    app.ObjectPickModeDropDown.Layout.Row = 1; app.ObjectPickModeDropDown.Layout.Column = 4;
+
+    bAdd = uibutton(tb, 'Text', '+ Add shape', ...
+        'BackgroundColor', semanticColor('action'), ...
+        'ButtonPushedFcn', @(~,~) app.addPendingShape());
+    bAdd.Layout.Row = 1; bAdd.Layout.Column = 5;
+
+    bCommit = uibutton(tb, 'Text', 'Commit pending', ...
+        'BackgroundColor', [0.7 1 0.7], ...
+        'ButtonPushedFcn', @(~,~) app.commitPendingShapes());
+    bCommit.Layout.Row = 1; bCommit.Layout.Column = 6;
+
+    bCancel = uibutton(tb, 'Text', 'Cancel pending', ...
+        'BackgroundColor', [1 0.85 0.85], ...
+        'ButtonPushedFcn', @(~,~) app.cancelPendingShapes());
+    bCancel.Layout.Row = 1; bCancel.Layout.Column = 7;
+
+    % --- Preview axes ---
+    axParent = uipanel(g, 'BorderType', 'none');
+    axParent.Layout.Row = 2;
+    axGrid = uigridlayout(axParent, [1, 1]);
+    axGrid.Padding = [0 0 0 0];
+    app.ManagerAxes = uiaxes(axGrid);
+    app.ManagerAxes.XTick = []; app.ManagerAxes.YTick = [];
+
+    % --- Status bar ---
+    app.ManagerStatusLabel = uilabel(g, 'Text', 'Ready. Pick geometry then click + Add shape.');
+    app.ManagerStatusLabel.Layout.Row = 3;
+
+    % Initialize pending state
+    app.PendingShapeHandles    = {};
+    app.PendingShapeGeometries = {};
+
+    % Initial render
+    app.refreshManagerPreview();
 end
 
 function onArenaGeometryToggle(app, src)
@@ -1713,7 +1993,8 @@ function buildAutoDetectControlsIn(app, parent)
 
     lblSens = uilabel(ag, 'Text', 'Sensitivity:');
     lblSens.Layout.Row = 3; lblSens.Layout.Column = 1;
-    app.AutoSensitivitySlider = uislider(ag, 'Limits', [0 1], 'Value', 0.5);
+    app.AutoSensitivitySlider = uislider(ag, 'Limits', [0 1], 'Value', 0.5, ...
+        'ValueChangingFcn', @(~,~) app.onSensitivityChanging());
     app.AutoSensitivitySlider.Layout.Row = 3; app.AutoSensitivitySlider.Layout.Column = 2;
 
     lblMin = uilabel(ag, 'Text', 'Min area, cm^2:');
@@ -1894,6 +2175,8 @@ function onPickArena(app)
 end
 
 function onAddObject(app)
+    % LEGACY: superseded by addPendingShape in Manager (round 3).
+    % Kept as fallback; no longer reachable from main panel.
     % Loop adding the same object until the user confirms it (Yes) or
     % asks to delete it. "No (redo)" pops the bad object first so the
     % old mask is NOT shown on preview while the user re-picks.
@@ -2365,6 +2648,34 @@ end
 
 function closeIfValid(h)
     if ~isempty(h) && isvalid(h); close(h); end
+end
+
+function h = createPendingROI(ax, geom, pos)
+    % Recreate a pending ROI on ax with known Position (after cla).
+    switch geom
+        case 'Circle'
+            % pos for circle = [cx, cy, r] or center+radius struct — use center/radius
+            % drawcircle Position is [cx, cy, r] but we store .Position as struct.
+            % Safe fallback: create at default center derived from pos if numeric.
+            if isstruct(pos)
+                h = drawcircle(ax, 'Center', pos.Center, 'Radius', pos.Radius, 'Color', [0 0.6 0]);
+            else
+                h = drawcircle(ax, 'Color', [0 0.6 0]);
+            end
+        case 'Ellipse'
+            if isstruct(pos)
+                h = drawellipse(ax, 'Center', pos.Center, 'SemiAxes', pos.SemiAxes, ...
+                    'RotationAngle', pos.RotationAngle, 'Color', [0 0.6 0]);
+            else
+                h = drawellipse(ax, 'Color', [0 0.6 0]);
+            end
+        otherwise  % Polygon
+            if ~isempty(pos)
+                h = drawpolygon(ax, 'Position', pos, 'Color', [0 0.6 0]);
+            else
+                h = drawpolygon(ax, 'Color', [0 0.6 0]);
+            end
+    end
 end
 
 % =================== Help text ============================================
