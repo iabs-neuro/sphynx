@@ -36,3 +36,17 @@ function testWallPartitionsArena(testCase)
     end
     verifyEqual(testCase, combined, arenaMask);
 end
+
+function testThreeZonesWhenWallWidthSet(testCase)
+    H = 200; W = 200; pxlPerCm = 2;
+    [X, Y] = meshgrid(1:W, 1:H);
+    arenaMask = (X-100).^2 + (Y-100).^2 <= (40 * pxlPerCm)^2;
+    Z = sphynx.preset.buildZonesCircleCenter(arenaMask, ...
+        'PixelsPerCm', pxlPerCm, ...
+        'CenterDiameterCm', 20, ...
+        'WallWidthCm', 5);
+    names = {Z.name};
+    verifyTrue(testCase, ismember('wall', names));
+    verifyTrue(testCase, ismember('middle', names));
+    verifyTrue(testCase, ismember('center', names));
+end

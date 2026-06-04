@@ -27,6 +27,7 @@ function arena = readArenaGeometry(frame, geometry, varargin)
     addParameter(p, 'NumPointsPerSide', 1000);
     addParameter(p, 'PickMode', 'shape', @(s) any(strcmpi(s, {'shape', 'points'})));
     addParameter(p, 'ExistingObjects', struct('border_x', {}, 'border_y', {}));
+    addParameter(p, 'ExistingArena', []);
     parse(p, frame, geometry, varargin{:});
 
     [H, W, ~] = size(frame);
@@ -35,6 +36,14 @@ function arena = readArenaGeometry(frame, geometry, varargin)
     if isempty(p.Results.Points)
         fh = figure; ax = axes(fh); imshow(frame, 'Parent', ax); hold(ax, 'on');
         cleanup = onCleanup(@() closeIfValid(fh));
+        exArena = p.Results.ExistingArena;
+        if ~isempty(exArena) && isstruct(exArena) && isfield(exArena, 'border_x')
+            bx = exArena.border_x;
+            by = exArena.border_y;
+            if ~isempty(bx)
+                plot(ax, bx(:), by(:), '-', 'Color', [0.85 0.55 0.10], 'LineWidth', 2);
+            end
+        end
         existing = p.Results.ExistingObjects;
         if isstruct(existing)
             for k = 1:numel(existing)

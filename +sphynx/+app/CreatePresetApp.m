@@ -198,7 +198,8 @@ classdef CreatePresetApp < handle
         function addObject(app, geometry, points)
             try
                 obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
-                    'Points', points, 'ExistingObjects', app.State.objects);
+                    'Points', points, 'ExistingObjects', app.State.objects, ...
+                    'ExistingArena', app.State.arena);
                 obj.type = sprintf('Object%d', numel(app.State.objects) + 1);
                 if isempty(app.State.objects)
                     app.State.objects = obj;
@@ -246,7 +247,8 @@ classdef CreatePresetApp < handle
             try
                 otherIdx = setdiff(1:numel(app.State.objects), idx);
                 obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
-                    'ExistingObjects', app.State.objects(otherIdx));
+                    'ExistingObjects', app.State.objects(otherIdx), ...
+                    'ExistingArena', app.State.arena);
                 obj.type = app.State.objects(idx).type;     % preserve label
                 app.State.objects(idx) = obj;
                 app.refreshObjectsList();
@@ -343,7 +345,7 @@ classdef CreatePresetApp < handle
 
         function copyObjectsN(app)
             % COPYOBJECTSN  Duplicate the single selected object N times,
-            % placing copies on a row/grid layout (S2).
+            % ring layout around source centroid + interactive drag + confirm (Fix 4).
             idx = app.getSelectedObjectIdx();
             if numel(idx) ~= 1
                 app.status('Copy x N requires exactly 1 object selected');
@@ -356,13 +358,79 @@ classdef CreatePresetApp < handle
                 app.status('Calibrate pxlPerCm first');
                 return;
             end
-            stepPx = 30 * pxlPerCm;     % 30 cm offset
-            offs = sphynx.preset.gridOffsets(n, stepPx);
+            % Source object's centroid and bounding-circle radius
+            srcCx = mean(src.border_x);
+            srcCy = mean(src.border_y);
+            srcR  = max(sqrt((src.border_x - srcCx).^2 + (src.border_y - srcCy).^2));
+            % Place copies in a ring around the source, radius = max(2.5 * srcR, 15 cm in px)
+            ringR = max(2.5 * srcR, 15 * pxlPerCm);
+
+            % Open interactive figure
+            fh = figure('Name', sprintf('Copy x %d — drag, then click Confirm', n), ...
+                        'NumberTitle', 'off');
+            cleaner = onCleanup(@() closeIfValid(fh)); %#ok<NASGU>
+            ax = axes(fh);
+            imshow(app.State.frame, 'Parent', ax); hold(ax, 'on');
+            % Reference overlay: arena (orange line) + existing objects (blue filled)
+            if ~isempty(app.State.arena) && ~isempty(app.State.arena.border_x)
+                plot(ax, app.State.arena.border_x, app.State.arena.border_y, '-', ...
+                    'Color', [0.85 0.55 0.10], 'LineWidth', 2);
+            end
+            for o = app.State.objects
+                if isempty(o.border_x); continue; end
+                fill(ax, o.border_x, o.border_y, [0.3 0.5 0.8], ...
+                    'FaceAlpha', 0.20, 'EdgeColor', [0.1 0.3 0.6], 'LineWidth', 1);
+            end
+
+            % Create N interactive polygons in a ring around source
+            handles = cell(1, n);
+            for k = 1:n
+                a = 2*pi * (k - 1) / n;
+                offX = ringR * cos(a);
+                offY = ringR * sin(a);
+                copyVerts = [src.border_x(:) + offX, src.border_y(:) + offY];
+                % Avoid too many points -- subsample if border is dense
+                if size(copyVerts, 1) > 60
+                    stride = ceil(size(copyVerts, 1) / 60);
+                    copyVerts = copyVerts(1:stride:end, :);
+                end
+                handles{k} = drawpolygon(ax, 'Position', copyVerts, ...
+                    'Color', [0 0.6 0]);
+            end
+
+            % Confirm/Cancel buttons
+            confirmed = false;
+            uicontrol(fh, 'Style', 'pushbutton', 'String', 'Confirm', ...
+                'Position', [10 10 80 30], 'BackgroundColor', [0.8 1 0.8], ...
+                'Callback', @(~,~) onConfirmCopy());
+            uicontrol(fh, 'Style', 'pushbutton', 'String', 'Cancel', ...
+                'Position', [100 10 80 30], 'BackgroundColor', [1 0.8 0.8], ...
+                'Callback', @(~,~) onCancelCopy());
+
+            function onConfirmCopy()
+                confirmed = true;
+                uiresume(fh);
+            end
+            function onCancelCopy()
+                confirmed = false;
+                uiresume(fh);
+            end
+
+            uiwait(fh);
+            if ~confirmed
+                app.status('Copy x N cancelled');
+                return;
+            end
+
+            % Commit: pull final positions out of each ROI
             newIdx = [];
             for k = 1:n
+                h = handles{k};
+                if ~isvalid(h); continue; end
+                finalPos = h.Position;   % Nx2
                 cp = src;
-                cp.border_x = src.border_x + offs(k, 1);
-                cp.border_y = src.border_y + offs(k, 2);
+                cp.border_x = finalPos(:, 1);
+                cp.border_y = finalPos(:, 2);
                 cp.mask = imfill(sphynx.preset.maskFromBorder( ...
                     app.State.height, app.State.width, cp.border_x, cp.border_y), 'holes');
                 cp.type = sprintf('Object%d', numel(app.State.objects) + 1);
@@ -373,11 +441,12 @@ classdef CreatePresetApp < handle
                 end
                 newIdx(end + 1) = numel(app.State.objects); %#ok<AGROW>
             end
+
             app.refreshObjectsList();
             app.refreshMoveTargets();
             app.setSelectedObjectIdx(newIdx);
             app.refreshPreview();
-            app.status(sprintf('Copied %d times; %d new objects', n, n));
+            app.status(sprintf('Committed %d copies', numel(newIdx)));
         end
 
         function addZones(app)
@@ -1098,7 +1167,7 @@ function buildCreateTab(app)
     %   Row 5 Zones (245), Row 6 Save (75),
     %   Row 7 Auto-detect (7 rows × 28 + title ≈ 250).
     % Tuned visually: Block 4 (Objects) at 200 -> listbox ≈ 80 px.
-    app.LeftGrid.RowHeight = {100, 145, 95, 200, 245, 75, 250};
+    app.LeftGrid.RowHeight = {100, 145, 95, 340, 245, 75, 290};
     app.LeftGrid.RowSpacing = 4;
     app.LeftGrid.Padding = [4 4 4 4];
 
@@ -1226,8 +1295,8 @@ function buildCalibPanel(app)
     %   Row 1: Choose | mode | cm Y | val | cm X | val | Compute | INFO
     %   Row 2: result labels (Y: / X: / avg: / kcorr:)
     %   Row 3: Exp dropdown spanning the full width
-    g = uigridlayout(app.CalibPanel, [4 8]);
-    g.RowHeight = {28, 28, 28, 28};
+    g = uigridlayout(app.CalibPanel, [3 8]);
+    g.RowHeight = {28, 28, 28};
     g.ColumnWidth = {70, 80, 'fit', 50, 'fit', 50, 'fit', 50};
     g.ColumnSpacing = 4;
     g.RowSpacing = 4;
@@ -1238,8 +1307,9 @@ function buildCalibPanel(app)
         'ButtonPushedFcn', @(~,~) onCalibrateChoose(app));
     bChoose.Layout.Row = 1; bChoose.Layout.Column = 1;
     app.CalibModeDropDown = uidropdown(g, ...
-        'Items', {'4 points', '2 lines'}, 'Value', '4 points', ...
-        'Tooltip', '4 points = legacy click-y1-y2-x1-x2; 2 lines = drawline');
+        'Items', {'4 points', '2 lines', '1 line'}, 'Value', '4 points', ...
+        'Tooltip', '4 points = legacy click-y1-y2-x1-x2; 2 lines = drawline; 1 line = single reference line', ...
+        'ValueChangedFcn', @(~,~) onCalibModeChanged(app));
     app.CalibModeDropDown.Layout.Row = 1; app.CalibModeDropDown.Layout.Column = 2;
     lblY = uilabel(g, 'Text', 'cm Y:'); lblY.Layout.Row = 1; lblY.Layout.Column = 3;
     app.DistanceYField = uieditfield(g, 'numeric', 'Value', 50, 'Limits', [0.1, Inf]);
@@ -1274,12 +1344,6 @@ function buildCalibPanel(app)
                   'Freezing Track','New Track','Complex Context','OF_Obj','3DM','<New>'}, ...
         'ValueChangedFcn', @(s, ~) onExpTypeChanged(app, s));
     app.ExpTypeDropDown.Layout.Row = 3; app.ExpTypeDropDown.Layout.Column = [2 8];
-
-    % Row 4: 1-line calibration shortcut
-    bOneLine = uibutton(g, 'Text', 'Calibrate (1 line)', ...
-        'BackgroundColor', semanticColor('action'), ...
-        'ButtonPushedFcn', @(~,~) app.calibrateByOneLine());
-    bOneLine.Layout.Row = 4; bOneLine.Layout.Column = [1 8];
 end
 
 function onExpTypeChanged(app, src)
@@ -1293,6 +1357,11 @@ function onExpTypeChanged(app, src)
     src.Items = items;
     src.Value = name;
     app.status(sprintf('Added experiment type "%s"', name));
+end
+
+function onCalibModeChanged(app)
+    mode = app.CalibModeDropDown.Value;
+    app.DistanceXField.Enable = toOnOff(~strcmpi(mode, '1 line'));
 end
 
 function buildArenaPanel(app)
@@ -1552,8 +1621,8 @@ end
 function buildAutoDetectPanel(app, parent)
     adPanel = uipanel(parent, 'Title', 'Auto-detect objects', ...
         'FontSize', 14, 'FontWeight', 'bold');
-    ag = uigridlayout(adPanel, [7, 3]);
-    ag.RowHeight = repmat({28}, 1, 7);
+    ag = uigridlayout(adPanel, [8, 3]);
+    ag.RowHeight = repmat({28}, 1, 8);
     ag.ColumnWidth = {180, '1x', 'fit'};
 
     lblMode = uilabel(ag, 'Text', 'Mode:');
@@ -1599,11 +1668,14 @@ function buildAutoDetectPanel(app, parent)
     app.AutoStartFromField.Layout.Row = 7; app.AutoStartFromField.Layout.Column = 2;
 
     btnGrid = uigridlayout(ag, [1, 2]);
-    btnGrid.Layout.Row = 7; btnGrid.Layout.Column = 3;
+    btnGrid.Layout.Row = 8; btnGrid.Layout.Column = [1 3];
+    btnGrid.ColumnWidth = {'1x', '1x'};
     btnGrid.Padding = [0 0 0 0];
-    uibutton(btnGrid, 'Text', 'Auto-detect', ...
+    bDetect = uibutton(btnGrid, 'Text', 'Auto-detect', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.runAutoDetect());
-    uibutton(btnGrid, 'Text', 'Commit', ...
+    bCommit = uibutton(btnGrid, 'Text', 'Commit', ...
+        'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.commitAutoDetected());
 end
 
@@ -1613,7 +1685,7 @@ end
 
 function onZoneStrategyChanged(app)
     s = app.ZonesStrategyDropDown.Value;
-    app.WallWidthField.Enable         = enableIfAny(s, {'corners-walls-center', 'circle-rings'});
+    app.WallWidthField.Enable         = enableIfAny(s, {'corners-walls-center', 'circle-rings', 'circle-with-center'});
     app.MiddleWidthField.Enable       = enableIfAny(s, {'circle-rings'});
     app.NumStripsField.Enable         = enableIfAny(s, {'strips'});
     app.StripDirDropDown.Enable       = enableIfAny(s, {'strips'});
@@ -1658,6 +1730,17 @@ function onCalibrateChoose(app)
             posX(2, 1), posX(2, 2)];
         clear cleanup;
         app.status('Got 2 calibration lines; now click "Compute"');
+    elseif strcmpi(mode, '1 line')
+        title(ax, 'Draw a reference line, then click "Compute"', 'Interpreter', 'none');
+        hL = drawline(ax);
+        wait(hL);
+        if ~isvalid(hL); clear cleanup; return; end
+        P = hL.Position;
+        % Pack the single line as 4 points: (1,2) as line endpoints (Y=length),
+        % (3,4) duplicated so X==Y when Compute treats them.
+        app.State.calibPoints = [P(1,1) P(1,2); P(2,1) P(2,2); P(1,1) P(1,2); P(2,1) P(2,2)];
+        clear cleanup;
+        app.status('Got 1 calibration line; now set cm (use cm Y field) and click "Compute"');
     else
         title(ax, 'Click 4 points: Y-pair (1, 2), then X-pair (3, 4)', 'Interpreter', 'none');
         [xPts, yPts] = ginput(4);
@@ -1670,46 +1753,27 @@ end
 
 function onCalibrateCompute(app)
     if isempty(app.State.calibPoints) || size(app.State.calibPoints, 1) < 4
-        app.status('Click "Choose points" first (need 4 points)');
+        app.status('Click "Choose" first');
         return;
+    end
+    mode = '4 points';
+    if ~isempty(app.CalibModeDropDown); mode = app.CalibModeDropDown.Value; end
+    dY = app.DistanceYField.Value;
+    if strcmpi(mode, '1 line')
+        dX = dY;
+    else
+        dX = app.DistanceXField.Value;
     end
     [pxlAvg, kcorr, pxlY, pxlX, diffPct] = sphynx.preset.pixelsPerCm(app.State.frame, ...
         'Points', app.State.calibPoints, ...
-        'DistancesCm', [app.DistanceYField.Value, app.DistanceXField.Value]);
+        'DistancesCm', [dY, dX]);
     % Always pass actual Y and X so the labels show the raw measurements
     % even when kcorr collapses to 1 (within threshold).
     app.setPixelsPerCm(pxlAvg, 'Y', pxlY, 'X', pxlX, 'KCorr', kcorr);
-    app.status(sprintf('Calibrated: avg=%.2f, Y=%.2f, X=%.2f, X/Y diff=%.2f%%, kcorr=%.3f', ...
-        pxlAvg, pxlY, pxlX, diffPct, kcorr));
+    app.status(sprintf('Calibrated (%s): avg=%.2f, Y=%.2f, X=%.2f, kcorr=%.3f', ...
+        mode, pxlAvg, pxlY, pxlX, kcorr));
 end
 
-function calibrateByOneLine(app)
-    if isempty(app.State.frame); app.status('Load video first'); return; end
-    try
-        fh = figure('Name', 'Calibrate: 1 line', 'NumberTitle', 'off');
-        cleaner = onCleanup(@() closeIfValid(fh)); %#ok<NASGU>
-        ax = axes(fh);
-        imshow(app.State.frame, 'Parent', ax);
-        title(ax, 'Draw a line of known length, then enter cm', 'Interpreter', 'none');
-        hL = drawline(ax);
-        wait(hL);
-        if ~isvalid(hL); app.status('Calibration cancelled'); return; end
-        P = hL.Position;
-        lengthPx = sqrt(sum(diff(P, 1, 1).^2));
-        cmStr = inputdlg('Line length in cm:', 'Calibrate', 1, {'10'});
-        if isempty(cmStr); app.status('Calibration cancelled'); return; end
-        cm = str2double(cmStr{1});
-        if isnan(cm) || cm <= 0
-            app.status('Invalid cm value');
-            return;
-        end
-        pxlPerCm = lengthPx / cm;
-        app.setPixelsPerCm(pxlPerCm, 'Y', pxlPerCm, 'X', pxlPerCm, 'KCorr', 1);
-        app.status(sprintf('Calibrated by 1 line: pxlPerCm=%.3f', pxlPerCm));
-    catch ME
-        app.status(sprintf('1-line calibration failed: %s', ME.message));
-    end
-end
 
 function onPickArena(app)
     if isempty(app.State.frame); app.status('Load video first'); return; end
@@ -1746,7 +1810,9 @@ function onAddObject(app)
     while true
         try
             obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
-                'PickMode', pickMode);
+                'PickMode', pickMode, ...
+                'ExistingObjects', app.State.objects, ...
+                'ExistingArena', app.State.arena);
             obj.type = sprintf('Object%d', numel(app.State.objects) + 1);
             if isempty(app.State.objects)
                 app.State.objects = obj;
@@ -1977,7 +2043,8 @@ function Z = computeZonesFromUI(app)
             case 'circle-with-center'
                 Z = sphynx.preset.buildZonesCircleCenter(app.State.arena.mask, ...
                     'PixelsPerCm', app.State.pxlPerCm, ...
-                    'CenterDiameterCm', app.CenterDiameterCmField.Value);
+                    'CenterDiameterCm', app.CenterDiameterCmField.Value, ...
+                    'WallWidthCm', app.WallWidthField.Value);
             case 'none'
                 Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, 'Strategy', 'none');
         end
