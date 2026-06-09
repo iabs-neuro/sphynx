@@ -1856,3 +1856,12 @@ total populated ratio 0.881). Auto-start default ON in defaultConfig.
 сейчас в circle (в этом режиме не нужно выбирать режим углов, их же
 нет. этот режим должен работать с круглой ареной либо с эллипсом),
 нельзя выбрать зону вокруг объектов. дефолт сделай для объектов 4 см"
+
+## 2026-06-09 (later 6) — Pass 2 round 13
+
+"как ты определяешь время старта. выводи эту информацию при Preprocess
+tracking, и в логах"
+
+Сделано: Preprocess Tracking tab после Load DLC показывает label
+"Session start: frame N (t=Xs, populated ratio R, window=W,
+threshold=T)" + та же строка в applog/logs.

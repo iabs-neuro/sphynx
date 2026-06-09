@@ -2942,3 +2942,50 @@ Circle/ellipse arenas get a dimmed CornerType field, signalling
 
 239/239 fast tests pass.
 
+
+---
+
+## 2026-06-09 (later 6) — Pass 2 round 13: surface session-start in Preprocess
+
+User: "как ты определяешь время старта. выводи эту информацию при
+Preprocess tracking, и в логах".
+
+### What I do
+The detector lives at `+sphynx/+preprocess/detectSessionStartFrame.m`
+(round 11). Algorithm:
+1. Per-frame populated score = fraction of body parts with both x and
+   y non-NaN AND non-negative (DLC -1.0 sentinel handled).
+2. Forward rolling mean over WindowFrames (default 30 ~= 1 s @ 30 fps).
+3. First frame where rolling >= WindowFillRatio (default 0.5).
+4. Snap forward to the next actually-populated frame so the start
+   never lands on a NaN.
+5. Returns 1 + a fallback message when the animal is detected from
+   frame 1 or never crosses the threshold.
+
+Returns `info` struct: firstPopulatedFrame, totalPopulatedRatio,
+windowFrames, threshold, message.
+
+### R13 changes
+- `PreprocessTabController`: new property `SessionStartLabel`.
+- `buildLoadingPanel`: grid extended from 3x4 to 4x4, LeftPanel row 1
+  height 130 -> 158; row 4 is the new label (italic placeholder
+  before load).
+- `loadAll`: after readDLC succeeds, call new `reportSessionStart()`
+  method which:
+    * runs detectSessionStartFrame on the loaded DLC,
+    * reads frame rate from computeContext (preset Options.FrameRate
+      or 30 fps fallback),
+    * builds a label like:
+      `Session start: frame 44 (t=1.43s @ 30 fps, first populated 14,
+       populated ratio 0.88, window=30, threshold=0.50)`,
+    * mirrors it to applog('info', ...) so it lands in
+      docs/superpowers/logs and the in-app log textarea.
+- `clearAll`: resets the label back to the italic placeholder.
+
+### Verified
+- 239/239 fast tests still pass (no test changes needed).
+- Sanity-printed the BARNES summary string -- matches expected
+  formatting:
+  "Session start: frame 44 (t=1.43s @ 30 fps, first populated 14,
+   populated ratio 0.88, window=30, threshold=0.50)".
+

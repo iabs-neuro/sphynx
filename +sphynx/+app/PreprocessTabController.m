@@ -26,6 +26,7 @@ classdef PreprocessTabController < handle
         DLCField
         VideoField
         PresetField
+        SessionStartLabel       % R13: auto-detected session start info
 
         % Block 2: per-part settings
         PerPartPanel
@@ -171,6 +172,11 @@ classdef PreprocessTabController < handle
                 return;
             end
 
+            % R13: auto-detect the session start frame and surface it in
+            % the UI + log. analyzeSession uses the same helper at batch
+            % time -- this preview shows the user what to expect.
+            obj.reportSessionStart();
+
             % Optional: load preset for frame + pxl2sm (used in Slice 4+)
             if ~isempty(obj.State.paths.preset) && isfile(obj.State.paths.preset)
                 try
@@ -193,6 +199,47 @@ classdef PreprocessTabController < handle
             obj.State.currentBodyPart = 1;
             obj.State.currentFrame = 1;
             obj.refreshPreview();
+        end
+
+        function reportSessionStart(obj)
+            % R13: run sphynx.preprocess.detectSessionStartFrame on the
+            % loaded DLC, post a one-liner to the log, and update the
+            % loading-panel label. Same detector that analyzeSession
+            % uses for batch auto-start, so the two stay in sync.
+            if isempty(obj.State.dlc); return; end
+            try
+                [startF, info] = sphynx.preprocess.detectSessionStartFrame( ...
+                    obj.State.dlc);
+            catch ME
+                obj.applog('warn', 'session-start detect failed: %s', ME.message);
+                obj.setSessionStartLabel('Session start: detection failed');
+                return;
+            end
+            ctx = obj.computeContext();
+            fps = ctx.frameRate;
+            timeStr = '';
+            if isnumeric(fps) && fps > 0
+                timeStr = sprintf(', t=%.2fs @ %g fps', (startF - 1) / fps, fps);
+            end
+            if isempty(info.message)
+                msg = sprintf(['Session start: frame %d%s ' ...
+                    '(first populated %d, populated ratio %.2f, ' ...
+                    'window=%d, threshold=%.2f)'], ...
+                    startF, timeStr, info.firstPopulatedFrame, ...
+                    info.totalPopulatedRatio, info.windowFrames, info.threshold);
+            else
+                msg = sprintf('Session start: frame %d%s (fallback: %s)', ...
+                    startF, timeStr, info.message);
+            end
+            obj.applog('info', '%s', msg);
+            obj.setSessionStartLabel(msg);
+        end
+
+        function setSessionStartLabel(obj, text)
+            if ~isempty(obj.SessionStartLabel) && isvalid(obj.SessionStartLabel)
+                obj.SessionStartLabel.Text = text;
+                obj.SessionStartLabel.FontAngle = 'normal';
+            end
         end
 
         % --- Compute API -----------------------------------------------------
@@ -494,6 +541,10 @@ classdef PreprocessTabController < handle
                 obj.VideoWindow = [];
             end
             obj.VideoReader_ = [];
+            if ~isempty(obj.SessionStartLabel) && isvalid(obj.SessionStartLabel)
+                obj.SessionStartLabel.Text = 'Session start: (load DLC to detect)';
+                obj.SessionStartLabel.FontAngle = 'italic';
+            end
             obj.applog('info', 'Cleared all (paths kept)');
         end
 
@@ -802,7 +853,7 @@ classdef PreprocessTabController < handle
             % B3 = '1x' = remaining = 270 (= B1 + B2 per user request).
             obj.LeftPanel = uigridlayout(obj.OuterGrid, [3, 1]);
             obj.LeftPanel.Layout.Row = 2; obj.LeftPanel.Layout.Column = 1;
-            obj.LeftPanel.RowHeight = {130, 140, '1x'};
+            obj.LeftPanel.RowHeight = {158, 140, '1x'};
             obj.LeftPanel.RowSpacing = 4;
             obj.LeftPanel.Padding = [0 0 0 0];
 
@@ -857,8 +908,8 @@ classdef PreprocessTabController < handle
         function buildLoadingPanel(obj)
             p = uipanel(obj.LeftPanel, 'Title', '1. Loading');
             p.Layout.Row = 1;
-            g = uigridlayout(p, [3, 4]);
-            g.RowHeight = {26, 26, 32};
+            g = uigridlayout(p, [4, 4]);
+            g.RowHeight = {26, 26, 32, 22};
             g.ColumnWidth = {'1x', '1x', '1x', '1x'};
             g.ColumnSpacing = 4;
             g.RowSpacing = 4;
@@ -908,6 +959,17 @@ classdef PreprocessTabController < handle
                 'BackgroundColor', semanticColor('info'), ...
                 'ButtonPushedFcn', @(~,~) obj.loadSynthetic());
             btnSynth.Layout.Row = 3; btnSynth.Layout.Column = 4;
+
+            % R13: auto-detected session start (filled after loadAll).
+            obj.SessionStartLabel = uilabel(g, ...
+                'Text', 'Session start: (load DLC to detect)', ...
+                'FontAngle', 'italic', ...
+                'Tooltip', ['Auto-detected from the DLC trace: first ', ...
+                            'frame where the animal is consistently ', ...
+                            'tracked. Used by analyzeSession as ', ...
+                            'config.range.startFrame when autoStart=on.']);
+            obj.SessionStartLabel.Layout.Row = 4;
+            obj.SessionStartLabel.Layout.Column = [1 4];
 
             % Try to inherit project root from sibling Preset tab
             obj.inheritRootFromParentApp();
