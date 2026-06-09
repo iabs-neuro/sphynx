@@ -1819,3 +1819,24 @@ After round 8 smoke (commit a3496cc):
    Корневая причина: stale classdef в interactive MATLAB. Файл
    парсится чисто в batch. После round 8 edit нужно `clear classes`
    или перезапуск MATLAB перед re-run приложения.
+
+## 2026-06-09 (later 3) — Pass 2 round 10 feedback
+
+After round 9:
+
+R10.1: "блок 5. Strategy - circle (добавь режим, где только есть стены
+       и все остальное центр), Wall 15, Obj zone - 3" — новый режим
+       только wall + center (без middle).
+
+R10.2: "во всех вкладках добавь возможность считывать таблицу DLC
+       режима мультиэнимал. Пусть определяется автоматом сколько
+       там животных, и для анализа берется (пока что), самое
+       заполненное по координатам.
+       пример таблицы Demo/DLC/Stfp 1 D5 T2 1-14-1...el.csv"
+
+Затем дополнительно: "вот сразу наш файл, с которым будем работать
+Demo/BARNES/3_DLC/2024_11_02_17_16_42_test_cr_reencoded_superanimal_topviewmouse_snapshot.csv
+проверь его, и тесты на нем"
+
+User testing this exact BARNES superanimal file. Picker found
+animal0 = 88% populated (right call).

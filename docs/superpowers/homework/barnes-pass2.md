@@ -1,7 +1,61 @@
 # Pass 2 manual verification (11 features S1-S11)
 
-Все 11 фич на ветке `sphynx-GUI`, HEAD = round 9 (Block 5 Barnes defaults).
-226/226 fast тестов зелёные.
+Все 11 фич на ветке `sphynx-GUI`, HEAD = round 10 (circle strategy + multianimal DLC).
+233/233 fast тестов зелёные.
+
+## iteration 10 (2026-06-09) — circle strategy + multianimal DLC
+
+### 1) Новый Strategy 'circle' (Barnes default)
+В Block 5 добавлен **circle** — два zona: `wall` (кольцо у стены)
+и `center` (всё остальное внутри арены).
+
+Новые дефолты:
+- Strategy = **circle**
+- Wall = **15 cm**
+- Obj zone = **3 cm**
+
+Помещён в dropdown перед `circle-rings`. Использует bwdist на маске —
+работает на эллипсе/круге/полигоне.
+
+### 2) Multianimal DLC support (auto-pick most populated)
+`sphynx.io.readDLC` теперь поддерживает оба формата:
+- **single-animal** (3 header rows) — как было.
+- **multi-animal** (4 header rows с `individuals` строкой) — авто.
+
+Логика multianimal pick:
+1. Парсит individuals + bodyparts + coords строки.
+2. Кандидаты — индивиды с >1 bodypart (исключает `single` — обычно
+   1 маркер вроде miniscope LED).
+3. Для каждого кандидата считает заполнённые пары (x,y) — где
+   "заполнено" = не NaN И не отрицательно (DLC superanimal пишет
+   `-1.0` как sentinel для "no detection").
+4. Берёт самого заполнённого. Лог:
+   `[readDLC] multi-animal: N individuals found {...}; selected "X" (P body parts)`.
+5. Сохраняет в `out.individuals` (все) и `out.selectedIndividual`.
+6. Доп: можно форсить через `'Individual', 'animal3'`.
+
+Бонус: значения `< 0` в X/Y/likelihood конвертятся в NaN на выходе
+(и для single-animal тоже) — Hampel/sgolay теперь корректно их
+пропускают.
+
+### Что проверено на твоих файлах
+- `Demo/DLC/Stfp 1 D5 T2 1-14-1...el.csv`:
+  individuals = {observer, demonstrator, single}. Selected
+  **observer** (11 bodyparts). `single` (1 bp = miniscope)
+  правильно отброшен.
+- `Demo/BARNES/3_DLC/2024_11_02_17_16_42_test_cr_reencoded_superanimal_topviewmouse_snapshot.csv`:
+  10 animals (animal0..animal9), 27 bodyparts каждый. Selected
+  **animal0** (88.1% populated, остальные 0-1%).
+
+### Что проверить руками
+1. Clear classes / restart MATLAB (после edit `+sphynx/+app/.m`).
+2. Block 5 свежий: Strategy=circle, Wall=15, ObjZone=3.
+3. Загрузи `..._snapshot.csv` в Preprocess Tracking tab. В логе
+   должно быть `[readDLC] multi-animal: 10 individuals found ...;
+   selected "animal0"`. Графики X/Y/likelihood должны рисоваться.
+4. Hampel + sgolay должны работать без NaN-крашей.
+
+## iteration 9 (2026-06-09) — Block 5 defaults + класс-кеш guidance
 
 ## iteration 9 (2026-06-09) — Block 5 defaults + класс-кеш guidance
 

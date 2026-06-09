@@ -2795,3 +2795,66 @@ breakage after class reload.
 
 226/226 fast tests pass.
 
+
+---
+
+## 2026-06-09 (later 3) — Pass 2 round 10
+
+User feedback:
+R10.1 Add Strategy 'circle' (wall ring + center, no middle). Wall=15, ObjZone=3.
+R10.2 Multi-animal DLC: auto-detect N animals, pick most populated.
+      Sample files: Stfp ...el.csv (observer/demonstrator/single) and
+      BARNES superanimal_topviewmouse (animal0..9).
+
+### R10.1 — 'circle' strategy
+New helper +sphynx/+preset/buildZonesCircleWall.m: returns
+{wall, center} with wall = bwdist-based ring, center = remainder.
+WallWidthCm=0 collapses to single 'center' = whole arena. Works on
+any arena shape (uses bwdist on the mask).
+
+Wired into CreatePresetApp:
+- ZonesStrategyDropDown: added 'circle' (before 'circle-rings');
+  default Value = 'circle'.
+- WallWidthField default 12 -> 15.
+- Enable rule: WallWidth on for {corners-walls-center, circle,
+  circle-rings, circle-with-center}.
+- computeZonesFromUI dispatch case for 'circle'.
+- INFO text helpZonesText updated.
+
+3 tests in buildZonesCircleWallTest.m: 2-zone partition, wall=0
+collapse, ellipse shape.
+
+### R10.2 — Multi-animal DLC
+Rewrote readDLC.m. Detection: row 2 first token == 'individuals'
+-> multi-animal (4 header rows); else single-animal (3 header rows).
+
+Multi-animal path:
+- Parse individuals row (per-triplet labels) + bodyparts row +
+  coords row, then data from row 5.
+- Build per-triplet (individual, bodypart) pairs.
+- Candidate individuals: those with >1 distinct bodypart. Excludes
+  trackers labelled 'single' (1 bodypart, e.g. miniscope LED).
+  Falls back to all if no candidate qualifies.
+- Score each candidate by total populated coords (where populated =
+  not NaN AND not negative -- DLC superanimal exports use -1.0 as
+  the missing sentinel).
+- Pick the highest-scoring individual (or honour 'Individual' opt).
+- Return its columns as the bodyPartsNames / X / Y / likelihood.
+- Add fields: out.individuals (all unique) + out.selectedIndividual.
+- Log: "[readDLC] multi-animal: N individuals found {...}; selected
+  "X" (P body parts)".
+
+Output normalization (both formats): replace negative x/y values
+with NaN unconditionally. Pixel coordinates are always >= 0; -1 is
+DLC's "no detection". This unblocks Hampel/sgolay downstream.
+
+4 tests in readDLCMultiAnimalTest.m:
+- Stfp file: detects {observer, demonstrator, single}, picks one of
+  the 2 true animals (excludes 'single' = 1 bp).
+- BARNES file: detects 10 animals, picks animal0 (88% populated;
+  others 0-1%). Verified -1.0 -> NaN replacement.
+- Forced individual override.
+- Single-animal backward-compat.
+
+Verification: 233/233 fast pass (was 226 -- 7 new tests).
+

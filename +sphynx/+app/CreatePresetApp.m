@@ -2161,8 +2161,8 @@ function buildZonesPanel(app)
     lblStrat = uilabel(g, 'Text', 'Strategy:');
     lblStrat.Layout.Row = 1; lblStrat.Layout.Column = 1;
     app.ZonesStrategyDropDown = uidropdown(g, ...
-        'Items', {'corners-walls-center', 'strips', 'circle-rings', 'circle-with-center', 'none'}, ...
-        'Value', 'circle-with-center', ...
+        'Items', {'corners-walls-center', 'strips', 'circle', 'circle-rings', 'circle-with-center', 'none'}, ...
+        'Value', 'circle', ...
         'ValueChangedFcn', @(~,~) onZoneStrategyChanged(app));
     app.ZonesStrategyDropDown.Layout.Row = 1; app.ZonesStrategyDropDown.Layout.Column = [2 4];
     bInfo = uibutton(g, 'Text', 'INFO', ...
@@ -2172,7 +2172,7 @@ function buildZonesPanel(app)
 
     lblWall = uilabel(g, 'Text', 'Wall:');
     lblWall.Layout.Row = 2; lblWall.Layout.Column = 1;
-    app.WallWidthField = uieditfield(g, 'numeric', 'Value', 12, 'Limits', [0, Inf]);
+    app.WallWidthField = uieditfield(g, 'numeric', 'Value', 15, 'Limits', [0, Inf]);
     app.WallWidthField.Layout.Row = 2; app.WallWidthField.Layout.Column = 2;
     lblMid = uilabel(g, 'Text', 'Middle:');
     lblMid.Layout.Row = 2; lblMid.Layout.Column = 3;
@@ -2358,7 +2358,7 @@ end
 
 function onZoneStrategyChanged(app)
     s = app.ZonesStrategyDropDown.Value;
-    app.WallWidthField.Enable         = enableIfAny(s, {'corners-walls-center', 'circle-rings', 'circle-with-center'});
+    app.WallWidthField.Enable         = enableIfAny(s, {'corners-walls-center', 'circle', 'circle-rings', 'circle-with-center'});
     app.MiddleWidthField.Enable       = enableIfAny(s, {'circle-rings'});
     app.NumStripsField.Enable         = enableIfAny(s, {'strips'});
     app.StripDirDropDown.Enable       = enableIfAny(s, {'strips'});
@@ -2735,6 +2735,10 @@ function Z = computeZonesFromUI(app)
                     'NumStrips', app.NumStripsField.Value, ...
                     'StripDirection', app.StripDirDropDown.Value, ...
                     'ArenaVertices', arenaVerts);
+            case 'circle'
+                Z = sphynx.preset.buildZonesCircleWall(app.State.arena.mask, ...
+                    'PixelsPerCm', app.State.pxlPerCm, ...
+                    'WallWidthCm', wallCm);
             case 'circle-rings'
                 Z = sphynx.preset.buildZonesCircle(app.State.arena.mask, ...
                     'PixelsPerCm', app.State.pxlPerCm, ...
@@ -3178,12 +3182,13 @@ function txt = helpZonesText()
         '  corners-walls-center - square arena split into corner,';
         '       wall, and center zones. Wall (cm) = wall width.';
         '  strips - split arena into N equal-width strips.';
+        '  circle - simplest: wall ring + center (everything else).';
+        '       Wall (cm) = ring thickness. Barnes default.';
         '  circle-rings - concentric rings (wall + middle1.. + center)';
         '       for round arenas. Wall and Middle widths in cm.';
-        '  circle-with-center - two-zone split for round arenas:';
-        '       center disc + wall annulus. Center diameter in cm.';
-        '  none - no spatial subdivision (Barnes default: only the';
-        '       per-hole object zones matter, no arena partition).';
+        '  circle-with-center - three zones for round arenas:';
+        '       wall annulus + middle + center disc.';
+        '  none - no spatial subdivision (only per-hole object zones).';
         '';
         '"Preview zones" shows the proposed partition on the preview';
         '(magenta) without committing.';
