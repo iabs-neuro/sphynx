@@ -2989,3 +2989,71 @@ windowFrames, threshold, message.
   "Session start: frame 44 (t=1.43s @ 30 fps, first populated 14,
    populated ratio 0.88, window=30, threshold=0.50)".
 
+
+## 2026-06-10 — barnes pass 2, round 14 (6 fixes)
+
+R14.1 calibration-gate warnings
+- New helpers: app.isCalibrated, app.warnUncalibrated, app.requireCalibration
+  (public methods on sphynx.app.CreatePresetApp).
+- Soft-warn (log + status area) in runAutoDetect / previewZones / addZones —
+  ops still run with pxlPerCm=1 fallback but the user is told.
+- Hard-block (log + uialert) in copyObjectsN / alignDetectedRadii — those
+  ops physically need cm->px conversion.
+
+R14.2 object drag after autodetect
+- Added ensureUniqueTypes() method; runs at end of commitAutoDetected and
+  renames any duplicate types to next-free index. Root cause was name
+  collisions making currentTargetIdx return only the first match — so
+  duplicates were unmovable via the MoveTarget dropdown.
+- ObjectsManagerFig.CloseRequestFcn now routes X-button to finishManager
+  so working state (incl. just-committed autodetect) is promoted to
+  savedObjects automatically instead of being trapped in the draft.
+
+R14.3 single-click manual shape
+- Removed wait(h) from addPendingShape; the ROI is pushed onto the
+  pending list as soon as drawXX returns. "Commit pending" remains the
+  second click. Polygon still requires drawpolygon's own
+  double-click-to-close (library API) but no extra confirmation step.
+
+R14.4 copy uses interactive ROIs per source geometry
+- copyObjectsN now spawns drawcircle for Circle sources, drawellipse for
+  Ellipse, drawpolygon for everything else. No more dense polygons
+  rendered as "circles with a dot".
+- Commit half reads each handle by the recorded handleGeom and rebuilds
+  the border from Center/Radius (circle), Center/SemiAxes/RotationAngle
+  (ellipse), or Position (polygon).
+- New local helper fitEllipseFromBorder(bx,by) — PCA-based axis-aligned
+  fit so ellipse copies mirror the source shape.
+
+R14.5 sensitivity slider + numeric input
+- Row 3 of Auto-detect panel is now a 2-row stacked sub-grid (64px tall):
+  slider spans the full width on top (no longer competing with a value
+  label for horizontal space), and below it a "value: 0.XX" label plus
+  AutoSensitivityField (uieditfield numeric 0..1, 2-digit format).
+- Slider exposes MajorTicks 0:0.25:1 so 0..1 labels render without
+  truncation.
+- New callback onSensitivityFieldChanged keeps slider, value label, and
+  edit field in sync and re-triggers detection.
+
+R14.6 1-line angle guard 20..70 deg
+- onCalibrateChoose '1 line' branch wraps drawline in a loop: after the
+  user finishes the line, compute angle vs horizontal (normalized 0..90)
+  and if outside [20, 70] log a warn + show uiconfirm "Redraw / Cancel".
+  Bad line is deleted; redraw continues in the same figure. Status
+  message on success reports the accepted angle.
+
+Tests
+- New tests/unit/round14HelpersTest.m — 9 tests:
+  ensureUniqueTypes (no-collision, numeric-suffix collision, non-numeric
+  base), isCalibrated (false default, true after setPixelsPerCm),
+  oneLineAngleOk (within range, too-horizontal, too-vertical, signed dirs).
+- Full fast suite: 248 passed, 0 failed, 3 unrelated assumption-filter
+  skips. Was 239 before; +9 from round14HelpersTest.
+
+Files touched
+- +sphynx/+app/CreatePresetApp.m (helpers, runAutoDetect, previewZones,
+  addZones, copyObjectsN, alignDetectedRadii, addPendingShape,
+  commitAutoDetected, ensureUniqueTypes, ObjectsManagerFig.CloseRequestFcn,
+  buildAutoDetectControlsIn, onSensitivityChanging,
+  onSensitivityFieldChanged, onCalibrateChoose, fitEllipseFromBorder)
+- tests/unit/round14HelpersTest.m (new)

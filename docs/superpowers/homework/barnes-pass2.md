@@ -700,3 +700,25 @@ sensitivity это первый параметр для подкрутки.
 Если всё ок — скажи "pass 2 ок" и переходим к следующему этапу
 (если хочешь — возобновим Project subsystem brainstorm от 2026-05-12,
 или новая тема).
+
+---
+
+## Round 14 — 10.06 правки (6 пунктов)
+
+Коммит: <см. git log после commit>
+
+### Что сделано
+1. Калибровка-gate: warn для auto-detect/preview/add, hard-block для copy/align.
+2. Объекты двигаются после autodetect — дедуп типов + auto-finish на X.
+3. Pending shapes — без двойного клика (Circle/Ellipse drag-release).
+4. Copy x N — drawcircle/drawellipse/drawpolygon по геометрии исходника.
+5. Sensitivity — длинная шкала + numeric input снизу + tick labels 0..1.
+6. 1-line калибровка — guard 20..70 deg с redraw/cancel.
+
+### Команды для smoke (MATLAB)
+1. `clear classes; close all; sphynx.app.CreatePresetApp` — стартовать.
+2. Прогнать сценарии из user_log 2026-06-10 (пункты 1..6).
+
+### Что прислать назад
+- Что увидел / не увидел по каждому пункту.
+- Любые подсказки/ошибки в logs/claude_log.md или GUI textarea.

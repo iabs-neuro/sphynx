@@ -122,6 +122,8 @@ classdef CreatePresetApp < handle
         AutoNeighborhoodField
         % Live sensitivity value display label (Fix 4)
         AutoSensitivityValueLabel
+        % R14.5: numeric edit for direct sensitivity entry
+        AutoSensitivityField
         % Mirror listbox in Block 4 (Fix 7)
         ObjectsMirrorListBox
         % Draft model: true while manager is open / has uncommitted edits (Fix 5)
@@ -292,6 +294,11 @@ classdef CreatePresetApp < handle
             % R12.1: object zones are added regardless of strategy --
             % including 'none' or any case where computeZonesFromUI
             % returns nothing -- so the per-hole zones always show.
+            % R14.1: warn when running uncalibrated -- object zone width
+            % is cm and will be misinterpreted as px without pxl/cm.
+            if ~app.isCalibrated()
+                app.warnUncalibrated('Preview zones');
+            end
             app.refitAllMasks();
             Z = computeZonesFromUI(app);
             if ~isempty(app.State.savedObjects)
@@ -393,11 +400,11 @@ classdef CreatePresetApp < handle
             end
             src = app.State.objects(idx);
             n = round(app.CopyNField.Value);
-            pxlPerCm = app.State.pxlPerCm;
-            if isnan(pxlPerCm) || pxlPerCm <= 0
-                app.status('Calibrate pxlPerCm first');
+            % R14.1: copy x N converts cm offsets to px, so calibration is required.
+            if ~app.requireCalibration('Copy x N')
                 return;
             end
+            pxlPerCm = app.State.pxlPerCm;
             % Source object's centroid and bounding-circle radius
             srcCx = mean(src.border_x);
             srcCy = mean(src.border_y);
@@ -422,20 +429,46 @@ classdef CreatePresetApp < handle
                     'FaceAlpha', 0.20, 'EdgeColor', [0.1 0.3 0.6], 'LineWidth', 1);
             end
 
-            % Create N interactive polygons in a ring around source
-            handles = cell(1, n);
+            % R14.4: choose ROI type to match the source geometry so the
+            % copies are first-class interactive shapes (drag handle in
+            % the middle, resize handles on the rim), not dense polygons
+            % rendered as "circles with a dot".
+            geomTag = '';
+            if isfield(src, 'geometry'); geomTag = src.geometry; end
+            ellipseParams = struct('semiAxes', [0 0], 'rotDeg', 0);
+            if strcmpi(geomTag, 'Ellipse')
+                ellipseParams = fitEllipseFromBorder(src.border_x, src.border_y);
+            end
+            handles    = cell(1, n);
+            handleGeom = cell(1, n);
             for k = 1:n
                 a = 2*pi * (k - 1) / n;
                 offX = ringR * cos(a);
                 offY = ringR * sin(a);
-                copyVerts = [src.border_x(:) + offX, src.border_y(:) + offY];
-                % Avoid too many points -- subsample if border is dense
-                if size(copyVerts, 1) > 60
-                    stride = ceil(size(copyVerts, 1) / 60);
-                    copyVerts = copyVerts(1:stride:end, :);
+                switch lower(geomTag)
+                    case 'circle'
+                        handles{k} = drawcircle(ax, ...
+                            'Center', [srcCx + offX, srcCy + offY], ...
+                            'Radius', srcR, ...
+                            'Color', [0 0.6 0], 'LineWidth', 1);
+                        handleGeom{k} = 'Circle';
+                    case 'ellipse'
+                        handles{k} = drawellipse(ax, ...
+                            'Center', [srcCx + offX, srcCy + offY], ...
+                            'SemiAxes', ellipseParams.semiAxes, ...
+                            'RotationAngle', ellipseParams.rotDeg, ...
+                            'Color', [0 0.6 0], 'LineWidth', 1);
+                        handleGeom{k} = 'Ellipse';
+                    otherwise
+                        copyVerts = [src.border_x(:) + offX, src.border_y(:) + offY];
+                        if size(copyVerts, 1) > 60
+                            stride = ceil(size(copyVerts, 1) / 60);
+                            copyVerts = copyVerts(1:stride:end, :);
+                        end
+                        handles{k} = drawpolygon(ax, 'Position', copyVerts, ...
+                            'Color', [0 0.6 0], 'LineWidth', 1);
+                        handleGeom{k} = 'Polygon';
                 end
-                handles{k} = drawpolygon(ax, 'Position', copyVerts, ...
-                    'Color', [0 0.6 0]);
             end
 
             % Confirm/Cancel buttons
@@ -462,15 +495,39 @@ classdef CreatePresetApp < handle
                 return;
             end
 
-            % Commit: pull final positions out of each ROI
+            % Commit: pull final positions out of each ROI. R14.4 -- read
+            % each ROI by its own geometry so the committed border is a
+            % proper resampling, not whatever drawpolygon's vertex list
+            % happens to be after user drag.
             newIdx = [];
+            ang = linspace(0, 2*pi, 60)';
             for k = 1:n
                 h = handles{k};
                 if ~isvalid(h); continue; end
-                finalPos = h.Position;   % Nx2
+                gk = handleGeom{k};
                 cp = src;
-                cp.border_x = finalPos(:, 1);
-                cp.border_y = finalPos(:, 2);
+                switch gk
+                    case 'Circle'
+                        cx = h.Center(1); cy = h.Center(2); r = h.Radius;
+                        bx = cx + r*cos(ang);
+                        by = cy + r*sin(ang);
+                        cp.geometry = 'Circle';
+                    case 'Ellipse'
+                        cx = h.Center(1); cy = h.Center(2);
+                        a  = h.SemiAxes(1); b = h.SemiAxes(2);
+                        rot = deg2rad(h.RotationAngle);
+                        xx = a*cos(ang); yy = b*sin(ang);
+                        bx = cx + xx*cos(rot) - yy*sin(rot);
+                        by = cy + xx*sin(rot) + yy*cos(rot);
+                        cp.geometry = 'Ellipse';
+                    otherwise
+                        pos = h.Position;
+                        bx = pos(:, 1);
+                        by = pos(:, 2);
+                        cp.geometry = 'Polygon';
+                end
+                cp.border_x = bx;
+                cp.border_y = by;
                 cp.mask = imfill(sphynx.preset.maskFromBorder( ...
                     app.State.height, app.State.width, cp.border_x, cp.border_y), 'holes');
                 cp.type = sprintf('object%d', numel(app.State.objects) + 1);
@@ -497,6 +554,11 @@ classdef CreatePresetApp < handle
             % R12.1: object zones are now added even when the strategy
             % returns nothing (e.g. 'none' for a Barnes preset where
             % only the per-hole zones matter).
+            % R14.1: warn when running uncalibrated -- saved zones use
+            % cm units in their build params.
+            if ~app.isCalibrated()
+                app.warnUncalibrated('Add zones');
+            end
             app.refitAllMasks();
             Z = computeZonesFromUI(app);
             % Object zones — only if not already committed (dedup).
@@ -923,8 +985,13 @@ classdef CreatePresetApp < handle
                 app.status('Need video + arena before auto-detect');
                 return;
             end
+            % R14.1: warn (do not block) when auto-detect runs without
+            % calibration -- area/radius filters in cm units silently
+            % collapse to px without scaling.
+            if ~app.isCalibrated()
+                app.warnUncalibrated('Auto-detect');
+            end
             pxlPerCm = app.State.pxlPerCm;
-            % Guard NaN pxlPerCm -> area filters would reject everything
             if isnan(pxlPerCm) || pxlPerCm <= 0
                 pxlPerCm = 1;   % treat as 1 px/cm (areas in px^2)
             end
@@ -1042,7 +1109,21 @@ classdef CreatePresetApp < handle
             end
             if isempty(app.ManagerAxes) || ~isvalid(app.ManagerAxes); return; end
             geom = app.State.objectGeometry;
-            app.ManagerStatusLabel.Text = sprintf('Drawing %s — drag/click, double-click to finish', geom);
+            % R14.3: no wait() -- the ROI is registered as pending the
+            % moment the user finishes the basic drawing gesture, so
+            % "Commit pending" serves as the second click. For Circle
+            % and Ellipse, one drag is enough (drawcircle/drawellipse
+            % return when the mouse is released). For Polygon, drawpolygon
+            % still needs a double-click to close the loop -- that is the
+            % library API, not an extra confirmation step.
+            switch geom
+                case 'Polygon'
+                    app.ManagerStatusLabel.Text = ['Drawing Polygon -- click vertices, ' ...
+                        'double-click last to close. Then "Commit pending".'];
+                otherwise
+                    app.ManagerStatusLabel.Text = sprintf( ...
+                        'Drawing %s -- drag to size, release mouse. Then "Commit pending".', geom);
+            end
             try
                 switch geom
                     case 'Polygon'
@@ -1054,8 +1135,7 @@ classdef CreatePresetApp < handle
                     otherwise
                         h = drawpolygon(app.ManagerAxes, 'Color', [0 0.6 0], 'LineWidth', 1);
                 end
-                wait(h);
-                if ~isvalid(h)
+                if isempty(h) || ~isvalid(h)
                     app.ManagerStatusLabel.Text = 'Cancelled';
                     return;
                 end
@@ -1208,12 +1288,30 @@ classdef CreatePresetApp < handle
 
         function onSensitivityChanging(app, evt)
             % Debounced live slider: re-run auto-detect while user drags.
-            % Update live value label.
+            % Update live value label + numeric input.
             if ~isempty(app.AutoSensitivityValueLabel) && isvalid(app.AutoSensitivityValueLabel)
-                app.AutoSensitivityValueLabel.Text = sprintf('%.2f', evt.Value);
+                app.AutoSensitivityValueLabel.Text = sprintf('value: %.2f', evt.Value);
+            end
+            if ~isempty(app.AutoSensitivityField) && isvalid(app.AutoSensitivityField)
+                app.AutoSensitivityField.Value = evt.Value;
             end
             % Mirror slider Value so runAutoDetect reads the live value.
             app.AutoSensitivitySlider.Value = evt.Value;
+            if isempty(app.State.frame) || isempty(app.State.arena); return; end
+            if isempty(app.State.arena.mask); return; end
+            app.runAutoDetect();
+        end
+
+        function onSensitivityFieldChanged(app, newVal)
+            % R14.5: numeric input -> slider + re-detect. Clamp to [0,1]
+            % defensively (uieditfield Limits already do this).
+            v = max(0, min(1, newVal));
+            if ~isempty(app.AutoSensitivitySlider) && isvalid(app.AutoSensitivitySlider)
+                app.AutoSensitivitySlider.Value = v;
+            end
+            if ~isempty(app.AutoSensitivityValueLabel) && isvalid(app.AutoSensitivityValueLabel)
+                app.AutoSensitivityValueLabel.Text = sprintf('value: %.2f', v);
+            end
             if isempty(app.State.frame) || isempty(app.State.arena); return; end
             if isempty(app.State.arena.mask); return; end
             app.runAutoDetect();
@@ -1243,6 +1341,12 @@ classdef CreatePresetApp < handle
                 end
                 app.State.objects = existing;
             end
+            % R14.2: dedup type names so the MoveTarget dropdown can
+            % address every object uniquely. Collisions happen when
+            % AutoStartFromField defaults to 1 but objects with the
+            % same names already exist -- currentTargetIdx returned
+            % only the first match, so the duplicates were unmovable.
+            app.State.objects = app.ensureUniqueTypes(app.State.objects);
             nAdded = numel(canonNew);
             app.State.autoDetectedObjects = struct('type', {}, 'geometry', {}, ...
                 'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
@@ -1251,6 +1355,66 @@ classdef CreatePresetApp < handle
             app.refreshManagerPreview();
             app.refreshPreview();
             app.status(sprintf('Committed %d auto-detected objects', nAdded));
+        end
+
+        function ok = isCalibrated(app)
+            ok = ~isnan(app.State.pxlPerCm) && app.State.pxlPerCm > 0;
+        end
+
+        function warnUncalibrated(app, opName)
+            % R14.1: soft-warn -- log + status-area message, then continue
+            % with a pxl/cm = 1 fallback. Area/radius filters using cm
+            % units will be off by the missing scale; the warning lets
+            % the user know before they're surprised.
+            app.applog('warn', ...
+                '%s without calibration: pxl/cm not set, treating areas as px; results may be inaccurate', ...
+                opName);
+        end
+
+        function ok = requireCalibration(app, opName)
+            % R14.1: hard-block -- log + status + popup dialog. Use for
+            % ops that physically need pxl/cm (e.g. cm -> px conversion
+            % for object placement). Returns false so the caller can
+            % bail out early.
+            if app.isCalibrated()
+                ok = true; return;
+            end
+            msg = sprintf( ...
+                '"%s" requires calibration. Open Block 2 (Calibration) and Compute pxl/cm first.', ...
+                opName);
+            app.applog('warn', '%s', msg);
+            try
+                if ~isempty(app.Figure) && isvalid(app.Figure)
+                    uialert(app.Figure, msg, 'Calibration required', 'Icon', 'warning');
+                end
+            catch
+                % uialert can fail in headless contexts; log already emitted
+            end
+            ok = false;
+        end
+
+        function objs = ensureUniqueTypes(~, objs)
+            % R14.2: guarantee unique .type across a struct array of
+            % objects. On collision, bump the trailing digits to the
+            % next free slot (e.g. duplicate 'object1' -> 'object3'
+            % when 'object1' and 'object2' already exist).
+            if isempty(objs); return; end
+            seen = containers.Map('KeyType', 'char', 'ValueType', 'logical');
+            for k = 1:numel(objs)
+                t = objs(k).type;
+                if isempty(t); t = sprintf('object%d', k); end
+                if isKey(seen, t)
+                    base = regexprep(t, '\d+$', '');
+                    if isempty(base); base = 'object'; end
+                    n = 1;
+                    while isKey(seen, sprintf('%s%d', base, n))
+                        n = n + 1;
+                    end
+                    t = sprintf('%s%d', base, n);
+                end
+                seen(t) = true;
+                objs(k).type = t;
+            end
         end
 
         function objs = canonicalizeObjects(~, objs)
@@ -1288,12 +1452,12 @@ classdef CreatePresetApp < handle
                 app.focusManagerIfOpen();
                 return;
             end
-            pxlPerCm = app.State.pxlPerCm;
-            if isnan(pxlPerCm) || pxlPerCm <= 0
-                app.status('Calibrate pxlPerCm first');
+            % R14.1: align radii needs px-from-cm; require calibration.
+            if ~app.requireCalibration('Align radii')
                 app.focusManagerIfOpen();
                 return;
             end
+            pxlPerCm = app.State.pxlPerCm;
             % Mean radius across detected objects, in cm
             radii = zeros(1, numel(app.State.autoDetectedObjects));
             for k = 1:numel(app.State.autoDetectedObjects)
@@ -1424,6 +1588,12 @@ classdef CreatePresetApp < handle
             end
             fh = uifigure('Name', 'Objects Manager', ...
                 'Position', [120 80 1400 750]);
+            % R14.2: X-out auto-finishes so working-state objects (e.g.
+            % committed auto-detect) become visible in main preview
+            % instead of being trapped in the draft. Otherwise users
+            % see "move broken" because the main preview only renders
+            % savedObjects.
+            fh.CloseRequestFcn = @(~,~) app.finishManager();
             app.ObjectsManagerFig = fh;
             gl = uigridlayout(fh, [1, 3]);
             gl.ColumnWidth = {260, '1x', 300};
@@ -2270,7 +2440,10 @@ function buildAutoDetectControlsIn(app, parent)
     % Rows: 1=Mode, 2=Algorithm, 3=Sensitivity, 4=Neighborhood,
     %       5=MinArea, 6=MaxArea, 7=Radius range, 8=StartFrom, 9=buttons, 10=INFO
     ag = uigridlayout(parent, [10, 3]);
-    ag.RowHeight = repmat({28}, 1, 10);
+    % R14.5: row 3 (Sensitivity) is now a tall stacked sub-grid so the
+    % slider can run the full panel width and a numeric input sits
+    % directly below; tick labels 0.0..1.0 fit without truncation.
+    ag.RowHeight = {28, 28, 64, 28, 28, 28, 28, 28, 28, 28};
     ag.ColumnWidth = {180, '1x', 'fit'};
 
     % Row 1: Mode dropdown
@@ -2290,17 +2463,34 @@ function buildAutoDetectControlsIn(app, parent)
         'ValueChangedFcn', @(~,~) app.updateAutoDetectEnableState());
     app.AutoAlgorithmDropdown.Layout.Row = 2; app.AutoAlgorithmDropdown.Layout.Column = 2;
 
-    % Row 3: Sensitivity slider + live value label
+    % Row 3: Sensitivity -- label + stacked slider/input panel
     lblSens = uilabel(ag, 'Text', 'Sensitivity:');
     lblSens.Layout.Row = 3; lblSens.Layout.Column = 1;
-    sensSub = uigridlayout(ag, [1, 2]);
+    sensSub = uigridlayout(ag, [2, 3]);
     sensSub.Layout.Row = 3; sensSub.Layout.Column = 2;
-    sensSub.ColumnWidth = {'1x', 50};
+    sensSub.RowHeight = {30, 28};
+    sensSub.ColumnWidth = {'1x', 'fit', 70};
     sensSub.Padding = [0 0 0 0];
-    sensSub.ColumnSpacing = 4;
+    sensSub.RowSpacing = 2;
+    sensSub.ColumnSpacing = 6;
+    % Slider spans the full width on the top sub-row so 0..1 tick
+    % labels render without overlap.
     app.AutoSensitivitySlider = uislider(sensSub, 'Limits', [0 1], 'Value', 0.75, ...
+        'MajorTicks', 0:0.25:1, ...
         'ValueChangingFcn', @(~,evt) app.onSensitivityChanging(evt));
-    app.AutoSensitivityValueLabel = uilabel(sensSub, 'Text', '0.75');
+    app.AutoSensitivitySlider.Layout.Row = 1;
+    app.AutoSensitivitySlider.Layout.Column = [1 3];
+    % Sub-row 2: value display label + numeric edit on the right.
+    app.AutoSensitivityValueLabel = uilabel(sensSub, 'Text', 'value: 0.75', ...
+        'HorizontalAlignment', 'right');
+    app.AutoSensitivityValueLabel.Layout.Row = 2;
+    app.AutoSensitivityValueLabel.Layout.Column = 2;
+    app.AutoSensitivityField = uieditfield(sensSub, 'numeric', ...
+        'Value', 0.75, 'Limits', [0 1], ...
+        'ValueDisplayFormat', '%.2f', ...
+        'ValueChangedFcn', @(src,~) app.onSensitivityFieldChanged(src.Value));
+    app.AutoSensitivityField.Layout.Row = 2;
+    app.AutoSensitivityField.Layout.Column = 3;
 
     % Row 4: Neighborhood (moved up near Sensitivity)
     lblNh = uilabel(ag, 'Text', 'Neighborhood, cm:');
@@ -2418,16 +2608,55 @@ function onCalibrateChoose(app)
         clear cleanup;
         app.status('Got 2 calibration lines; now click "Compute"');
     elseif strcmpi(mode, '1 line')
+        % R14.6: enforce 20..70 deg from horizontal. Lines too close to
+        % an axis make the kcorr split degenerate (the perpendicular
+        % component approaches zero) and they're usually a sign that
+        % the user dragged along the arena's frame instead of a true
+        % diagonal. The loop re-prompts until the user draws a valid
+        % line or cancels.
         title(ax, 'Draw a reference line, then click "Compute"', 'Interpreter', 'none');
-        hL = drawline(ax);
-        wait(hL);
-        if ~isvalid(hL); clear cleanup; return; end
-        P = hL.Position;
+        P = [];
+        while true
+            hL = drawline(ax);
+            wait(hL);
+            if ~isvalid(hL); clear cleanup; return; end
+            Ptmp = hL.Position;
+            dxPx = Ptmp(2, 1) - Ptmp(1, 1);
+            dyPx = Ptmp(2, 2) - Ptmp(1, 2);
+            angDeg = abs(atan2d(dyPx, dxPx));
+            if angDeg > 90; angDeg = 180 - angDeg; end
+            if angDeg < 20 || angDeg > 70
+                app.applog('warn', ...
+                    '1-line calibration: line angle %.1f deg is outside 20..70 deg', angDeg);
+                try
+                    choice = uiconfirm(app.Figure, ...
+                        sprintf(['Line angle %.1f deg is too close to horizontal/vertical.\n' ...
+                                 'Allowed range: 20..70 deg.\n\n' ...
+                                 'Double-click the bad line to remove it and redraw, ' ...
+                                 'or click Cancel to abort calibration.'], angDeg), ...
+                        'Bad calibration angle', ...
+                        'Options', {'Redraw', 'Cancel'}, ...
+                        'DefaultOption', 1, 'CancelOption', 2);
+                catch
+                    choice = 'Redraw';
+                end
+                if strcmp(choice, 'Cancel')
+                    if isvalid(hL); delete(hL); end
+                    clear cleanup; return;
+                end
+                if isvalid(hL); delete(hL); end
+                continue;
+            end
+            P = Ptmp;
+            break;
+        end
         % Store only the 2 endpoints (2x2). onCalibrateCompute handles the
         % 1-line branch directly without routing through pixelsPerCm.
-        app.State.calibPoints = P;   % 2x2 [x1 y1; x2 y2]
+        app.State.calibPoints = P;
         clear cleanup;
-        app.status('Got 1 calibration line; set total length in "cm Y" and click "Compute"');
+        app.status(sprintf( ...
+            'Got 1 calibration line (angle %.1f deg); set total length in "cm Y" and click "Compute"', ...
+            angDeg));
     else
         title(ax, 'Click 4 points: Y-pair (1, 2), then X-pair (3, 4)', 'Interpreter', 'none');
         [xPts, yPts] = ginput(4);
@@ -2987,6 +3216,33 @@ end
 
 function closeIfValid(h)
     if ~isempty(h) && isvalid(h); close(h); end
+end
+
+function out = fitEllipseFromBorder(bx, by)
+    % R14.4: rough axis-aligned ellipse fit -- semi-axes from the std
+    % of border points along PCA axes, rotation from the principal
+    % component direction. Used by copyObjectsN to spawn drawellipse
+    % ROIs that mirror the source object's actual ellipse.
+    bx = bx(:); by = by(:);
+    cx = mean(bx); cy = mean(by);
+    pts = [bx - cx, by - cy];
+    if size(pts, 1) < 2
+        out = struct('semiAxes', [10, 10], 'rotDeg', 0);
+        return;
+    end
+    C = (pts' * pts) / max(1, size(pts, 1) - 1);
+    [V, D] = eig(C);
+    [eVals, order] = sort(diag(D), 'descend');
+    V = V(:, order);
+    % Semi-axes ≈ max distance along each principal direction.
+    proj1 = pts * V(:, 1);
+    proj2 = pts * V(:, 2);
+    sa = max(abs(proj1));
+    sb = max(abs(proj2));
+    if ~(sa > 0); sa = 10; end
+    if ~(sb > 0); sb = 10; end
+    rotDeg = atan2d(V(2, 1), V(1, 1));
+    out = struct('semiAxes', [sa, sb], 'rotDeg', rotDeg);
 end
 
 function h = createPendingROI(ax, geom, pos)
