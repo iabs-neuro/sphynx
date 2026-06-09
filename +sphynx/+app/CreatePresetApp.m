@@ -289,9 +289,11 @@ classdef CreatePresetApp < handle
         function previewZones(app)
             % Auto-refit all masks first so previewed zones use the
             % current geometry (after any move/rotate). Then build.
+            % R12.1: object zones are added regardless of strategy --
+            % including 'none' or any case where computeZonesFromUI
+            % returns nothing -- so the per-hole zones always show.
             app.refitAllMasks();
             Z = computeZonesFromUI(app);
-            if isempty(Z); return; end
             if ~isempty(app.State.savedObjects)
                 Zobj = sphynx.preset.buildObjectZones(app.State.savedObjects, ...
                     app.State.height, app.State.width, ...
@@ -299,6 +301,7 @@ classdef CreatePresetApp < handle
                     'ZoneWidthCm', app.ObjectZoneWidthField.Value);
                 Z = [Z, Zobj];
             end
+            if isempty(Z); return; end
             app.State.previewZones = Z;
             app.refreshPreview();
             app.status(sprintf('Previewing %d zones (%s)', numel(Z), app.ZonesStrategyDropDown.Value));
@@ -491,9 +494,11 @@ classdef CreatePresetApp < handle
         function addZones(app)
             % Auto-refit masks first so committed zones reflect the
             % current (possibly transformed) geometry.
+            % R12.1: object zones are now added even when the strategy
+            % returns nothing (e.g. 'none' for a Barnes preset where
+            % only the per-hole zones matter).
             app.refitAllMasks();
             Z = computeZonesFromUI(app);
-            if isempty(Z); return; end
             % Object zones — only if not already committed (dedup).
             % Uses savedObjects (draft model Fix 5).
             if ~isempty(app.State.savedObjects)
@@ -535,6 +540,10 @@ classdef CreatePresetApp < handle
                 end
             end
 
+            if isempty(Z)
+                app.status('No zones to add (set Strategy or commit objects in manager first)');
+                return;
+            end
             if isempty(app.State.zones)
                 app.State.zones = Z;
             else
@@ -2195,7 +2204,7 @@ function buildZonesPanel(app)
 
     lblObjZone = uilabel(g, 'Text', 'Obj zone:');
     lblObjZone.Layout.Row = 4; lblObjZone.Layout.Column = 1;
-    app.ObjectZoneWidthField = uieditfield(g, 'numeric', 'Value', 3, 'Limits', [0, Inf]);
+    app.ObjectZoneWidthField = uieditfield(g, 'numeric', 'Value', 4, 'Limits', [0, Inf]);
     app.ObjectZoneWidthField.Layout.Row = 4; app.ObjectZoneWidthField.Layout.Column = 2;
     lblCorners = uilabel(g, 'Text', 'Corners:');
     lblCorners.Layout.Row = 4; lblCorners.Layout.Column = 3;
@@ -2363,7 +2372,12 @@ function onZoneStrategyChanged(app)
     app.NumStripsField.Enable         = enableIfAny(s, {'strips'});
     app.StripDirDropDown.Enable       = enableIfAny(s, {'strips'});
     app.CenterDiameterCmField.Enable  = enableIfAny(s, {'circle-with-center'});
-    app.ObjectZoneWidthField.Enable   = toOnOff(~isempty(app.State.savedObjects));
+    % R12.2: corners only exist for the square arena strategy.
+    app.CornerTypeDropDown.Enable     = enableIfAny(s, {'corners-walls-center'});
+    % R12.3: ObjectZone width is always editable -- it's a global
+    % setting that applies whenever savedObjects are present, and
+    % users want to set the default *before* committing objects.
+    app.ObjectZoneWidthField.Enable   = 'on';
 end
 
 function v = enableIfAny(s, list)

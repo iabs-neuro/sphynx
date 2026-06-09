@@ -2908,3 +2908,37 @@ User-facing impact:
 
 Verification: 239/239 fast tests pass (was 233 -- 6 new).
 
+
+---
+
+## 2026-06-09 (later 5) — Pass 2 round 12 (3 fixes)
+
+User: "объекты всегда рисуются независимо от стратегии разметки арены.
+сейчас в circle ... нельзя выбрать зону вокруг объектов. дефолт сделай
+для объектов 4 см".
+
+### R12.1 — object zones survive empty strategy Z
+previewZones and addZones had `if isempty(Z); return; end` AFTER
+computeZonesFromUI but BEFORE the object-zone append. With
+Strategy='none' (or any case where computeZonesFromUI returned [])
+this short-circuited everything, so per-hole object zones never
+rendered. Moved the empty check to after the object-zone append.
+addZones still early-exits with a helpful status when there are
+neither strategy zones nor object zones to add.
+
+### R12.2 — CornerType disabled outside square strategy
+The dropdown had no Enable rule -> always interactive even when the
+arena is round/elliptic (where corners are meaningless). Now
+`onZoneStrategyChanged` sets
+`app.CornerTypeDropDown.Enable = enableIfAny(s, {'corners-walls-center'})`.
+Circle/ellipse arenas get a dimmed CornerType field, signalling
+"not applicable".
+
+### R12.3 — ObjectZone always editable + default 4 cm
+- Removed the `Enable = ~isempty(savedObjects)` conditional. The
+  field is now always editable so users can pre-set the default
+  before committing objects in the manager.
+- Default `Value` changed from 3 -> 4 cm.
+
+239/239 fast tests pass.
+

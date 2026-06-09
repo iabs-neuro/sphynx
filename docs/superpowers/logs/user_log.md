@@ -1849,3 +1849,10 @@ animal0 = 88% populated (right call).
 
 Real BARNES file: detector landed on frame 44 (first populated 14,
 total populated ratio 0.881). Auto-start default ON in defaultConfig.
+
+## 2026-06-09 (later 5) — Pass 2 round 12
+
+"объекты всегда рисуются независимо от стратегии разметки арены.
+сейчас в circle (в этом режиме не нужно выбирать режим углов, их же
+нет. этот режим должен работать с круглой ареной либо с эллипсом),
+нельзя выбрать зону вокруг объектов. дефолт сделай для объектов 4 см"
