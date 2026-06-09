@@ -1,7 +1,60 @@
 # Pass 2 manual verification (11 features S1-S11)
 
-Все 11 фич на ветке `sphynx-GUI`, HEAD = round 10 (circle strategy + multianimal DLC).
-233/233 fast тестов зелёные.
+Все 11 фич на ветке `sphynx-GUI`, HEAD = round 11 (auto session-start detection).
+239/239 fast тестов зелёные.
+
+## iteration 11 (2026-06-09) — auto session-start detection
+
+Анализ может теперь сам понимать, с какого кадра начинать. Логика:
+
+- Считает per-frame «заполненность» = доля bodyparts с непустыми
+  (не NaN, не отрицательными) x и y.
+- Скользящее окно вперёд (30 кадров ~ 1 с при 30 fps).
+- Первый кадр, где среднее окна >= 0.5 — точка старта.
+- Snap'ает к следующему реально заполненному кадру (не падает на
+  NaN-дыру).
+- Если животное с первого кадра — возвращает 1.
+- Если ни разу не появилось — fallback 1 + сообщение в логе.
+
+### Где живёт
+- `+sphynx/+preprocess/detectSessionStartFrame.m` — pure helper.
+- `+sphynx/+pipeline/defaultConfig.m` — новый флаг
+  `cfg.range.autoStart = true` (default ON).
+- `+sphynx/+pipeline/analyzeSession.m` — при `autoStart && startFrame==1`
+  пред-читает DLC, гоняет детектор, записывает результат обратно в
+  `config.range.startFrame`, перечитывает с правильного смещения.
+
+### Что увидишь в логах при анализе/batch
+```
+[Auto-start: detected session start at frame 44 (firstPop=14, populatedRatio=0.88)]
+```
+или (если животное в кадре с самого начала):
+```
+[Auto-start: keeping startFrame=1 (animal populated from frame 1)]
+```
+
+### Проверено на твоём файле
+`Demo/BARNES/3_DLC/..._snapshot.csv` → детектор вернул кадр **44**
+(первый populated frame 14 — короткий transient, стабильное
+обнаружение с 44).
+
+### Как выключить
+Если хочешь выключить (например, запустить с manual `startFrame`),
+выстави `cfg.range.autoStart = false` в config'е перед вызовом
+`sphynx.pipeline.analyzeSession`. Или просто задай `startFrame > 1`
+— manual override всегда побеждает (auto работает только когда
+startFrame == 1).
+
+### Что проверить
+1. В Batch Analysis запусти batch с твоим BARNES preset + DLC. В логе
+   должен быть `[Auto-start: detected ... frame 44 ...]`.
+2. Открой результирующий `_Result.mat`. `config.range.startFrame`
+   должен быть = 44 (не 1).
+3. Видео-overlay уже учитывает `startFrame - 1` как frameOffset
+   (legacy код в Define Acts / Batch / Analyze Tab) — синхронизация
+   с видео должна остаться корректной.
+
+## iteration 10 (2026-06-09) — circle strategy + multianimal DLC
 
 ## iteration 10 (2026-06-09) — circle strategy + multianimal DLC
 

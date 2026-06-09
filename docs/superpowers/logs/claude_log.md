@@ -2858,3 +2858,53 @@ DLC's "no detection". This unblocks Hampel/sgolay downstream.
 
 Verification: 233/233 fast pass (was 226 -- 7 new tests).
 
+
+---
+
+## 2026-06-09 (later 4) — Pass 2 round 11: auto session-start detection
+
+User: "можно ли по этим таблицам определять момент начала анализа
+сессии. если да, давай сделаем. пусть добавляется в конфиг
+сессионный, при батче пусть автоматически определяется".
+
+### R11.1 — sphynx.preprocess.detectSessionStartFrame
+Takes DLC struct, returns first frame where animal is consistently
+detected. Algorithm:
+- per-frame "population score" = fraction of body parts with both
+  x and y populated (not NaN, not negative -- DLC -1 sentinel).
+- forward-window rolling mean (default 30 frames ~ 1 s at 30 fps).
+- first frame where rolling mean >= WindowFillRatio (default 0.5).
+- snaps result to the next actually-populated frame so we never
+  start on a NaN gap.
+- returns 1 (with info.message) if animal is detected from frame 1
+  or if never reaches threshold.
+
+Optional name-value: WindowFrames, PopulationRatio, WindowFillRatio.
+
+Tested on the BARNES superanimal file: returns frame 44 (first
+populated 14, total populated ratio 0.881). 6 unit tests cover the
+real file + 5 synthetic edge cases (always populated / late start /
+never populated / negative-coord sentinel / snap to next populated
+frame).
+
+### R11.2 — wired into config + pipeline
+- defaultConfig: new cfg.range.autoStart = true (default on).
+- analyzeSession: when autoStart && startFrame == 1, pre-read DLC,
+  run detector, record detected frame back into
+  config.range.startFrame, then read again with that offset.
+  Single source of truth for the rest of the pipeline (video
+  offsets, timestamps) -- everything downstream reads
+  config.range.startFrame as before.
+- Logs both decisions: "[Auto-start: detected ... at frame N
+  (firstPop=K, populatedRatio=R)]" or "keeping startFrame=1 (reason)".
+
+User-facing impact:
+- Batch runs auto-skip pre-session footage. No UI control added --
+  toggle via `cfg.range.autoStart = false` in defaultConfig or per
+  config override.
+- The recorded result.config.range.startFrame keeps reflecting the
+  truth so video overlays (already using startFrame - 1 as offset)
+  line up correctly without further change.
+
+Verification: 239/239 fast tests pass (was 233 -- 6 new).
+

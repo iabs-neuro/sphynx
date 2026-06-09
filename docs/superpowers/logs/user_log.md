@@ -1840,3 +1840,12 @@ Demo/BARNES/3_DLC/2024_11_02_17_16_42_test_cr_reencoded_superanimal_topviewmouse
 
 User testing this exact BARNES superanimal file. Picker found
 animal0 = 88% populated (right call).
+
+## 2026-06-09 (later 4) — Pass 2 round 11
+
+"можно ли по этим таблицам определять момент начала анализа сессии.
+если да, давай сделаем. пусть добавляется в конфиг сессионный, при
+батче пусть автоматически определяется"
+
+Real BARNES file: detector landed on frame 44 (first populated 14,
+total populated ratio 0.881). Auto-start default ON in defaultConfig.

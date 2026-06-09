@@ -47,6 +47,28 @@ function result = analyzeSession(config)
     ArenaAndObjects = presetData.ArenaAndObjects;
 
     log('info', 'Reading DLC: %s', config.paths.dlc);
+    % R11 auto-start: if user kept startFrame=1 and autoStart is on,
+    % read the full DLC first, detect the session start from the trace,
+    % then re-read with that start. The detected frame is recorded in
+    % config.range.startFrame so the rest of the pipeline (video offsets,
+    % timestamps) sees a single source of truth.
+    autoStart = false;
+    if isfield(config.range, 'autoStart')
+        autoStart = config.range.autoStart;
+    end
+    if autoStart && config.range.startFrame == 1
+        dlcFull = sphynx.io.readDLC(config.paths.dlc, ...
+            'EndFrame', config.range.endFrame);
+        [detected, detInfo] = sphynx.preprocess.detectSessionStartFrame(dlcFull);
+        if isempty(detInfo.message) && detected > 1
+            log('info', 'Auto-start: detected session start at frame %d (firstPop=%d, populatedRatio=%.2f)', ...
+                detected, detInfo.firstPopulatedFrame, detInfo.totalPopulatedRatio);
+            config.range.startFrame = detected;
+        else
+            log('info', 'Auto-start: keeping startFrame=1 (%s)', ...
+                ifEmpty(detInfo.message, 'animal populated from frame 1'));
+        end
+    end
     dlc = sphynx.io.readDLC(config.paths.dlc, ...
         'StartFrame', config.range.startFrame, ...
         'EndFrame', config.range.endFrame);
@@ -425,6 +447,10 @@ function [arr, keepIdx] = tryLoadPrepared(dlcPath, dlc, log)
         arr(k).PercentLowLikelihood = t.PercentLowLikelihood;
         keepIdx(k) = ~strcmp(t.Status, 'NotFound');
     end
+end
+
+function v = ifEmpty(x, fallback)
+    if isempty(x); v = fallback; else; v = x; end
 end
 
 function w = makeOdd(w)

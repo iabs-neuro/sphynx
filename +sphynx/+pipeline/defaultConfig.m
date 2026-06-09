@@ -25,6 +25,10 @@ function cfg = defaultConfig()
 
     cfg.range.startFrame = 1;
     cfg.range.endFrame   = 0;          % 0 = read all
+    % R11: when true and startFrame == 1, auto-detect the first
+    % consistently-tracked frame from DLC and use it as the effective
+    % start. Lets batch runs skip pre-session footage automatically.
+    cfg.range.autoStart  = true;
 
     cfg.preprocess.likelihoodThreshold = 0.95;
     cfg.preprocess.smoothWindowSmallSec = 0.10;
