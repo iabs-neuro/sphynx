@@ -220,10 +220,13 @@ classdef CreatePresetApp < handle
                     'Points', points, 'ExistingObjects', app.State.objects, ...
                     'ExistingArena', app.State.arena);
                 obj.type = sprintf('Object%d', numel(app.State.objects) + 1);
-                if isempty(app.State.objects)
-                    app.State.objects = obj;
+                objCanon = app.canonicalizeObjects(obj);
+                existing = app.canonicalizeObjects(app.State.objects);
+                if isempty(existing)
+                    app.State.objects = objCanon;
                 else
-                    app.State.objects(end+1) = obj;
+                    existing(end+1) = objCanon;
+                    app.State.objects = existing;
                 end
                 app.refreshObjectsList();
                 app.refreshPreview();
@@ -1063,10 +1066,13 @@ classdef CreatePresetApp < handle
                     obj = sphynx.preset.readArenaGeometry(app.State.frame, geom, 'Points', pts);
                     obj.type  = sprintf('Object%d', numel(app.State.objects) + 1);
                     obj.class = '';
-                    if isempty(app.State.objects)
-                        app.State.objects = obj;
+                    objCanon = app.canonicalizeObjects(obj);
+                    existing = app.canonicalizeObjects(app.State.objects);
+                    if isempty(existing)
+                        app.State.objects = objCanon;
                     else
-                        app.State.objects(end + 1) = obj;
+                        existing(end + 1) = objCanon;
+                        app.State.objects = existing;
                     end
                     nCommitted = nCommitted + 1;
                     delete(h);
@@ -1181,17 +1187,24 @@ classdef CreatePresetApp < handle
             end
             startNum = app.AutoStartFromField.Value;
             newObjs = app.State.autoDetectedObjects;
+            % Round 7 fix: canonicalize each auto-detected object to the
+            % full 9-field schema (adds empty border_separate_x/y) so
+            % subsequent manual-add via Pending shapes can append without
+            % a struct-array field-mismatch error.
             for k = 1:numel(newObjs)
                 newObjs(k).type = sprintf('Object%d', startNum + k - 1);
             end
-            if isempty(app.State.objects)
-                app.State.objects = newObjs;
+            canonNew = app.canonicalizeObjects(newObjs);
+            existing = app.canonicalizeObjects(app.State.objects);
+            if isempty(existing)
+                app.State.objects = canonNew;
             else
-                for k = 1:numel(newObjs)
-                    app.State.objects(end + 1) = newObjs(k);
+                for k = 1:numel(canonNew)
+                    existing(end + 1) = canonNew(k); %#ok<AGROW>
                 end
+                app.State.objects = existing;
             end
-            nAdded = numel(newObjs);
+            nAdded = numel(canonNew);
             app.State.autoDetectedObjects = struct('type', {}, 'geometry', {}, ...
                 'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
             app.refreshObjectsList();
@@ -1199,7 +1212,35 @@ classdef CreatePresetApp < handle
             app.refreshManagerPreview();
             app.refreshPreview();
             app.status(sprintf('Committed %d auto-detected objects', nAdded));
-            app.focusManagerIfOpen();
+        end
+
+        function objs = canonicalizeObjects(~, objs)
+            % Round 7: ensure every element has the canonical 8 fields so
+            % struct arrays from different sources (autoDetectObjects 6-field,
+            % readArenaGeometry 9-field) can be concatenated safely.
+            needs = {'type', 'geometry', 'border_x', 'border_y', ...
+                'border_separate_x', 'border_separate_y', 'mask', 'class'};
+            if isempty(objs)
+                objs = cell2struct(cell(numel(needs), 0), needs, 1);
+                return;
+            end
+            for f = 1:numel(needs)
+                if ~isfield(objs, needs{f})
+                    for k = 1:numel(objs)
+                        objs(k).(needs{f}) = [];
+                    end
+                end
+            end
+            for k = 1:numel(objs)
+                if ~iscell(objs(k).border_separate_x)
+                    objs(k).border_separate_x = {};
+                end
+                if ~iscell(objs(k).border_separate_y)
+                    objs(k).border_separate_y = {};
+                end
+                if isempty(objs(k).class); objs(k).class = ''; end
+            end
+            objs = orderfields(objs, needs);
         end
 
         function alignDetectedRadii(app)
@@ -1288,31 +1329,23 @@ classdef CreatePresetApp < handle
             app.SyntheticController       = sphynx.app.SyntheticDataTabController(app.TabSynthetic, app);
         end
 
+        function tf = isManagerOpen(app)
+            tf = ~isempty(app.ObjectsManagerFig) && isvalid(app.ObjectsManagerFig);
+        end
+
         function refocus(app)
-            % Bring app figure back to front (after a log/status / external focus)
+            % Suppress focus shift to main while the manager is open
+            % (round 7: prevents flickering between manager and main).
+            if app.isManagerOpen(); return; end
             if ~isempty(app.Figure) && isvalid(app.Figure)
                 figure(app.Figure);
             end
         end
 
         function focusManagerIfOpen(app)
-            % Restore focus to the Objects Manager window after operations.
-            % Visibility cycle (off→on) forces uifigure to come to front on
-            % Windows in R2020a; figure() alone is unreliable for uifigure.
-            if isempty(app.ObjectsManagerFig) || ~isvalid(app.ObjectsManagerFig)
-                return;
-            end
-            try
-                % Visibility cycle: brief off+on tends to bring uifigure to front
-                % on Windows. Drawnow forces the repaint.
-                app.ObjectsManagerFig.Visible = 'off';
-                drawnow;
-                app.ObjectsManagerFig.Visible = 'on';
-                figure(app.ObjectsManagerFig);   % attempt focus shift
-                drawnow;
-            catch
-                % Best-effort -- focus management on uifigure in R2020a is brittle
-            end
+            % Round 7: kept as a no-op. Focus stealing fixed at the source
+            % (refocus + refreshPreview are now manager-aware), so no need
+            % to fight the OS with visibility cycles.
         end
 
         function status(app, msg)
@@ -1387,6 +1420,10 @@ classdef CreatePresetApp < handle
 
         function refreshPreview(app)
             if isempty(app.State.frame); return; end
+            % Round 7: skip main redraw while manager is open. Main only
+            % reflects committed (saved) state; finishManager triggers an
+            % explicit refresh on close. Avoids focus flicker.
+            if app.isManagerOpen(); return; end
             ax = app.PreviewAxes;
             cla(ax);
             % Use raw image() instead of imshow() — image() coexists with
@@ -1744,18 +1781,21 @@ function buildCalibPanel(app)
     % Row 1: Choose | mode | cm Y | cmYval | cm X | cmXval | Compute | INFO
     bChoose = uibutton(g, 'Text', 'Choose', ...
         'BackgroundColor', semanticColor('action'), ...
+        'Tooltip', ['4 points: click 4 points. ' ...
+                    '2 lines / 1 line: drag line endpoints, ' ...
+                    'then DOUBLE-CLICK to confirm.'], ...
         'ButtonPushedFcn', @(~,~) onCalibrateChoose(app));
     bChoose.Layout.Row = 1; bChoose.Layout.Column = 1;
     app.CalibModeDropDown = uidropdown(g, ...
-        'Items', {'4 points', '2 lines', '1 line'}, 'Value', '4 points', ...
+        'Items', {'4 points', '2 lines', '1 line'}, 'Value', '1 line', ...
         'Tooltip', '4 points = legacy click-y1-y2-x1-x2; 2 lines = drawline; 1 line = single reference line', ...
         'ValueChangedFcn', @(~,~) onCalibModeChanged(app));
     app.CalibModeDropDown.Layout.Row = 1; app.CalibModeDropDown.Layout.Column = 2;
     lblY = uilabel(g, 'Text', 'cm Y:'); lblY.Layout.Row = 1; lblY.Layout.Column = 3;
-    app.DistanceYField = uieditfield(g, 'numeric', 'Value', 50, 'Limits', [0.1, Inf]);
+    app.DistanceYField = uieditfield(g, 'numeric', 'Value', 92, 'Limits', [0.1, Inf]);
     app.DistanceYField.Layout.Row = 1; app.DistanceYField.Layout.Column = 4;
     lblX = uilabel(g, 'Text', 'cm X:'); lblX.Layout.Row = 1; lblX.Layout.Column = 5;
-    app.DistanceXField = uieditfield(g, 'numeric', 'Value', 50, 'Limits', [0.1, Inf]);
+    app.DistanceXField = uieditfield(g, 'numeric', 'Value', 92, 'Limits', [0.1, Inf]);
     app.DistanceXField.Layout.Row = 1; app.DistanceXField.Layout.Column = 6;
     bCompute = uibutton(g, 'Text', 'Compute', ...
         'BackgroundColor', semanticColor('action'), ...
@@ -1785,6 +1825,9 @@ function buildCalibPanel(app)
         'Value', 'Barnes', ...
         'ValueChangedFcn', @(s, ~) onExpTypeChanged(app, s));
     app.ExpTypeDropDown.Layout.Row = 3; app.ExpTypeDropDown.Layout.Column = [2 8];
+
+    % Sync enabled state of cm X field with chosen mode (1 line disables cm X).
+    onCalibModeChanged(app);
 end
 
 function onExpTypeChanged(app, src)
@@ -1818,13 +1861,17 @@ function buildArenaPanel(app)
     g.Padding = [4 4 4 4];
 
     geometries = {'Polygon', 'Circle', 'Ellipse', 'O-maze'};
+    defaultArena = 'Ellipse';   % Barnes default
     app.ArenaGeometryButtons = cell(1, numel(geometries));
     for i = 1:numel(geometries)
         b = uibutton(g, 'state', 'Text', geometries{i}, ...
             'BackgroundColor', semanticColor('geometry'), ...
             'ValueChangedFcn', @(src, ~) onArenaGeometryToggle(app, src));
         b.Layout.Row = 1; b.Layout.Column = i;
-        if i == 1; b.Value = true; end
+        if strcmp(geometries{i}, defaultArena)
+            b.Value = true;
+            app.State.arenaGeometry = defaultArena;
+        end
         app.ArenaGeometryButtons{i} = b;
     end
     % Row 1 INFO at the right edge
@@ -1835,7 +1882,7 @@ function buildArenaPanel(app)
 
     % Row 2: pick mode | pick | clear, all left-aligned
     app.ArenaPickModeDropDown = uidropdown(g, ...
-        'Items', {'shape', 'points'}, 'Value', 'shape', ...
+        'Items', {'shape', 'points'}, 'Value', 'points', ...
         'Tooltip', 'shape = drag-and-drop ROI; points = click vertices then ENTER');
     app.ArenaPickModeDropDown.Layout.Row = 2;
     app.ArenaPickModeDropDown.Layout.Column = 1;
@@ -1957,13 +2004,17 @@ function buildObjectsPickIn(app, parent)
     tb.Padding = [0 0 0 0];
 
     geometries = {'Polygon', 'Circle', 'Ellipse'};
+    defaultObjGeom = 'Circle';   % Barnes default
     app.ObjectGeometryButtons = cell(1, numel(geometries));
     for i = 1:numel(geometries)
         b = uibutton(tb, 'state', 'Text', geometries{i}, ...
             'BackgroundColor', semanticColor('geometry'), ...
             'ValueChangedFcn', @(src, ~) onObjectGeometryToggle(app, src));
         b.Layout.Row = 1; b.Layout.Column = i;
-        if i == 1; b.Value = true; end
+        if strcmp(geometries{i}, defaultObjGeom)
+            b.Value = true;
+            app.State.objectGeometry = defaultObjGeom;
+        end
         app.ObjectGeometryButtons{i} = b;
     end
 
@@ -2049,6 +2100,7 @@ function buildZonesPanel(app)
     lblStrat.Layout.Row = 1; lblStrat.Layout.Column = 1;
     app.ZonesStrategyDropDown = uidropdown(g, ...
         'Items', {'corners-walls-center', 'strips', 'circle-rings', 'circle-with-center', 'none'}, ...
+        'Value', 'none', ...
         'ValueChangedFcn', @(~,~) onZoneStrategyChanged(app));
     app.ZonesStrategyDropDown.Layout.Row = 1; app.ZonesStrategyDropDown.Layout.Column = [2 4];
     bInfo = uibutton(g, 'Text', 'INFO', ...
@@ -2155,7 +2207,7 @@ function buildAutoDetectControlsIn(app, parent)
     lblMode.Layout.Row = 1; lblMode.Layout.Column = 1;
     app.AutoModeDropdown = uidropdown(ag, ...
         'Items', {'free-form', 'all-circles', 'all-polygons', 'all-ellipses'}, ...
-        'Value', 'free-form', ...
+        'Value', 'all-circles', ...
         'ValueChangedFcn', @(~,~) app.updateAutoDetectEnableState());
     app.AutoModeDropdown.Layout.Row = 1; app.AutoModeDropdown.Layout.Column = 2;
 
@@ -2971,21 +3023,28 @@ function txt = helpCalibrationText()
     txt = {
         'Calibration: convert pixels to centimeters.';
         '';
-        'Step 1 - "Choose points":';
-        '   Click 4 points on the preview frame in this order:';
-        '     point 1 - top of vertical reference';
-        '     point 2 - bottom of vertical reference';
-        '     point 3 - left of horizontal reference';
-        '     point 4 - right of horizontal reference';
-        '   The picture closes when all 4 are clicked.';
+        'Pick a mode in the dropdown next to "Choose":';
         '';
-        'Step 2 - enter the real cm distances into the cm Y / cm X';
-        'fields.';
+        '  4 points - click 4 points in this order:';
+        '      1,2: Y-axis pair (top/bottom of vertical reference)';
+        '      3,4: X-axis pair (left/right of horizontal reference)';
+        '      Window closes after the 4th click.';
         '';
-        'Step 3 - "Compute": computes pxl/cm for Y,';
-        'X, average, and the X/Y correction factor (kcorr). If kcorr';
-        'differs from 1 by more than ~3%, your camera scale is';
-        'unequal between axes — keep this in mind.';
+        '  2 lines - draw a Y line, DOUBLE-CLICK to confirm, then';
+        '      draw an X line and DOUBLE-CLICK again. Each line';
+        '      contributes its axis-projection length.';
+        '';
+        '  1 line - draw a single line of known length anywhere';
+        '      and DOUBLE-CLICK to confirm. The full Euclidean';
+        '      length is used; X = Y, kcorr = 1.';
+        '      (cm Y field = total length in cm; cm X is ignored.)';
+        '';
+        'After choosing, enter the real cm distance(s) in cm Y / cm X';
+        'and click "Compute". Results appear in row 2: pxl/cm Y, X,';
+        'avg, and the X/Y correction factor (kcorr).';
+        '';
+        'For BARNES: 1 line is the default. Drag a line across the';
+        'arena diameter, enter 92 cm in cm Y, click Compute.';
     };
 end
 
@@ -2993,23 +3052,59 @@ function txt = helpArenaText()
     txt = {
         'Define the arena boundary on the current preview frame.';
         '';
-        '1) Choose geometry: Polygon (clicks corners), Circle (>=3 pts on rim),';
-        '   Ellipse (>=5 pts on rim), or O-maze (>=3 pts outer + >=3 pts inner).';
-        '2) Click "Pick arena points".';
-        '3) Click points on the temp window; press ENTER. Window closes.';
-        '4) The polygon outline appears in black on the preview.';
+        'Step 1 - geometry (yellow toggle row):';
+        '   Polygon | Circle | Ellipse | O-maze';
+        '';
+        'Step 2 - pick mode:';
+        '   shape  - drag/resize an interactive ROI directly on the';
+        '            frame; DOUBLE-CLICK to confirm.';
+        '   points - click points on the rim; press ENTER to fit.';
+        '            (Circle: 3+ pts, Ellipse: 5+ pts,';
+        '             O-maze: 3+ outer then 3+ inner).';
+        '';
+        'Step 3 - "Pick arena": opens a temp window with the frame.';
+        'Step 4 - the arena outline appears in black on the preview.';
+        '';
+        'Clear drops the arena (and dependent zones).';
+        '';
+        'For BARNES: Ellipse + points (mark 5-8 points on the arena';
+        'rim, ENTER to fit).';
     };
 end
 
 function txt = helpObjectsText()
     txt = {
-        'Add objects (food bowls, novel objects, etc.) on the arena.';
+        'Block 4 in the main window is a compact summary - click';
+        '"Manage objects..." to open the Objects Manager.';
         '';
-        '1) Choose object geometry.';
-        '2) Click "+ Add object", click points, ENTER. Window closes.';
-        '3) Up to 4 named objects supported by downstream zone acts.';
-        '4) Select an object in the list to highlight it on the preview.';
-        '5) Use "Remove selected" to delete the highlighted object.';
+        'Objects Manager layout (3 columns):';
+        '';
+        '  LEFT  - the objects listbox + tools:';
+        '     Remove / Replace / Rename / Delete all';
+        '     Class field + "Assign to selected"';
+        '     Copy x N (replicate selected; you place N copies)';
+        '     Order Barnes (CW renumber around arena center from the';
+        '       selected target; target keeps name "target")';
+        '';
+        '  CENTER - preview + manual picking:';
+        '     Geometry row (Polygon/Circle/Ellipse) + pick mode';
+        '       (shape = drag ROI; points = click vertices + ENTER)';
+        '     "+ Add shape" - draws a new ROI in the manager preview;';
+        '        for shape mode: DOUBLE-CLICK to confirm the ROI.';
+        '     "Commit pending" - turns ALL pending ROIs into objects.';
+        '     "Cancel pending"  - drops them.';
+        '     FINISH (bright green, bottom) - commit working state';
+        '        to the preset and close the manager. Until Finish,';
+        '        nothing renders in the main window (draft model).';
+        '';
+        '  RIGHT - Auto-detect (see its own INFO):';
+        '     Mode + Algorithm + sensitivity slider + area/radius';
+        '     filters. "Auto-detect" runs detection (preview only).';
+        '     "Commit" adds detected objects to the working list.';
+        '     Manual and auto can be mixed in any order.';
+        '';
+        'Selection in the listbox is multi (Ctrl/Shift). Group';
+        'rotate/translate via the "Move target" buttons in main.';
     };
 end
 
@@ -3018,25 +3113,26 @@ function txt = helpZonesText()
         'Build spatial-zone masks based on the arena (and objects).';
         '';
         'Strategies:';
-        '  corners-walls-center : square arena split into corner, wall,';
-        '       and center zones. Wall (cm) controls wall width.';
-        '  strips : split arena into N equal-width strips.';
-        '  circle-rings : concentric rings (wall + middle1.. + center)';
+        '  corners-walls-center - square arena split into corner,';
+        '       wall, and center zones. Wall (cm) = wall width.';
+        '  strips - split arena into N equal-width strips.';
+        '  circle-rings - concentric rings (wall + middle1.. + center)';
         '       for round arenas. Wall and Middle widths in cm.';
-        '  circle-with-center : two-zone split for round arenas:';
+        '  circle-with-center - two-zone split for round arenas:';
         '       center disc + wall annulus. Center diameter in cm.';
-        '  none : no spatial subdivision.';
+        '  none - no spatial subdivision (Barnes default: only the';
+        '       per-hole object zones matter, no arena partition).';
         '';
         '"Preview zones" shows the proposed partition on the preview';
         '(magenta) without committing.';
         '"Add to set" commits the previewed zones to the final set';
         '(blue). You can call it multiple times with different';
         'strategies to combine partitions.';
-        '"Clear all" removes every committed zone.';
+        '"Clear zones" removes every committed zone.';
         '';
         'Object zone (cm) is the inflated radius around each object';
         'that counts as object interaction. Field is enabled only';
-        'when objects are defined.';
+        'when objects are committed (Finish in the manager).';
         '';
         'Implicit "outside-wall" 10 cm offset is always applied';
         'internally to wall/corner/center calculations (legacy';
@@ -3051,11 +3147,18 @@ function txt = helpSaveText()
         '(consumed by both the legacy BehaviorAnalyzer.m and the';
         'new sphynx.pipeline.analyzeSession).';
         '';
-        '"Make plot": always saves <videobase>_layout.png — the';
-        'combined preview (arena + objects + all committed zones).';
+        'Save also auto-writes <videobase>_layout.png - the combined';
+        'preview (arena + committed objects + all committed zones).';
+        '';
+        'If the Objects Manager is still open with uncommitted edits,';
+        'Save auto-finishes the draft first (= equivalent to clicking';
+        'Finish in the manager).';
         '';
         'Check "plot all zones" to ALSO save one PNG per individual';
         'zone (<videobase>_zone_<name>.png).';
+        '';
+        'Clear All wipes arena/objects/zones (paths and calibration';
+        'are kept).';
     };
 end
 

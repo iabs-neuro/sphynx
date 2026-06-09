@@ -1,5 +1,141 @@
 # User Log
 
+## 2026-06-04 -- Pass 2 polish round 5 -- 6 UX refinements
+
+Requested: apply 6 refinements -- fix defaults, add Align radii button, remove uniform-radius UI, move Neighborhood row up, add INFO button + help text, stronger focus retention. Received: all applied, 81 methods, 226/0/3 tests, commit c422f37.
+
+## 2026-06-04 -- Pass 2 polish round 4 -- 7 UX fixes
+
+Requested: apply 7 UX fixes from smoke round 4 (thin ROI lines, target rename, focus, refreshManagerPreview, neighborhood param, uniform radius, mirror listbox). Received: all applied, 80 methods, 227/0/3 tests, commit 384ab21.
+
+## 2026-06-04 -- Pass 2 polish round 3 — 4 UX fixes
+
+Requested: apply 4 UX fixes from smoke round 3 (3-col manager layout, multi-pick flow, live slider + arena clipping, Order by Barnes). Received: all applied, 79 methods, 226/0/3 tests, commit e3e454b.
+
+## 2026-06-04 -- Pass 2 polish round 2 — 3 UX fixes
+
+Requested: apply 3 UX fixes from smoke on Pass 2 round 2 (calib 1-line math, Barnes in Exp dropdown, Objects+Auto-detect manager window). Received: all 3 applied, 73 methods, 225/0/3 tests, commit f12b59e.
+
+## 2026-06-04 -- Pass 2 polish round 1 — 6 UX fixes
+
+Requested: apply 6 UX fixes from smoke on Pass 2 (calib 1-line, objects panel height, arena overlay, copy-N ring, circle-with-center walls, auto-detect buttons). Received: all 6 applied, 225/0/3 tests, commit 88ae206.
+
+## 2026-06-04 -- Barnes Pass 2 sanity review (S1-S11)
+
+Requested: read-only sanity review of full Pass 2 diff (92f2de5..3e10d23). Received: PASS verdict with confirmed test count 224/0/3 and deferred-items list.
+
+## 2026-06-04 -- P2.12 Pass 2 final smoke check
+
+Requested: verification-only smoke check of Barnes Pass 2 branch (HEAD 3e10d23). All checks passed: 224/0/3, 6 helper files + 8 test files present, 12-commit chain intact, no uncommitted source changes, both classes parse clean.
+
+## 2026-06-04 -- Code review of P2.11 commit 3e10d23
+
+Requested combined spec+code review of P2.11 (S7 auto-detect). Result: APPROVED with minor observations. Hybrid threshold workaround is sound. Tests 4/4, fast suite 224/224.
+
+## 2026-06-04 -- P2.11 S7 auto-detect objects
+
+Request: implement Task 11 (P2.11), largest Barnes Pass 2 task. Delivered: autoDetectObjects.m (threshold+Hough, 4 modes), UI panel in CreatePresetApp, tests. Commit 3e10d23.
+
+## 2026-06-04 -- Code review request: P2.10 b3b44ef (S11 auto exclusion ring)
+
+Request: combined spec+code review for commit b3b44ef. Result: APPROVED with observation (stale "220 PASS" count in implementer claim; actual suite 196/199, 0 failures).
+
+## 2026-06-04 -- P2.10 S11 auto exclusion ring
+
+Request: implement Task 10 (P2.10) S11 auto exclusion ring N cm from arena. Delivered: arenaExclusionRing.m helper, UI wiring in PreprocessTabController, tests. Commit b3b44ef.
+
+## 2026-06-04 -- P2.9 combined spec+code review (commit d4ff8f0)
+
+Request: combined spec+code review for P2.9 commit d4ff8f0 (manual exclusion region circle shape). Read-only.
+Result: APPROVED. 93 methods parse OK. 218/218 fast PASS. All spec points verified in diff.
+
+## 2026-06-04 -- P2.9 S10 manual exclusion circle option
+
+Request: implement Task 9 (P2.9) — add circle shape option to manual exclusion region panel.
+Result: DONE. RegionsShapeDropdown property added, shape dropdown in both region panel builds, addManualRegion branches polygon/circle. 93 methods parse OK. 218/218 fast PASS. Commit d4ff8f0.
+
+## 2026-06-04 -- P2.8 combined spec+code review (commit 76e5107)
+
+Request: combined spec+code review for P2.8 commit 76e5107 (frame picker N-of-M). Read-only.
+Result: APPROVED. 69 methods parse OK. 218/218 fast PASS. All spec points verified in diff.
+
+## 2026-06-04 -- P2.8 S6 frame picker N-of-M
+
+Request: implement Task 8 (P2.8) frame picker N-of-M dropdown. Completed: properties added, methods added, nextFrame refactored, nav grid extended, setVideo updated. 218 PASS, commit 76e5107.
+
+## 2026-06-04 -- P2.7 combined spec+code review
+
+Request: combined spec+code review for P2.7 commit 0abd02d. All checks passed, APPROVED.
+
+## 2026-06-04 -- P2.7 S5 circle-with-center zoning
+
+Request: implement Task 7 (P2.7) — S5 Zoning strategy circle-with-center. All steps completed, 3/3 unit tests pass, 218 fast-suite pass, committed 0abd02d.
+
+## 2026-06-04 -- P2.6 code review (c67157e)
+
+Request: spec+code review for P2.6 commit c67157e (calibrate by 1 line, S4). Read-only.
+Result: APPROVED. 215/215 fast tests PASS. 67 methods parse OK.
+
+## 2026-06-04 -- P2.5 code review (94162a7)
+
+Request: spec+code review for P2.5 commit 94162a7 (overlay existing objects on geometry picker). Read-only.
+Result: APPROVED with one Minor observation. All spec items verified. 2/2 + 215/215 PASS. Minor: overlay loop does not guard border_y field existence (readArenaGeometry.m:42) -- only border_x emptiness is checked. Not a practical issue since all objects always have border_y, but corrupt external struct would error rather than skip.
+
+## 2026-06-04 -- P2.5 S3 overlay existing objects on picker (94162a7)
+
+Request: implement Task 5 P2.5 -- overlay existing objects on geometry picker.
+Result: DONE. readArenaGeometryOverlayTest 2/2 PASS. runAllTests fast: 215 passed, 0 failed, 3 skipped. Commit 94162a7 on sphynx-GUI.
+
+## 2026-06-04 -- P2.4 code review (a1d75f6)
+
+Request: spec-compliance + code-quality review for P2.4 commit a1d75f6 (Copy x N). Read-only.
+Result: APPROVED with observations. 3/3 gridOffsets tests PASS. 213/213 suite PASS. All spec items verified. No blocking issues. Minor observations: isempty guard in copy loop unreachable (defensive, harmless); n=5 boundary untested (correct by manual verification); 20-copy mask rebuild is acceptable perf.
+
+## 2026-06-04 -- P2.4 S2 Copy x N (a1d75f6)
+
+Status: DONE. gridOffsetsTest 3/3 PASS. runAllTests fast: 213 passed, 0 failed, 3 skipped. Commit a1d75f6 on sphynx-GUI.
+
+## 2026-06-04 -- P2.3 S9 multi-select group move (3762fea)
+
+Status: DONE. rotateAroundCentroidTest 3/3 PASS. runAllTests fast: 210 passed, 0 failed, 3 skipped. Commit 3762fea on sphynx-GUI.
+
+## 2026-06-04 -- P2.2 code review (dc4b819)
+
+Reviewer: APPROVED. Spec compliant, quality clean. objectClassTest 2/2 PASS. runAllTests fast 207/207 PASS. Commit message exact match.
+
+## 2026-06-04 -- P2.2 S8 object class property
+
+Status: DONE. objectClassTest 2/2 PASS. runAllTests fast: 207 passed, 0 failed, 3 skipped. Commit dc4b819 on sphynx-GUI.
+
+## 2026-06-04 -- P2.1 re-review at 270976e
+
+Code reviewer confirmed: all 7 fixes verified, tests 205/205 PASS. Commit approved.
+
+## 2026-06-04 -- P2.1 review fixes (C1/C2/I1-I5)
+
+Status: DONE. All 7 issues fixed. marqueeSelectTest 5/5 PASS. runAllTests fast: 205 passed, 0 failed, 3 skipped (readFrameAt video-absent, pre-existing). Commit 270976e on sphynx-GUI.
+
+## 2026-06-04 -- A1.5: VFR-safe seek + arena cancel error fix
+
+Status: DONE. 200/200 fast tests pass, 0 failures. readFrameAtTest 3/3 skipped (BARNES video absent -- correct). Commit c765f29 on sphynx-GUI. BARNES video smoke pending on user machine.
+
+## 2026-06-04 -- A4: Pass 1 final smoke check
+
+All 200 fast tests pass. BARNES video: 2703 frames (WARN fired as expected). BARNES DLC csv found: 1307 frames, 14 parts, NaN=0. Commit chain complete, no dirty A1/A2/A3 files. Status: DONE.
+
+## 2026-06-04 -- A3 re-review result
+
+Mutation test: JVM locale switch does not cause R2020a readmatrix to misparse on Windows. testStillCleanUnderRuLocale passed even without the fix. Documentation gate verdict. readDLC.m restored.
+
+## 2026-06-04 — A3 review fixes committed (c4edd31)
+
+Both Important issues from code review applied to readDLCLocaleTest.m. 2/2 test pass, 16/16 regression pass.
+
+## 2026-06-04 — A3 review result
+
+User requested code review of commit 858f16e (A3: readDLC decimal separator).
+Claude verified: spec compliant, 1/1 + 16/16 tests PASS.
+
 Только реплики пользователя и финальные ответы Claude. Без промежуточных шагов.
 Хронологический порядок (новое снизу). Дата — Europe/Moscow.
 
@@ -1457,3 +1593,193 @@ Save all metrics — обходит все detected metrics + все уровн�
 **Юзер:** про йдись по текущей папке, изучи. пройдись по папке c:\Users\User\YandexDisk\_Projects\Ontogenez\BehaviorData\ изучи.
 
 **Claude:** Прочитал структуру sphynx (`+sphynx/` с 13 пакетами, 9 GUI-вкладок, статус из `docs/TODO.md`) и Ontogenez BehaviorData (pipeline 1_Raw/2_Combined/3_DLC/4_Preset/5_Behavior + `Ontogenez - Main.csv` на 582 строки). Пресеты сделаны на 37 когорт (A9A10..A56, C1C2..C35C36); 2_Combined/3_DLC/5_Behavior пусты — DLC ещё не прогонялся. Изменений не вносил.
+
+---
+
+## 2026-05-12 — резка Ontogenez
+
+**Юзер:** нужно разрезать видео из 1_Raw/ → 2_Combined/. Один CSV-row = одна посадка. Имя из колонки Example, для пустых — DEV_<Mouse_id>_<Trial>. Плоско. Резать ffmpeg-ом (юзер поставил).
+
+**Уточнения:**
+- Шаблон имени = `DEV_<Mouse_id>_<Trial>.mp4` для всех 577 валидных строк (15 hand-filled подтвердили этот вид).
+- 2_Combined плоско.
+- ffmpeg по `/c/ffmpeg/bin/ffmpeg.exe`.
+
+**Claude:** Написал `tools/cut_ontogenez_clips.sh` (pilot/all/dryrun). Метод — гибрид `-ss start_s` + `-vf select=between(n,0,count-1)`, гарантирует точное число кадров (PSNR первого кадра output vs frame fs source = inf). На пилоте 5/5 клипов получили ровно ожидаемое nb_frames. Запустил полный прогон 577 клипов в background, мониторю.
+
+**Юзер (поправка):** не 5 битых строк в CSV, а 4. И C33 5T (start=9373) — реально режется до конца видео.
+
+**Claude:** Прав, 4 не 5 (581 data-row - 4 broken = 577). Дорезал DEV_C33_5T.mp4 на 247 кадров (источник имеет 9619 кадров, не 9633 — резал до фактического конца). Main-run завершился: ok=572 new + 5 skipped (пилот) + 0 fail. Итого в 2_Combined/ 578 клипов, 46 мин.
+
+---
+
+## 2026-05-12 — 4_Preset: cohort -> per-session
+
+**Юзер:** в 4_Preset/ маски сделаны для big-видео (cohort-level), naming правильное но плохое. Надо подделать недостающие — чтобы 1 видео из 2_Combined = 1 маска в 4_Preset, ID идентичные.
+
+**Уточнения:**
+- 15 second-order источников (D*/F*/G*) — cohort-preset нет, юзер сделает руками; пропустить сейчас.
+- Per-session плоско: `4_Preset/DEV_<mouse>_<trial>_Preset.mat`.
+- Оригиналы перенести в `4_Preset/_originals/`.
+
+**Claude:** Сделано. 37 cohort перенесены в `_originals/`, клонировано 405 per-session (1:1 с A*/C* видео). 3 orphan (C34 5T, C33 6T, C34 6T) удалил. 174 D/F/G клипов в 2_Combined без preset — ждут твоих cohort масок.
+
+## 2026-05-12 - Brainstorm Project subsystem (пауза до перезагрузки)
+
+Брейнштормим дизайн Project subsystem на `Sphynx-GUI-dev`. Кода ещё не было, только дизайн.
+
+Что одобрено (Sections 1-5 в `docs/superpowers/specs/2026-05-12-project-subsystem-design.md`):
+1. Модель данных ProjectState + JSON schema (Root, Description, ExperimentType, NamePattern, Folders, Defaults, Mice, Log)
+2. UI Project tab (Tab 0): controls слева, mice table + activity log справа
+3. Реестр `+sphynx/+experiments/` (один файл на тип эксперимента)
+4. Listener-based propagation (ProjectState handle с событием Changed)
+5. Что каждая существующая вкладка делает в onProjectChanged()
+
+Что осталось (Sections 6-8):
+6. CreatePreset unfreezing scope (как читать defaults без затирания user input)
+7. Backward compat (старые проекты без JSON; уже сконвертированные H:\Dataset)
+8. Testing approach
+
+Когда вернёшься — скажи "продолжаем дизайн Project subsystem", я прочитаю файл и пойду с Section 6.
+
+
+## 2026-06-03 — Brainstorm: Barnes features
+
+**Юзер:** Расконсервируем sphynx-GUI, добавляем фичи для Barnes. 9 фич Create Preset + 3 фичи Preprocess + 3 бага. Осознай правки, продумаем план.
+
+**Claude:** Подтянул контекст (CreatePresetApp 1929 строк, PreprocessTabController 1918, классификатор зон, калибровка, чтение DLC). Разбил 14 пунктов на 3 бага (A1-A3) + 11 фич (S1-S11). Согласовали: bugs first одним проходом, фичи единой спекой.
+
+**Юзер:** Pass 1 — good. Для F9 auto-detect circles — оба алгоритма (Threshold + Hough). A2 fix оба случая (круг boundary + эллипс).
+
+**Claude:** Записал спеку `docs/superpowers/specs/2026-06-03-barnes-features-design.md`, закоммитил. Жду твоего ревью файла перед writing-plans.
+
+**Юзер:** go.
+
+**Claude:** Спека апрувлена. Памяти `feedback_createpreset_frozen` снял freeze. Записал план Pass 1: `docs/superpowers/plans/2026-06-03-barnes-pass1-bugs.md` (4 TDD-задачи, ~50 LOC + 9 тестов). Закоммитил. Жду выбор execution mode: subagent-driven (recommended) или inline.
+
+---
+
+## 2026-06-03 — Task A1 (subagent)
+
+**User request (via plan):** Implement numFrames fallback for VFR h264. VideoReader.NumFrames returns 2 for the Barnes demo video, breaking frame navigation.
+
+**Claude response:** Task A1 complete. Created correctedFrameCount.m helper, integrated into pickGoodFrame.m. 6/6 unit tests pass. Smoke test: numFrames=2703 (expected ~2700) with [WARN] log. Commit 9fdc6a5.
+
+
+---
+
+## 2026-06-03 — A1 review fixes (subagent)
+
+**User request (via review task):** Apply 4 Important review findings on commit 9fdc6a5: inline magic-number comment, symmetric-case docstring, boundary tests (at/just-over 5%), high-count symmetric test.
+
+**Claude response:** All 4 issues fixed. 9/9 tests pass. Commit 614f069.
+
+## 2026-06-03 — A1 re-review (post-fix)
+
+**User request (via re-review task):** Verify all 4 Important issues are resolved in 614f069.
+
+**Claude response:** Approved. All 4 resolved; 9/9 tests pass.
+
+---
+
+## 2026-06-03 — A2: classifyCircle relaxed boundaries
+
+**User request (via subagent task):** Fix classifyCircle so exact wall+mid+minC==radius arenas always get wall+middle+center; always emit center if any pixels remain.
+
+**Claude response:** Done. classifyCircle.m: removed early return, relaxed greedy loop with 0.5 px epsilon. Test file: replaced testNoCenterIfTooSmall, added 2 new tests, updated testSmallArenaWallAndCenter. 7/7 PASS. Commit 0ff5748.
+
+---
+
+## 2026-06-04 — A2 code review fixes
+
+**User request (via review task):** Apply 4 Important + 1 Minor review findings on commit 0ff5748: rename eps->rastSlop, fix docstring contradiction (MinCenterCm), add NOTE comments to repro tests, assert center deterministically in testSmallArenaWallAndCenter, remove dead minC line.
+
+**Claude response:** All 5 issues fixed. I4 probe: output was {'wall'} {'middle1'} {'center'}, maxDist=60.0083 px -- center IS present deterministically (bwdist sliver). Used verifyTrue for center assertion with geometric explanation. 7/7 PASS. Commit a25414a.
+
+---
+
+## 2026-06-04 — A2 fix re-review (a25414a)
+
+**User request:** Re-review commit a25414a (5 issues from prior review). Read-only.
+
+**Claude response:** All 5 issues confirmed resolved. 7/7 PASS. Pad formula shrinkage verified safe (new pad=190 vs arena r=120 for worst-case test). Verdict: Approved.
+
+## 2026-06-04 -- Task A3 complete
+
+A3 readDLC decimal separator bug fix done and committed (858f16e).
+
+## 2026-06-04 — Barnes Pass 1 final code review
+
+Claude performed final sanity pass on Barnes Pass 1. All 200 tests green. One minor finding: misleading inline comment classifyCircle.m:89 says MinCenterCm controls loop (it does not). Everything else clean. Deferred items all still deferred.
+
+**Юзер:** 1 (выбор: subagent-driven execution).
+
+**Claude:** Прогнал Pass 1 через subagent-driven с two-stage review на каждой таске. Pass 1 готов на `c4edd31`. Все 3 бага закрыты, 200/200 fast-тестов зелёные, BARNES video/DLC прошли smoke. Полишь-список собран в claude_log. Готов писать Pass 2 plan (11 фич).
+
+**Юзер:** А2 ок. а3 не могу. в а1 опять ошибка (NextFrame failed: Frame index must be a numeric value greater than zero and less than or equal to the number of frames in the file). Также Arena failed: Output argument "arena" not assigned. Нет окна для ввода кадра вручную. Правь и делай дальше pass2 в авторежиме.
+
+**Claude:** A1 регрессия — VideoReader.read не индексирует VFR-кадры. Фикс через CurrentTime/readFrame в новом helper readFrameAt. Также пофиксил Arena cancel чтобы кидало внятное `sphynx:readArenaGeometry:cancelled`. Commit `c765f29`. Smoke на твоём BARNES видео — все кадры читаются. Окно для ручного выбора кадра — это feature S6 в Pass 2, сейчас стартую Pass 2 plan. Homework `barnes-pass1.md` обновлён с iteration 2 — перепроверь Next Frame после рестарта MATLAB.
+
+---
+## 2026-06-04 — P2.3 code review received
+
+Review result: APPROVED with 1 observation.
+rotateAroundCentroid.m, test file, CreatePresetApp.m changes all verified.
+210/210 tests PASS.
+
+**Юзер:** "правь и делай дальше pass2 в авторежиме" (после A1.5 фикса).
+
+**Claude:** Pass 2 закрыт. HEAD `3e10d23`. 11 фич (S1-S11), 12 коммитов, 6 helpers, 8 test файлов, ~26 новых тестов. 224/224 fast зелёные. Каждая task через subagent-driven (implementer + spec review + code review + fix loop где надо). Homework `barnes-pass2.md` с smoke-протоколом по фичам. Жду пощупать.
+
+**Юзер:** 6 UX issues из Pass 2 смока — calib 1-line кнопка не работает (объединить с modes), Objects listbox почти нулевой, при рисовании нового объекта арены и границ объектов не видно, Copy x N должно быть ring вокруг source с drag-n-drop + confirm, circle-with-center нужны стены, Auto-detect кнопку не видно.
+
+**Claude:** 6 фиксов одним коммитом `88ae206`. 225/225 fast зелёные. Homework обновлён. Перепроверяй.
+
+**Юзер:** 3 round-2 issues — calib 1-line считает неверно (нужно тангенс+катеты в см и px), добавить Barnes в Exp default, полностью переписать блок объектов (кнопка → отдельное окно с natural pick + auto-detect справа).
+
+**Claude:** 3 фикса в `f12b59e`. Calib 1-line — direct math без pixelsPerCm: `pxlPerCm = lengthPx/totalCm`, status логает legs. Barnes первым в Exp. Objects + Auto-detect в отдельном окне `Objects Manager`, главный panel = label + кнопка `Manage objects...`. 225/225 green. Homework обновлён.
+
+**Юзер:** Objects Manager 4 правки — 3-col layout (list|preview|autodetect-narrow), multi-pick flow (Add shape собирает pending ROIs, один Commit), live slider в auto-detect, фильтр чтобы детекшен только внутри арены (сейчас плодит arena-shaped blob), кнопка Order by Barnes (CW от target вокруг arena center). Объясни Hough.
+
+**Claude:** Hough в чате (по голосам edge-точек, для кругов идеально). 4 правки в `e3e454b`: 3-col manager + multi-pick + live slider + arena erosion + 50% area cap + Order by Barnes. 226/226 fast. Homework обновлён iteration 3 с описанием flow и Hough'a.
+
+**Юзер:** 7 правок manager — тоньше линии, Order Barnes target name, focus в manager, refresh после delete, threshold действительно local? арена освещена неравномерно, mode same radius для all-circles + параметры в cm (калибровка же есть), и большой фикс: вся работа в manager, main только display, дублировать список в main.
+
+**Claude:** 7 фиксов в `384ab21`. Threshold yes local (`adaptthresh`), expose neighborhood-cm параметр. Uniform radius mode + radius range в cm. Mirror listbox в Block 4. Focus возвращается в manager. ROI LineWidth=1. Order Barnes target='target'. 227/227 fast. Note: реальная draft-separation не сделана (manager мутирует app.State напрямую) — пометил в homework, +1 итерация если попросит явно.
+
+**Юзер:** 6 правок — defaults area 1/100 + radius 2/7, кнопка Align radii (mean + edit), убрать uniform-radius чекбокс, Neighborhood выше у sensitivity, INFO, focus снова скачет. Объясни Commit/Cancel pending. Также: у меня есть MATLAB 2025b — стоит переезжать?
+
+**Claude:** Объяснил Commit/Cancel как draft-commit batch flow для multi-pick. Расписал плюсы переезда на 2025b: focus в uifigure нормальный, VFR h264 fix не нужен, UI modernization. Минусы: перетест и потенциальный break хаков. Рекомендация: переезжать. 6 фиксов в `c422f37`. Focus теперь visibility cycle (flicker на каждой операции; fallback на no-op если бесит). 226/226 fast.
+
+**Юзер:** 7 правок — Neighborhood default 5, INFO в самый низ (она портила tabs), Threshold/Hough conditional Enable, Sensitivity numeric value + default 75, Commit ТОЛЬКО в manager (main не отрисовывает), Finish button под preview = финальное подтверждение всех объектов, mix manual+auto.
+
+**Claude:** Реализовал draft-model: `objects` = working copy в manager, `savedObjects` = committed state в main. Manager edit'ы не идут в main до Finish. Finish копирует objects→savedObjects, refresh main, close manager. savePreset auto-finish. 226/226 fast + smoke test PASS. Commit `748144f`. Homework iteration 6.
+
+## 2026-06-09 — Pass 2 round 7 feedback
+
+User after manual smoke of round 6 (HEAD 748144f):
+
+1. "постоянно сворачивается-разворачивается окно с объектами, попробуй
+   что-то с этим сделать, держать фокус на окне с manager objects
+   (может ничего в это время не рисовать в основном окне и ок,
+   нарисовать только когда финиш в менеджере?)"
+   — explicitly suggested skipping main draws during manager session.
+
+2. "После автопоиска объектов не работает добавление обычного объекта
+   через Pending; исправь и проверь, что работает в любом порядке
+   использвания автопоиска и мануального добавления. Кстати надо ли
+   сейчас прощелкивать двойным кликом мануальные объекты?"
+   — bug confirmed by user. Also asks if double-click is still required.
+
+3. "Двойной щелчок закрепляет линию калибровки (1 line), можно добавить
+   в подсказку в окне. И проверь все инфо на актуальность"
+   — wants tooltip + full INFO audit.
+
+4. "сделай пока дефолты во всех системах как для барнса:
+   -блок 2. 92 см по иксу и игреку, метод - 1 line
+   -блок 3. арена - эллипс, метод - points
+   -блок 4. ручной объект - круг, метод shape. Mode - all circles
+   -блок 5. Strategy - none. вам ведь не нужна в итоге область у стен
+   и в центре, можно и не делать рамзетку арены, только лунки."
+   — full Barnes default set across 4 blocks. Bonus context: no
+   need for wall/center arena partition, holes only.
