@@ -1,7 +1,51 @@
 # Pass 2 manual verification (11 features S1-S11)
 
-Все 11 фич на ветке `sphynx-GUI`, HEAD = round 7 (focus + auto/manual mix + Barnes defaults).
+Все 11 фич на ветке `sphynx-GUI`, HEAD = round 8 (labels, selection sync, lowercase names).
 226/226 fast тестов зелёные.
+
+## iteration 8 (2026-06-09) — 4 fixes (labels, selection, main listbox, lowercase)
+
+1. **Order Barnes теперь видно на картинке.** Метки на manager preview
+   были числовые (1,2,3...) — оставались стабильны при reorder.
+   Теперь рисую `o.type` — после Order Barnes: `target`, `object1`,
+   `object2`, ... `objectN-1` на каждом круге.
+
+2. **Selection sync в manager preview.** `setSelectedObjectIdx`
+   обновлял главное окно + listbox, но НЕ перерисовывал manager axes.
+   Теперь добавил `refreshManagerPreview` в конец — жёлтое выделение
+   тапнутого объекта следует за листбоксом.
+
+3. **Main mirror listbox интерактивный.** В Block 4 listbox был
+   `Enable='off'`. Сейчас multiselect, callback пишет в
+   `app.State.selectedSavedIdx`, `refreshPreview` рисует жёлтую обводку
+   + name label у каждого выделенного saved-объекта на main картинке.
+   Selection переживает Finish (refreshObjectsList восстанавливает
+   Value после Items update).
+
+4. **Lowercase везде**.
+   - Объекты: `Object1..N` → `object1..N` (target всегда был мелким).
+   - Зоны от объектов (buildObjectZones):
+     `Object1Real` → `object1_real`, `Object1RealOut` → `object1_realout`,
+     `Object1Out` → `object1_out`. Plus combined `objectall_real/realout/out`.
+     Подчёркивание-разделитель — иначе `object1realout` нечитабельно.
+   - `ArenaCorner1` → `arenacorner1`, `Object1Center` → `object1_center`.
+   - `analyzeSession` defaultBehaviorZoneSpec обновлён под новые имена.
+   - Хелперы детекции (`startsWith/endsWith`) обновлены под новые
+     префиксы/суффиксы.
+
+   **Совместимость**: старые preset'ы со старыми (заглавными) именами
+   зон не будут матчиться по новой spec в `analyzeSession`. Re-save
+   preset один раз — и всё.
+
+Что проверить:
+- Order Barnes: на картинке должны появиться `target`,
+  `object1`..`objectN-1` в правильных позициях.
+- Прощёлкивание объектов в listbox менеджера: жёлтое выделение
+  должно прыгать на manager preview.
+- В main: в Block 4 listbox теперь кликается. Тапни любой — на main
+  картинке должна появиться жёлтая обводка + name label.
+- Save preset → перепрочитай `.mat` — все имена зон должны быть
+  lowercase (object1_realout, arenacorner1, и т.д.).
 
 ## iteration 7 (2026-06-09) — 4 fixes (focus, mix order, INFO, defaults)
 

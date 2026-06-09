@@ -16,14 +16,14 @@ function Zones = buildObjectZones(objects, frameH, frameW, varargin)
 %                          interaction zone around each object
 %
 %   For each object i, three zones are built (matching legacy):
-%     ObjectiReal     - the object polygon itself
-%     ObjectiRealOut  - object inflated by ZoneWidthCm (includes
+%     objecti_real     - the object polygon itself
+%     objecti_realout  - object inflated by ZoneWidthCm (includes
 %                       the object area)
-%     ObjectiOut      - inflated zone MINUS the object itself
-%                       (the surrounding ring only)
+%     objecti_out      - inflated zone MINUS the object itself
+%                        (the surrounding ring only)
 %
 %   When K >= 2, three combined zones are also added:
-%     ObjectAllReal, ObjectAllRealOut, ObjectAllOut
+%     objectall_real, objectall_realout, objectall_out
 %
 %   Decomposition of legacy CreatePreset.m:436-485.
 
@@ -46,18 +46,18 @@ function Zones = buildObjectZones(objects, frameH, frameW, varargin)
 
     nObj = numel(objects);
 
-    % Per-object zones
+    % Per-object zones (R8.4 lowercase: object1_real, object1_realout, object1_out)
     for i = 1:nObj
         objMask = logical(objects(i).mask);
-        objName = objects(i).type;
-        if isempty(objName); objName = sprintf('Object%d', i); end
+        objName = lower(objects(i).type);
+        if isempty(objName); objName = sprintf('object%d', i); end
 
-        Zones(end+1) = mkZone([objName 'Real'], objMask); %#ok<AGROW>
+        Zones(end+1) = mkZone([objName '_real'], objMask); %#ok<AGROW>
         if widthPxl > 0
             d = bwdist(objMask);
             inflated = d <= widthPxl;
-            Zones(end+1) = mkZone([objName 'RealOut'], inflated); %#ok<AGROW>
-            Zones(end+1) = mkZone([objName 'Out'], inflated & ~objMask); %#ok<AGROW>
+            Zones(end+1) = mkZone([objName '_realout'], inflated); %#ok<AGROW>
+            Zones(end+1) = mkZone([objName '_out'], inflated & ~objMask); %#ok<AGROW>
         end
     end
 
@@ -72,10 +72,10 @@ function Zones = buildObjectZones(objects, frameH, frameW, varargin)
                 allRealOut = allRealOut | (d <= widthPxl);
             end
         end
-        Zones(end+1) = mkZone('ObjectAllReal', allReal);
+        Zones(end+1) = mkZone('objectall_real', allReal);
         if widthPxl > 0
-            Zones(end+1) = mkZone('ObjectAllRealOut', allRealOut);
-            Zones(end+1) = mkZone('ObjectAllOut', allRealOut & ~allReal);
+            Zones(end+1) = mkZone('objectall_realout', allRealOut);
+            Zones(end+1) = mkZone('objectall_out', allRealOut & ~allReal);
         end
     end
 end

@@ -1783,3 +1783,23 @@ User after manual smoke of round 6 (HEAD 748144f):
    и в центре, можно и не делать рамзетку арены, только лунки."
    — full Barnes default set across 4 blocks. Bonus context: no
    need for wall/center arena partition, holes only.
+
+## 2026-06-09 (later) — Pass 2 round 8 feedback
+
+After round 7 manual smoke (commit 0f3fdac):
+
+1. Order Barnes: "разметку объектов при нажатии кнопки Barnes order.
+   в списке вроде ок, а на картинке не отображается."
+   — list reorder visible, picture labels stayed numeric (1,2,3...).
+
+2. Manager selection: "сломалось следующее: при пролистовании объектов
+   не подсвечивается выделение объекта на картинке в окне менеджера."
+   — listbox click no longer highlights on manager axes.
+
+3. Main listbox: "в основном окне списко объектов сделай также
+   пролистываемым, тапающимся с выделением теперь уже на основной
+   картинке."
+   — main mirror listbox: enable + highlight on main preview.
+
+4. Naming: "Все названия объектов и зон делай с маленькой буквы"
+   — full lowercase pass.

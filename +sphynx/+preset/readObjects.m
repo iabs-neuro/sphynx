@@ -34,7 +34,7 @@ function objects = readObjects(frame, geometries, varargin)
             extraArgs = {};
         end
         a = sphynx.preset.readArenaGeometry(frame, geometries{k}, extraArgs{:});
-        a.type = sprintf('Object%d', k);
+        a.type = sprintf('object%d', k);
         objects(k) = a;
     end
 end

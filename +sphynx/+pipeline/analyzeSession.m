@@ -465,20 +465,20 @@ function spec = legacyZoneActSpec()
     %     corners / walls / walls_and_corners / center /
     %     arena_realout / corners_realout / walls_realout /
     %     walls_and_corners_realout
-    %   buildObjectZones:
-    %     Object1Real / Object1RealOut / Object1Out / ... /
-    %     ObjectAllReal / ObjectAllRealOut / ObjectAllOut
+    %   buildObjectZones (R8.4 lowercase):
+    %     object1_real / object1_realout / object1_out / ... /
+    %     objectall_real / objectall_realout / objectall_out
     %
-    % If a zone isn't in the preset (e.g. Object3RealOut for a 2-object
+    % If a zone isn't in the preset (e.g. object3_realout for a 2-object
     % session), the loop in step 9 silently skips it — no error.
     spec = {
         'corners_realout',        'corners',  'tailbase';
         'walls_realout',          'walls',    'tailbase';
         'center',                 'center',   'tailbase';
-        'Object1RealOut',         'object1',  'nose';
-        'Object2RealOut',         'object2',  'nose';
-        'Object3RealOut',         'object3',  'nose';
-        'Object4RealOut',         'object4',  'nose';
-        'ObjectAllRealOut',       'objects',  'nose';
+        'object1_realout',        'object1',  'nose';
+        'object2_realout',        'object2',  'nose';
+        'object3_realout',        'object3',  'nose';
+        'object4_realout',        'object4',  'nose';
+        'objectall_realout',      'objects',  'nose';
     };
 end

@@ -2697,3 +2697,62 @@ canonicalize to 8-field and concatenate cleanly.
 ### Deferred polish (still in queue)
 Unchanged from prior rounds — will batch later when user calls
 "polish pass".
+
+---
+
+## 2026-06-09 (later) — Pass 2 round 8 (4 fixes)
+
+User feedback after round 7 smoke:
+R8.1 Order Barnes: list updates, picture doesn't reflect order.
+R8.2 Selection in listbox doesn't highlight on manager picture.
+R8.3 Main mirror listbox: make interactive, highlight on main preview.
+R8.4 Lowercase all object + zone names.
+
+### R8.1 — manager labels show type name
+refreshManagerPreview was writing sprintf('%d', k) on each object.
+After Order Barnes the visual order matched but k labels (1,2,3...)
+didn't visually convey target/objectK. Switched to o.type label
+(fallback to k if empty). Now picture shows "target", "object1", etc.
+
+### R8.2 — manager highlight refresh
+setSelectedObjectIdx updated state + main preview + move targets but
+never called refreshManagerPreview. When manager is open, the yellow
+highlight needs to follow the listbox click. Added one call at end of
+setSelectedObjectIdx — refreshManagerPreview is itself a no-op when
+ManagerAxes is invalid, safe to always call.
+
+### R8.3 — interactive main mirror listbox
+Was uilistbox with Enable=off. Now multiselect-on with
+ValueChangedFcn → new method onMirrorListBoxChanged. Resolves clicked
+items to indices, stores in app.State.selectedSavedIdx (new field
+in emptyState), calls refreshPreview. refreshPreview now draws yellow
+outline + name label on each selected saved object. refreshObjectsList
+restores the listbox Value from selectedSavedIdx after Items update so
+selection survives a Finish (savedObjects reassigned).
+
+### R8.4 — lowercase
+- CreatePresetApp 'Object%d' → 'object%d' (all sites — addObject,
+  copyObjectsN replicate, commit paths, removeSelectedObject renumber,
+  orderObjectsBarnes, commitAutoDetected, commitPendingShapes,
+  addManualRegion).
+- 'ArenaCorner%d' → 'arenacorner%d' in arenaCornerZones helper.
+- objectCenterZones: '%sCenter' (camel-concat) → '%s_center' with
+  lower() on the type so legacy uppercase saved presets still resolve
+  to lowercase zone names.
+- Zone name detection: startsWith 'Object' → 'object', 'ArenaCorner'
+  → 'arenacorner', endsWith 'Center' → '_center'.
+- buildObjectZones: 'ObjectAllReal/RealOut/Out' → 'objectall_real/
+  realout/out'; per-object 'objNReal/RealOut/Out' →
+  'objN_real/_realout/_out' (with snake-case separator since the
+  bare lowercase concat 'object1realout' is unreadable).
+- readObjects 'Object%d' → 'object%d'.
+- analyzeSession default zone spec: 'Object1RealOut' etc. →
+  'object1_realout' etc. Also docstring updated.
+
+### Backward compatibility note
+Old presets saved with capitalized zone names won't match the new
+analyzeSession spec until re-saved. Not adding a migration shim;
+re-saving is one click. Documenting this in the homework.
+
+Verification: 226/226 fast tests pass.
+

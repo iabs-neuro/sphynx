@@ -219,7 +219,7 @@ classdef CreatePresetApp < handle
                 obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
                     'Points', points, 'ExistingObjects', app.State.objects, ...
                     'ExistingArena', app.State.arena);
-                obj.type = sprintf('Object%d', numel(app.State.objects) + 1);
+                obj.type = sprintf('object%d', numel(app.State.objects) + 1);
                 objCanon = app.canonicalizeObjects(obj);
                 existing = app.canonicalizeObjects(app.State.objects);
                 if isempty(existing)
@@ -250,7 +250,7 @@ classdef CreatePresetApp < handle
             app.State.objects = app.State.objects(keep);
             % Renumber remaining objects to maintain Object1..ObjectN.
             for k = 1:numel(app.State.objects)
-                app.State.objects(k).type = sprintf('Object%d', k);
+                app.State.objects(k).type = sprintf('object%d', k);
             end
             app.setSelectedObjectIdx([]);
             app.refreshObjectsList();
@@ -470,7 +470,7 @@ classdef CreatePresetApp < handle
                 cp.border_y = finalPos(:, 2);
                 cp.mask = imfill(sphynx.preset.maskFromBorder( ...
                     app.State.height, app.State.width, cp.border_x, cp.border_y), 'holes');
-                cp.type = sprintf('Object%d', numel(app.State.objects) + 1);
+                cp.type = sprintf('object%d', numel(app.State.objects) + 1);
                 if isempty(app.State.objects)
                     app.State.objects = cp;
                 else
@@ -499,7 +499,7 @@ classdef CreatePresetApp < handle
             if ~isempty(app.State.savedObjects)
                 hasObjectZones = false;
                 if ~isempty(app.State.zones)
-                    hasObjectZones = any(startsWith(string({app.State.zones.name}), 'Object'));
+                    hasObjectZones = any(startsWith(string({app.State.zones.name}), 'object'));
                 end
                 if ~hasObjectZones
                     Zobj = sphynx.preset.buildObjectZones(app.State.savedObjects, ...
@@ -516,7 +516,7 @@ classdef CreatePresetApp < handle
                     && ~isempty(app.State.arena.border_separate_x)
                 hasCorners = false;
                 if ~isempty(app.State.zones)
-                    hasCorners = any(startsWith(string({app.State.zones.name}), 'ArenaCorner'));
+                    hasCorners = any(startsWith(string({app.State.zones.name}), 'arenacorner'));
                 end
                 if ~hasCorners
                     Zcorners = arenaCornerZones(app.State.arena);
@@ -527,7 +527,7 @@ classdef CreatePresetApp < handle
             if ~isempty(app.State.savedObjects)
                 hasCenters = false;
                 if ~isempty(app.State.zones)
-                    hasCenters = any(endsWith(string({app.State.zones.name}), 'Center'));
+                    hasCenters = any(endsWith(string({app.State.zones.name}), '_center'));
                 end
                 if ~hasCenters
                     Zcenters = objectCenterZones(app.State.savedObjects);
@@ -855,10 +855,36 @@ classdef CreatePresetApp < handle
             end
             app.refreshMoveTargets();
             app.refreshPreview();
+            % R8.2: also refresh manager axes so the yellow selection
+            % highlight follows the listbox click while manager is open.
+            app.refreshManagerPreview();
         end
 
         function resetListboxFlag(app)
             app.UpdatingListboxFromState = false;
+        end
+
+        function onMirrorListBoxChanged(app)
+            % R8.3: main-window mirror listbox selection -> highlight on
+            % main preview. Reads ObjectsMirrorListBox.Value, resolves to
+            % indices in savedObjects, stores in selectedSavedIdx, redraws.
+            if isempty(app.ObjectsMirrorListBox) || ~isvalid(app.ObjectsMirrorListBox)
+                return;
+            end
+            val = app.ObjectsMirrorListBox.Value;
+            if isempty(val)
+                idx = [];
+            else
+                if ischar(val); val = {val}; end
+                items = app.ObjectsMirrorListBox.Items;
+                idx = zeros(0, 1);
+                for k = 1:numel(val)
+                    hit = find(strcmp(items, val{k}), 1);
+                    if ~isempty(hit); idx(end+1, 1) = hit; end %#ok<AGROW>
+                end
+            end
+            app.State.selectedSavedIdx = idx;
+            app.refreshPreview();
         end
 
         function onObjectsListBoxChanged(app, ~)
@@ -956,15 +982,19 @@ classdef CreatePresetApp < handle
                 plot(app.ManagerAxes, app.State.arena.border_x, app.State.arena.border_y, '-', ...
                     'Color', [0.85 0.55 0.10], 'LineWidth', 2);
             end
-            % Existing objects (semi-transparent fill + number label)
+            % Existing objects (semi-transparent fill + type-name label).
+            % R8.1: show actual type (target / object1..N-1) so Order Barnes
+            % reflects on the picture, not just in the listbox.
             for k = 1:numel(app.State.objects)
                 o = app.State.objects(k);
                 if isempty(o.border_x); continue; end
                 fill(app.ManagerAxes, o.border_x, o.border_y, [0.3 0.5 0.8], ...
                     'FaceAlpha', 0.20, 'EdgeColor', [0.1 0.3 0.6], 'LineWidth', 1);
+                label = o.type;
+                if isempty(label); label = sprintf('%d', k); end
                 text(app.ManagerAxes, mean(o.border_x), mean(o.border_y), ...
-                    sprintf('%d', k), 'Color', 'w', 'FontWeight', 'bold', ...
-                    'HorizontalAlignment', 'center');
+                    label, 'Color', 'w', 'FontWeight', 'bold', ...
+                    'HorizontalAlignment', 'center', 'FontSize', 10);
             end
             % Selected objects highlighted in yellow
             selIdx = app.getSelectedObjectIdx();
@@ -1064,7 +1094,7 @@ classdef CreatePresetApp < handle
                 end
                 try
                     obj = sphynx.preset.readArenaGeometry(app.State.frame, geom, 'Points', pts);
-                    obj.type  = sprintf('Object%d', numel(app.State.objects) + 1);
+                    obj.type  = sprintf('object%d', numel(app.State.objects) + 1);
                     obj.class = '';
                     objCanon = app.canonicalizeObjects(obj);
                     existing = app.canonicalizeObjects(app.State.objects);
@@ -1138,7 +1168,7 @@ classdef CreatePresetApp < handle
             % order(1) is the target (rel_target = 0). Rename target + CW objects.
             reordered(1).type = 'target';
             for k = 2:numel(reordered)
-                reordered(k).type = sprintf('Object%d', k - 1);
+                reordered(k).type = sprintf('object%d', k - 1);
             end
             app.State.objects = reordered;
             app.refreshObjectsList();
@@ -1192,7 +1222,7 @@ classdef CreatePresetApp < handle
             % subsequent manual-add via Pending shapes can append without
             % a struct-array field-mismatch error.
             for k = 1:numel(newObjs)
-                newObjs(k).type = sprintf('Object%d', startNum + k - 1);
+                newObjs(k).type = sprintf('object%d', startNum + k - 1);
             end
             canonNew = app.canonicalizeObjects(newObjs);
             existing = app.canonicalizeObjects(app.State.objects);
@@ -1456,11 +1486,28 @@ classdef CreatePresetApp < handle
                     'k-', 'LineWidth', 2);
             end
             % Objects — main panel shows SAVED state only (draft model Fix 5).
-            % Selection highlight and auto-detect overlay are manager-only.
+            % R8.3: selected saved object(s) get yellow highlight + name tag.
             savedObjs = app.State.savedObjects;
             for k = 1:numel(savedObjs)
                 plot(ax, savedObjs(k).border_x(:), savedObjs(k).border_y(:), ...
                     '-', 'Color', [0 0.7 0], 'LineWidth', 1.5);
+            end
+            selSavedIdx = [];
+            if isfield(app.State, 'selectedSavedIdx')
+                selSavedIdx = app.State.selectedSavedIdx;
+                selSavedIdx = selSavedIdx(selSavedIdx >= 1 & selSavedIdx <= numel(savedObjs));
+            end
+            for k = selSavedIdx(:)'
+                o = savedObjs(k);
+                if isempty(o.border_x); continue; end
+                plot(ax, o.border_x(:), o.border_y(:), '-', ...
+                    'Color', [1 0.85 0], 'LineWidth', 2.5);
+                label = o.type;
+                if ~isempty(label)
+                    text(ax, mean(o.border_x), mean(o.border_y), label, ...
+                        'Color', 'w', 'FontWeight', 'bold', 'FontSize', 10, ...
+                        'HorizontalAlignment', 'center');
+                end
             end
             hold(ax, 'off');
         end
@@ -1488,7 +1535,7 @@ classdef CreatePresetApp < handle
                     app.ObjectsListBox.Value = workingItems(idx);
                 end
             end
-            % Mirror listbox in main Block 4 — saved state
+            % Mirror listbox in main Block 4 — saved state (R8.3 interactive)
             if ~isempty(app.ObjectsMirrorListBox) && isvalid(app.ObjectsMirrorListBox)
                 if isempty(app.State.savedObjects)
                     savedItems = {};
@@ -1496,6 +1543,17 @@ classdef CreatePresetApp < handle
                     savedItems = arrayfun(@(o) o.type, app.State.savedObjects, 'UniformOutput', false);
                 end
                 app.ObjectsMirrorListBox.Items = savedItems;
+                % Clamp + restore selection from state.
+                if isfield(app.State, 'selectedSavedIdx')
+                    sel = app.State.selectedSavedIdx;
+                    sel = sel(sel >= 1 & sel <= numel(savedItems));
+                    app.State.selectedSavedIdx = sel;
+                    if isempty(sel) || isempty(savedItems)
+                        app.ObjectsMirrorListBox.Value = {};
+                    else
+                        app.ObjectsMirrorListBox.Value = savedItems(sel);
+                    end
+                end
             end
             app.refreshObjectsCount();
         end
@@ -1614,6 +1672,7 @@ classdef CreatePresetApp < handle
             s.previewZones = struct('name', {}, 'type', {}, 'maskfilled', {});
             s.zoneStrategies = {};   % short tags appended on each Add to set
             s.selectedObjectIdx = [];   % vector of object indices (S1 foundation)
+            s.selectedSavedIdx  = [];   % R8.3: main mirror listbox selection
             s.autoDetectedObjects = struct('type', {}, 'geometry', {}, ...
                 'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
         end
@@ -1910,8 +1969,11 @@ function buildObjectsPanelCompact(app)
         'BackgroundColor', semanticColor('action'), ...
         'ButtonPushedFcn', @(~,~) app.showObjectsManager());
     bManage.Layout.Row = 2; bManage.Layout.Column = 1;
-    % Read-only mirror listbox — same items as manager listbox (Fix 7)
-    app.ObjectsMirrorListBox = uilistbox(g, 'Items', {}, 'Enable', 'off');
+    % R8.3: mirror listbox is now interactive — clicking a row
+    % highlights that saved object in main preview.
+    app.ObjectsMirrorListBox = uilistbox(g, 'Items', {}, ...
+        'Multiselect', 'on', ...
+        'ValueChangedFcn', @(~,~) app.onMirrorListBoxChanged());
     app.ObjectsMirrorListBox.Layout.Row = 3; app.ObjectsMirrorListBox.Layout.Column = 1;
 end
 
@@ -2449,7 +2511,7 @@ function onAddObject(app)
                 'PickMode', pickMode, ...
                 'ExistingObjects', app.State.objects, ...
                 'ExistingArena', app.State.arena);
-            obj.type = sprintf('Object%d', numel(app.State.objects) + 1);
+            obj.type = sprintf('object%d', numel(app.State.objects) + 1);
             if isempty(app.State.objects)
                 app.State.objects = obj;
             else
@@ -2947,7 +3009,7 @@ end
 function Z = arenaCornerZones(arena)
     Z = struct('name', {}, 'type', {}, 'maskfilled', {});
     for c = 1:numel(arena.border_separate_x)
-        Z(end+1).name = sprintf('ArenaCorner%d', c); %#ok<AGROW>
+        Z(end+1).name = sprintf('arenacorner%d', c); %#ok<AGROW>
         Z(end).type = 'point';
         Z(end).maskfilled = [arena.border_separate_x{c}(1), arena.border_separate_y{c}(1)];
     end
@@ -2958,7 +3020,7 @@ function Z = objectCenterZones(objects)
     for k = 1:numel(objects)
         cx = mean(objects(k).border_x(:));
         cy = mean(objects(k).border_y(:));
-        Z(end+1).name = sprintf('%sCenter', objects(k).type); %#ok<AGROW>
+        Z(end+1).name = sprintf('%s_center', lower(objects(k).type)); %#ok<AGROW>
         Z(end).type = 'point';
         Z(end).maskfilled = [cx, cy];
     end
