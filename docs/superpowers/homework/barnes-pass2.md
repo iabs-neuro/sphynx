@@ -722,3 +722,27 @@ sensitivity это первый параметр для подкрутки.
 ### Что прислать назад
 - Что увидел / не увидел по каждому пункту.
 - Любые подсказки/ошибки в logs/claude_log.md или GUI textarea.
+
+---
+
+## Round 14 follow-up — 10.06 (R14.7 + R14.8)
+
+### Что сделано
+- R14.7: убран soft fallback на pxl/cm=1. Auto-detect / Preview /
+  Add zones / Copy / Align теперь hard-block с popup-ом без
+  калибровки.
+- R14.8: arena_realout (выходная буферная зона = arena + ring шириной
+  Wall см) эмитируется во всех стратегиях (раньше только в
+  corners-walls-center / strips).
+
+### Smoke
+1. `clear classes; close all; sphynx.app.CreatePresetApp`
+2. Не калибруя, нажми любую кнопку из auto-detect / preview /
+   add zones / copy x N / align radii -> должен быть popup
+   "Calibration required".
+3. Калибруй (1 line, 92 cm), выбери Strategy = circle, Preview ->
+   должно быть 3 зоны (wall, center, arena_realout).
+4. Strategy = none -> Preview -> 2 зоны (arena, arena_realout).
+
+### Что прислать
+- Скриншот / описание поведения по шагам.

@@ -3057,3 +3057,41 @@ Files touched
   buildAutoDetectControlsIn, onSensitivityChanging,
   onSensitivityFieldChanged, onCalibrateChoose, fitEllipseFromBorder)
 - tests/unit/round14HelpersTest.m (new)
+
+## 2026-06-10 — barnes pass 2, round 14 follow-up (R14.7 + R14.8)
+
+R14.7 calibration hard-block everywhere
+- Replaced soft warnUncalibrated() calls with requireCalibration() in
+  runAutoDetect, previewZones, addZones. They now return immediately
+  with uialert popup if pxl/cm is not set instead of silently using a
+  1 px/cm fallback. copyObjectsN and alignDetectedRadii were already
+  hard-blocked in the original round 14 commit; this round makes the
+  rule uniform across every calibration-dependent op.
+- warnUncalibrated() helper kept but unused -- left in case a future
+  op genuinely wants soft-warn semantics.
+
+R14.8 arena_realout in every strategy
+- computeZonesFromUI(app) now appends an 'arena_realout' zone after
+  the strategy switch when it isn't already in the result set.
+- arena_realout = arenaMask | (outer ring of WallWidthCm px) using
+  bwdist on the inverted arena mask. Fallback margin 3cm when wall is
+  0 or NaN.
+- Why: classifySquare already emits arena_realout for corners-walls-center
+  and per-strip *_realout for strips, but buildZonesCircleWall,
+  classifyCircle, buildZonesCircleCenter, and the 'none' branch did
+  not. analyzeSession downstream code (line 492 comment and the zone-
+  mapping table) assumes arena_realout exists -- now it always does
+  regardless of which strategy the user picks.
+
+Tests
+- New tests/unit/arenaRealoutAlwaysPresentTest.m -- 7 tests, one per
+  strategy (corners-walls-center / strips / circle / circle-rings /
+  circle-with-center / none) plus a containment check that
+  arena_realout strictly contains the arena mask.
+- Full fast suite: 255 passed, 0 failed, 3 unrelated assumption skips.
+  Was 248 before; +7 from arenaRealoutAlwaysPresentTest.
+
+Files touched
+- +sphynx/+app/CreatePresetApp.m (runAutoDetect, previewZones, addZones,
+  computeZonesFromUI tail)
+- tests/unit/arenaRealoutAlwaysPresentTest.m (new)

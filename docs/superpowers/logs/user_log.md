@@ -1973,3 +1973,50 @@ threshold=T)" + та же строка в applog/logs.
      показывает угол.
 
 Если всё ок -- "round 14 ok" или скажи что подправить.
+
+## 2026-06-10 — pass 2, round 14 follow-up (R14.7 + R14.8)
+
+По правкам "1. Calibration-gate везде хард блок ... проверь что везде
+есть зона аут от границы арены, во всех стратегиях разметки":
+
+R14.7 -- Calibration теперь HARD BLOCK везде, без исключений:
+- Auto-detect: до калибровки кнопка показывает popup "Calibration
+  required", операция не запускается. Никакого pxl/cm=1 fallback.
+- Preview zones / Add zones / Copy x N / Align radii: тоже popup
+  "Calibration required", операция блокируется.
+- Без калибровки можно только: загрузить видео, выбрать геометрию
+  арены, открыть менеджер. Всё что использует cm-единицы --
+  заблокировано до Compute pxl/cm в Block 2.
+
+R14.8 -- зона "arena_realout" появляется во ВСЕХ стратегиях:
+- arena_realout = arenaMask + наружный ring шириной = Wall (cm),
+  или 3 см если Wall=0. Это "буферная зона" вокруг арены для
+  jitter tracking-а на границе.
+- Раньше:
+  * corners-walls-center и strips эмитировали её через classifySquare.
+  * circle / circle-rings / circle-with-center / none -- НЕ эмитировали.
+- Теперь computeZonesFromUI в CreatePresetApp.m в конце switch
+  проверяет наличие arena_realout и добавляет если нет. Унифицирован
+  контракт для downstream (analyzeSession).
+
+Тесты
+- 7 новых тестов в tests/unit/arenaRealoutAlwaysPresentTest.m,
+  по одному на каждую стратегию + containment check (arena внутри
+  arena_realout). Все зелёные.
+- Полный fast suite: 255 passed, 0 failed (было 248, +7 новых).
+
+Что протестировать (после clear classes + restart):
+
+1) До калибровки: загрузи видео, пропусти Block 2, открой менеджер,
+   нажми Auto-detect -> popup "Calibration required". Никаких объектов
+   не появляется.
+
+2) В Block 5 выбери Strategy = circle (Barnes default). Калибруй
+   (1 line, 92 cm), пометь арену, потом Preview zones. Должны быть
+   wall + center + arena_realout = 3 зоны.
+   Если переключишь на 'none' и Preview -> arena + arena_realout.
+
+3) В лог-textarea ничего не должно фолбэчить на pxl/cm=1 -- все
+   зоны строятся в правильных см.
+
+Если всё ок -- "follow-up ok".

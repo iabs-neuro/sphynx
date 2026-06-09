@@ -294,10 +294,11 @@ classdef CreatePresetApp < handle
             % R12.1: object zones are added regardless of strategy --
             % including 'none' or any case where computeZonesFromUI
             % returns nothing -- so the per-hole zones always show.
-            % R14.1: warn when running uncalibrated -- object zone width
-            % is cm and will be misinterpreted as px without pxl/cm.
-            if ~app.isCalibrated()
-                app.warnUncalibrated('Preview zones');
+            % R14.7: zone widths/diameters are all in cm -- block when
+            % calibration is missing instead of building geometrically
+            % wrong zones.
+            if ~app.requireCalibration('Preview zones')
+                return;
             end
             app.refitAllMasks();
             Z = computeZonesFromUI(app);
@@ -554,10 +555,10 @@ classdef CreatePresetApp < handle
             % R12.1: object zones are now added even when the strategy
             % returns nothing (e.g. 'none' for a Barnes preset where
             % only the per-hole zones matter).
-            % R14.1: warn when running uncalibrated -- saved zones use
-            % cm units in their build params.
-            if ~app.isCalibrated()
-                app.warnUncalibrated('Add zones');
+            % R14.7: zone widths are in cm -- block when calibration
+            % is missing so committed zones are never wrong scale.
+            if ~app.requireCalibration('Add zones')
+                return;
             end
             app.refitAllMasks();
             Z = computeZonesFromUI(app);
@@ -985,16 +986,13 @@ classdef CreatePresetApp < handle
                 app.status('Need video + arena before auto-detect');
                 return;
             end
-            % R14.1: warn (do not block) when auto-detect runs without
-            % calibration -- area/radius filters in cm units silently
-            % collapse to px without scaling.
-            if ~app.isCalibrated()
-                app.warnUncalibrated('Auto-detect');
+            % R14.7: calibration is mandatory -- area/radius filters use
+            % cm units; without pxl/cm there is no defensible fallback,
+            % so block instead of silently using 1 px/cm.
+            if ~app.requireCalibration('Auto-detect')
+                return;
             end
             pxlPerCm = app.State.pxlPerCm;
-            if isnan(pxlPerCm) || pxlPerCm <= 0
-                pxlPerCm = 1;   % treat as 1 px/cm (areas in px^2)
-            end
             cfg = struct( ...
                 'mode',         app.AutoModeDropdown.Value, ...
                 'algorithm',    app.AutoAlgorithmDropdown.Value, ...
@@ -2994,6 +2992,32 @@ function Z = computeZonesFromUI(app)
                     'WallWidthCm', app.WallWidthField.Value);
             case 'none'
                 Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, 'Strategy', 'none');
+        end
+        % R14.8: every strategy must contribute an 'arena_realout' zone --
+        % the arena mask extended outward by the wall width so downstream
+        % code has a "barely outside the arena" band to tolerate tracking
+        % jitter at the boundary. corners-walls-center and strips already
+        % emit it from classifySquare; circle/circle-rings/circle-with-center
+        % and 'none' did not. Append here when missing so behaviour is
+        % uniform across strategies.
+        if ~isempty(Z)
+            hasArenaRealout = any(strcmp({Z.name}, 'arena_realout'));
+        else
+            hasArenaRealout = false;
+        end
+        if ~hasArenaRealout
+            outWidthCm = wallCm;
+            if isnan(outWidthCm) || outWidthCm <= 0
+                outWidthCm = 3;   % fallback margin
+            end
+            ringPx = outWidthCm * app.State.pxlPerCm;
+            arenaMask = app.State.arena.mask > 0;
+            distOutside = bwdist(arenaMask);
+            outerRing = (distOutside > 0) & (distOutside <= ringPx);
+            zr.name = 'arena_realout';
+            zr.type = 'area';
+            zr.maskfilled = arenaMask | outerRing;
+            if isempty(Z); Z = zr; else; Z(end+1) = zr; end
         end
     catch ME
         app.status(sprintf('Zone build failed: %s', ME.message));
