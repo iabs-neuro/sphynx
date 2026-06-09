@@ -2756,3 +2756,42 @@ re-saving is one click. Documenting this in the homework.
 
 Verification: 226/226 fast tests pass.
 
+
+---
+
+## 2026-06-09 (later 2) — Pass 2 round 9 (Block 5 defaults)
+
+User reports MATLAB errors:
+  "Unable to find function @(~,~)app.previewZones()"
+on Preview / strategy-change / Add buttons. Plus asks for new Block 5
+defaults.
+
+### Root cause of "function not found"
+File parses cleanly in batch (`?sphynx.app.CreatePresetApp` resolves).
+This is stale classdef in interactive MATLAB after the round 8 file
+edit — MATLAB caches classdef per-session and partial reload doesn't
+work reliably for methods. User needs `clear classes` (or close+restart
+MATLAB) before re-running. Per memory note project_matlab_function_cache.md.
+
+### R9.1 — Block 5 Barnes defaults
+- ZonesStrategyDropDown Value: 'none' -> 'circle-with-center'.
+- WallWidthField default: 3 -> 12.
+- CenterDiameterCmField default: already 20.
+- ObjectZoneWidthField default: 2.5 -> 3.
+
+### R9.2 — zone rebuild flow review
+Verified flow:
+- previewZones always rebuilds Z from current UI + always rebuilds
+  object zones from savedObjects (with current ObjectZoneWidthField).
+- addZones dedups object/corner/center zones against already-committed
+  zones via startsWith / endsWith on lowercase prefixes. Means re-Add
+  after changing ObjectZoneWidth doesn't update committed object zones
+  (must Clear zones first). By-design (multi-strategy combine).
+- circle-with-center uses bwdist on arenaMask so it works with Ellipse
+  arena (Barnes default) — wall ring + middle + center disc.
+
+No code change beyond defaults. Will revisit if user reports persistent
+breakage after class reload.
+
+226/226 fast tests pass.
+

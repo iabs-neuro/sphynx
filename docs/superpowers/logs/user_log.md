@@ -1803,3 +1803,19 @@ After round 7 manual smoke (commit 0f3fdac):
 
 4. Naming: "Все названия объектов и зон делай с маленькой буквы"
    — full lowercase pass.
+
+## 2026-06-09 (later 2) — Pass 2 round 9 feedback
+
+After round 8 smoke (commit a3496cc):
+
+1. Block 5 defaults request: "Strategy - circle-with-center, Wall 12,
+   Center diam - 20, Obj zone - 3".
+
+2. "проверь, что зоны объектов отрисовываются при разных схемах,
+   и можно поменять и перестроить. сейчас баги" — пользователь
+   получает Unable to find function @(~,~)app.previewZones()
+   при нажатии Preview / переключении strategy / Add to set.
+
+   Корневая причина: stale classdef в interactive MATLAB. Файл
+   парсится чисто в batch. После round 8 edit нужно `clear classes`
+   или перезапуск MATLAB перед re-run приложения.

@@ -2162,7 +2162,7 @@ function buildZonesPanel(app)
     lblStrat.Layout.Row = 1; lblStrat.Layout.Column = 1;
     app.ZonesStrategyDropDown = uidropdown(g, ...
         'Items', {'corners-walls-center', 'strips', 'circle-rings', 'circle-with-center', 'none'}, ...
-        'Value', 'none', ...
+        'Value', 'circle-with-center', ...
         'ValueChangedFcn', @(~,~) onZoneStrategyChanged(app));
     app.ZonesStrategyDropDown.Layout.Row = 1; app.ZonesStrategyDropDown.Layout.Column = [2 4];
     bInfo = uibutton(g, 'Text', 'INFO', ...
@@ -2172,7 +2172,7 @@ function buildZonesPanel(app)
 
     lblWall = uilabel(g, 'Text', 'Wall:');
     lblWall.Layout.Row = 2; lblWall.Layout.Column = 1;
-    app.WallWidthField = uieditfield(g, 'numeric', 'Value', 3, 'Limits', [0, Inf]);
+    app.WallWidthField = uieditfield(g, 'numeric', 'Value', 12, 'Limits', [0, Inf]);
     app.WallWidthField.Layout.Row = 2; app.WallWidthField.Layout.Column = 2;
     lblMid = uilabel(g, 'Text', 'Middle:');
     lblMid.Layout.Row = 2; lblMid.Layout.Column = 3;
@@ -2195,7 +2195,7 @@ function buildZonesPanel(app)
 
     lblObjZone = uilabel(g, 'Text', 'Obj zone:');
     lblObjZone.Layout.Row = 4; lblObjZone.Layout.Column = 1;
-    app.ObjectZoneWidthField = uieditfield(g, 'numeric', 'Value', 2.5, 'Limits', [0, Inf]);
+    app.ObjectZoneWidthField = uieditfield(g, 'numeric', 'Value', 3, 'Limits', [0, Inf]);
     app.ObjectZoneWidthField.Layout.Row = 4; app.ObjectZoneWidthField.Layout.Column = 2;
     lblCorners = uilabel(g, 'Text', 'Corners:');
     lblCorners.Layout.Row = 4; lblCorners.Layout.Column = 3;

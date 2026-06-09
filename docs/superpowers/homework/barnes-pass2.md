@@ -1,7 +1,57 @@
 # Pass 2 manual verification (11 features S1-S11)
 
-Все 11 фич на ветке `sphynx-GUI`, HEAD = round 8 (labels, selection sync, lowercase names).
+Все 11 фич на ветке `sphynx-GUI`, HEAD = round 9 (Block 5 Barnes defaults).
 226/226 fast тестов зелёные.
+
+## iteration 9 (2026-06-09) — Block 5 defaults + класс-кеш guidance
+
+**ВАЖНО — про ошибки `Unable to find function @(~,~)app.previewZones()`:**
+Это **не баг кода**, а stale classdef в interactive MATLAB. После любого
+edit'а .m в `+sphynx/+app/CreatePresetApp.m` MATLAB продолжает использовать
+**предыдущую** версию класса (методы кешируются на сессию).
+
+**Лечение:**
+```matlab
+clear classes
+close all force
+startup
+sphynx.app.CreatePresetApp
+```
+
+Либо просто перезапусти MATLAB (но это дольше). Я добавил это в memory
+project_matlab_function_cache.md.
+
+В batch (`matlab -batch`) всё работает чисто потому что каждый запуск
+стартует с чистого листа.
+
+### Block 5 defaults (Barnes)
+- Strategy = **circle-with-center**
+- Wall = **12 cm**
+- Center diameter = **20 cm** (уже было)
+- Object zone = **3 cm** (было 2.5)
+
+Эта схема для эллипса 92 cm:
+- wall ring толщиной 12 cm у стены
+- center диск 20 cm в середине
+- middle — всё остальное между ними
+- + per-hole object zones 3 cm вокруг каждой лунки.
+
+### Что проверить после `clear classes` + рестарт
+1. Block 5 при свежем запуске: должны стоять **circle-with-center / 12 /
+   20 / 3** по умолчанию.
+2. Создай savedObjects (через manager → Finish), нажми **Preview** —
+   должны нарисоваться: wall (синий ring) + middle + center (диск) +
+   маленькие кружки `object1_realout`..`objectN_realout`.
+3. Нажми **Add to set**. Должно прибавиться ~6-12 зон в зависимости от
+   количества лунок.
+4. Поменяй Strategy на **circle-rings** (Wall 12, Middle 24). Preview
+   покажет новую схему + те же object zones. Add — добавит ещё.
+5. Если хочешь чисто перестроить — **Clear zones** сначала, потом
+   Preview + Add.
+
+   Замечание: дедуп по startsWith('object') / endsWith('_center')
+   мешает повторно добавить object zones с новой шириной. Если поменял
+   ObjectZone width — Clear zones, затем Preview + Add.
 
 ## iteration 8 (2026-06-09) — 4 fixes (labels, selection, main listbox, lowercase)
 
