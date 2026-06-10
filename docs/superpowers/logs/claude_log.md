@@ -3095,3 +3095,24 @@ Files touched
 - +sphynx/+app/CreatePresetApp.m (runAutoDetect, previewZones, addZones,
   computeZonesFromUI tail)
 - tests/unit/arenaRealoutAlwaysPresentTest.m (new)
+
+## 2026-06-10 — barnes pass 2, round 14 (R14.9 sensitivity layout)
+
+Screenshot from user shows the Sensitivity row clipped: slider tiny,
+edit field showed only "0" instead of "0.51". Root cause: sensSub
+lived in ag.Column = 2 only, and the Auto-detect panel is the narrow
+3rd column of the 3-col Objects Manager (~284 px). Column 2 of ag
+got <100 px after the 180 px label column. Slider + 70 px edit
+field could not coexist in that.
+
+Fix
+- sensSub.Layout.Column = [1 3] -- span all three ag columns so the
+  sub-grid sees the panel's full horizontal extent.
+- sensSub.ColumnWidth = {'fit', '1x', 80} -- label sized to text,
+  slider grows, edit field 80 px (was 70).
+- Slider row 1 col [2 3] (full remaining width).
+- Value label row 2 col [1 2], right-aligned + edit field col 3.
+- Dropped MajorTicks to [0, 0.5, 1] and MinorTicks=[] so labels never
+  collide with the panel edge.
+
+Tests: 255 passed, 0 failed (unchanged).

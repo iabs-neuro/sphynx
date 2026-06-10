@@ -2461,28 +2461,31 @@ function buildAutoDetectControlsIn(app, parent)
         'ValueChangedFcn', @(~,~) app.updateAutoDetectEnableState());
     app.AutoAlgorithmDropdown.Layout.Row = 2; app.AutoAlgorithmDropdown.Layout.Column = 2;
 
-    % Row 3: Sensitivity -- label + stacked slider/input panel
-    lblSens = uilabel(ag, 'Text', 'Sensitivity:');
-    lblSens.Layout.Row = 3; lblSens.Layout.Column = 1;
+    % Row 3: Sensitivity sub-grid spans ALL ag columns so the slider
+    % gets the panel's full horizontal extent (R14.9). Previously the
+    % sub-grid lived in column 2 only, which on the narrow Auto-detect
+    % panel left the slider and value field both visually clipped.
     sensSub = uigridlayout(ag, [2, 3]);
-    sensSub.Layout.Row = 3; sensSub.Layout.Column = 2;
+    sensSub.Layout.Row = 3; sensSub.Layout.Column = [1 3];
     sensSub.RowHeight = {30, 28};
-    sensSub.ColumnWidth = {'1x', 'fit', 70};
+    sensSub.ColumnWidth = {'fit', '1x', 80};
     sensSub.Padding = [0 0 0 0];
     sensSub.RowSpacing = 2;
     sensSub.ColumnSpacing = 6;
-    % Slider spans the full width on the top sub-row so 0..1 tick
-    % labels render without overlap.
+    lblSens = uilabel(sensSub, 'Text', 'Sensitivity:');
+    lblSens.Layout.Row = 1; lblSens.Layout.Column = 1;
+    % Drop the dense tick labels (a tighter set fits the available width
+    % without overlapping or getting cut off at the panel edge).
     app.AutoSensitivitySlider = uislider(sensSub, 'Limits', [0 1], 'Value', 0.75, ...
-        'MajorTicks', 0:0.25:1, ...
+        'MajorTicks', [0 0.5 1], 'MinorTicks', [], ...
         'ValueChangingFcn', @(~,evt) app.onSensitivityChanging(evt));
     app.AutoSensitivitySlider.Layout.Row = 1;
-    app.AutoSensitivitySlider.Layout.Column = [1 3];
-    % Sub-row 2: value display label + numeric edit on the right.
+    app.AutoSensitivitySlider.Layout.Column = [2 3];
+    % Sub-row 2: value label (right-aligned, spans cols 1-2) + edit field.
     app.AutoSensitivityValueLabel = uilabel(sensSub, 'Text', 'value: 0.75', ...
         'HorizontalAlignment', 'right');
     app.AutoSensitivityValueLabel.Layout.Row = 2;
-    app.AutoSensitivityValueLabel.Layout.Column = 2;
+    app.AutoSensitivityValueLabel.Layout.Column = [1 2];
     app.AutoSensitivityField = uieditfield(sensSub, 'numeric', ...
         'Value', 0.75, 'Limits', [0 1], ...
         'ValueDisplayFormat', '%.2f', ...
