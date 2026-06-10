@@ -3116,3 +3116,32 @@ Fix
   collide with the panel edge.
 
 Tests: 255 passed, 0 failed (unchanged).
+
+## 2026-06-10 — barnes pass 2, round 14 (R14.10 move-sync)
+
+Bug report: "объекты все еще не перемещаются кнопками up, down". The
+R14.2 dedupe fix wasn't the actual root cause. Real root cause:
+
+State.objects (working draft) is what moveTarget/rotateTarget/refitTargetMask
+modify. refreshPreview, when the manager is closed, reads
+State.savedObjects. The two diverge: every main-window transform was
+silently invisible AND if the user reopened the manager, showObjectsManager
+copies savedObjects -> objects, WIPING the transform entirely.
+
+Fix
+- New method syncSavedFromWorking(): copies State.objects to
+  State.savedObjects when the manager is NOT open (no-op while open --
+  the draft model still applies).
+- Called at the end of every main-window transform: moveTarget (both
+  '<selection>' path and single-target path), rotateTarget (both
+  paths), refitTargetMask.
+- Order is sync THEN refreshPreview, so the redraw sees the new
+  positions.
+
+Tests
+- New tests/unit/moveTargetSyncsSavedTest.m (4 tests):
+  * move via 'objectN' updates savedObjects
+  * rotate via 'objectN' updates savedObjects
+  * '<selection>' multi-object move updates savedObjects
+  * sync is skipped while manager is open (draft model preserved)
+- Full fast suite: 259 passed, 0 failed, 3 unrelated skips (was 255, +4).

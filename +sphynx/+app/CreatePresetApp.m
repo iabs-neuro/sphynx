@@ -763,6 +763,7 @@ classdef CreatePresetApp < handle
                     app.State.objects(k).border_x = app.State.objects(k).border_x + delta(1);
                     app.State.objects(k).border_y = app.State.objects(k).border_y + delta(2);
                 end
+                app.syncSavedFromWorking();
                 app.invalidateZonesOnTransform();
                 app.refreshPreview();
                 return;
@@ -771,6 +772,7 @@ classdef CreatePresetApp < handle
             tIdx = currentTargetIdx(app);
             if isnan(tIdx); return; end
             applyTransformToTarget(app, tIdx, dirVec * step, 0);
+            app.syncSavedFromWorking();
             app.invalidateZonesOnTransform();
             app.refreshPreview();
         end
@@ -796,6 +798,7 @@ classdef CreatePresetApp < handle
                     app.State.objects(k).border_x = xR;
                     app.State.objects(k).border_y = yR;
                 end
+                app.syncSavedFromWorking();
                 app.invalidateZonesOnTransform();
                 app.refreshPreview();
                 return;
@@ -803,8 +806,21 @@ classdef CreatePresetApp < handle
             tIdx = currentTargetIdx(app);
             if isnan(tIdx); return; end
             applyTransformToTarget(app, tIdx, [0 0], sign * stepDeg);
+            app.syncSavedFromWorking();
             app.invalidateZonesOnTransform();
             app.refreshPreview();
+        end
+
+        function syncSavedFromWorking(app)
+            % R14.10: when the manager is closed, working state IS the
+            % saved state -- main-window transformations (move/rotate)
+            % modify State.objects, but refreshPreview reads
+            % State.savedObjects. Without this sync, the move is
+            % silently invisible AND the next time the user reopens the
+            % manager, showObjectsManager copies savedObjects back to
+            % objects, wiping the transform entirely.
+            if app.isManagerOpen(); return; end
+            app.State.savedObjects = app.State.objects;
         end
 
         function refitTargetMask(app)
@@ -824,6 +840,7 @@ classdef CreatePresetApp < handle
                     obj.border_x, obj.border_y), 'holes');
                 app.State.objects(tIdx) = obj;
             end
+            app.syncSavedFromWorking();
             app.refreshPreview();
             sphynx.util.log('info', '[App] refit mask for target idx=%d', tIdx);
         end

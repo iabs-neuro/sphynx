@@ -2040,3 +2040,39 @@ R14.8 -- зона "arena_realout" появляется во ВСЕХ страт�
   edit-е виден полный знак, не клип.
 
 Если ок -- "ok".
+
+## 2026-06-10 — pass 2, round 14 (R14.10 move-sync fix)
+
+Корень бага "объекты не перемещаются после autodetect":
+
+- main-window кнопки Up/Down/Left/Right/Rot модифицируют State.objects
+  (working draft).
+- но refreshPreview, когда менеджер ЗАКРЫТ, читает
+  State.savedObjects. Они расходятся, и перемещение было невидимым.
+- Хуже: если переоткрыть менеджер, showObjectsManager копирует
+  savedObjects -> objects, СБРАСЫВАЯ все перемещения.
+
+Фикс
+- Новый метод syncSavedFromWorking(): когда менеджер закрыт,
+  копирует State.objects -> State.savedObjects (no-op пока менеджер
+  открыт - draft model остаётся).
+- Вызывается в конце moveTarget (всех 2-х веток: '<selection>' и
+  одиночная), rotateTarget (обоих веток), refitTargetMask.
+- Порядок: sync -> invalidateZones -> refreshPreview.
+
+Тесты
+- 4 новых теста в tests/unit/moveTargetSyncsSavedTest.m:
+  * move через 'objectN' обновляет savedObjects
+  * rotate через 'objectN' обновляет savedObjects
+  * '<selection>' multi-object move обновляет savedObjects
+  * sync пропускается пока менеджер открыт (draft model сохранён)
+- Full fast: 259 passed, 0 failed (было 255, +4).
+
+Что протестировать
+1. clear classes; close all; sphynx.app.CreatePresetApp
+2. Калибруй (1 line), pick arena, manager -> autodetect -> commit -> X.
+3. Главное окно показывает объекты. Выбери Target = object1.
+4. Жми Right несколько раз - объект едет вправо.
+5. Открой менеджер снова: object1 на новом месте (а не на старом!).
+
+Если ок - "move ok".
