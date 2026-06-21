@@ -2076,3 +2076,27 @@ R14.8 -- зона "arena_realout" появляется во ВСЕХ страт�
 5. Открой менеджер снова: object1 на новом месте (а не на старом!).
 
 Если ок - "move ok".
+
+## 2026-06-21 -- R15 цвета зон в combined layout (commit pending)
+
+**Что просил:** Зона "вне стен" одного цвета со стенами; для квадратной арены — зоны углов и "вне арены за углами" в одном цвете. Как на референсе из Dataset_paper.
+
+**Что сделал:** `sphynx.app.CreatePresetApp.zoneColorMap(names)` — статический метод, по имени зоны возвращает RGB. Правила:
+- walls + walls_realout = красный
+- corners + corners_realout = зелёный
+- center = синий
+- arena_realout = красный, но ТОЛЬКО когда нет walls_realout/corners_realout/strip*_realout (иначе перекрашивал бы углы в красный и мутил картинку — пропускаем).
+- walls_and_corners* (композитные зоны-объединения) — пропуск (тоже мутили бы оверлей).
+- неизвестные имена → запасная палитра по кругу.
+
+**Где применил:** `refreshPreview` (главное окно — outline зон) и `drawState` (сохраняемый combined layout PNG — filled с alpha).
+
+**Что протестить:**
+1. `clear classes; close all; sphynx.app.CreatePresetApp`
+2. Калибруй, нарисуй квадратную арену, добавь 4 объекта в углах, выбери стратегию `corners-walls-center`, Preview zones.
+3. Главное окно: углы (corners + corners_realout) одного зелёного цвета, стены (walls + walls_realout + outside-arena-near-walls) одного красного.
+4. Save preset → открой `*_layout.png` → должно соответствовать референсу Dataset_paper (углы зелёные половинки, стены пинк-красный, центр светлее).
+5. Стратегия `circle` → стенка + внешняя кайма одного красного, центр синий.
+6. Стратегия `strips` → каждый страйп своего цвета, arena_realout не рисуется (strip*_realout уже покрывают внешнюю кайму).
+
+Если ок — "colors ok".

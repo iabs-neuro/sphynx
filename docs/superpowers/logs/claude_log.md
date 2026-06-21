@@ -3145,3 +3145,32 @@ Tests
   * '<selection>' multi-object move updates savedObjects
   * sync is skipped while manager is open (draft model preserved)
 - Full fast suite: 259 passed, 0 failed, 3 unrelated skips (was 255, +4).
+
+## 2026-06-21 -- R15 zone semantic colors -- walls/realout share red, corners/realout share green
+
+User feedback: combined layout PNG export was visually noisy (8 distinct colors per corners-walls-center strategy from rotating palette). Reference Barnes render (Dataset_paper) had clean semantic coloring: walls + walls_realout one red, corners + corners_realout one green, center blue, outer arena band continuous with walls. Implemented `sphynx.app.CreatePresetApp.zoneColorMap(names)` -- static method, name-keyed RGB map.
+
+Rules:
+- `wall`, `walls`, `walls_realout`, `arena` -> red [0.95 0.30 0.20]
+- `corners`, `corners_realout` -> green [0.20 0.70 0.30]
+- `center` -> blue [0.10 0.45 0.95]
+- `arena_realout` -> red, but ONLY when no per-region `*_realout` exists. In corners-walls-center / strips the per-region zones already paint the outer ring, and arena_realout would overpaint corners/strips with wallC and muddy them -- so we skip (NaN).
+- `walls_and_corners`, `walls_and_corners_realout` -> NaN (composite unions of already-drawn zones; would also muddy overlay).
+- Unknown names -> rotating fallback palette (orange/purple/cyan/magenta/yellow-olive/blue/red/green).
+
+Callers (`refreshPreview` x2 for zones/previewZones; `drawState` for combined layout export) filter NaN rows via `if any(isnan(cmap(k,:))); continue; end`.
+
+Per-zone export plots (lines 743, 3382) untouched -- those use a fixed blue highlight for a single zone-of-interest, no semantic mapping needed.
+
+Tests: `tests/unit/zoneColorMapTest.m` (11 tests, all pass) covers:
+- walls == walls_realout color
+- corners == corners_realout color
+- circle wall == arena_realout when no per-region _realout
+- corners-walls-center: arena_realout NaN, composites NaN, per-region colors preserved
+- circle-rings: arena_realout kept (no per-region _realout)
+- strips: arena_realout skipped (strip*_realout siblings present)
+- unknown names get distinct fallback colors
+- empty input -> 0x3
+- string input accepted (auto cellstr)
+
+Fast: 270 passed, 0 failed, 3 skipped (pre-existing video-fixture filter). Was 259 + 11 new.

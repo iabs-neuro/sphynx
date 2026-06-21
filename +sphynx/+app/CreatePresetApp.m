@@ -1662,15 +1662,20 @@ classdef CreatePresetApp < handle
             hold(ax, 'on');
             % Zones — outline-only in preview (filled is too slow with
             % many zones on large frames). Save plot still uses filled.
+            % R15: semantic colors -- walls/realout share red, corners/
+            % realout share green, arena_realout matches walls when no
+            % per-region _realout exists; composites are NaN -> skipped.
             if ~isempty(app.State.zones)
-                cmap = colorPaletteForZones(numel(app.State.zones));
+                cmap = sphynx.app.CreatePresetApp.zoneColorMap({app.State.zones.name});
                 for k = 1:numel(app.State.zones)
+                    if any(isnan(cmap(k,:))); continue; end
                     drawZoneOutline(ax, app.State.zones(k), cmap(k,:));
                 end
             end
             if ~isempty(app.State.previewZones)
-                cmap = colorPaletteForZones(numel(app.State.previewZones));
+                cmap = sphynx.app.CreatePresetApp.zoneColorMap({app.State.previewZones.name});
                 for k = 1:numel(app.State.previewZones)
+                    if any(isnan(cmap(k,:))); continue; end
                     drawZoneOutline(ax, app.State.previewZones(k), cmap(k,:));
                 end
             end
@@ -1869,6 +1874,73 @@ classdef CreatePresetApp < handle
             s.selectedSavedIdx  = [];   % R8.3: main mirror listbox selection
             s.autoDetectedObjects = struct('type', {}, 'geometry', {}, ...
                 'border_x', {}, 'border_y', {}, 'mask', {}, 'class', {});
+        end
+
+        function cmap = zoneColorMap(names)
+            % R15: semantic per-zone color map for combined-layout renders.
+            %
+            %   wall / walls / walls_realout / arena    -> red
+            %   corners / corners_realout               -> green
+            %   center                                  -> blue
+            %   arena_realout                           -> red, UNLESS a
+            %       per-region _realout zone is present (walls_realout,
+            %       corners_realout, strip*_realout) -- in that case it
+            %       would overpaint and muddy the corners/strips, so skip.
+            %   walls_and_corners(_realout)             -> skip (composite)
+            %   unknown names                           -> fallback rotating
+            %       palette (matches v1 colorPaletteForZones output)
+            %
+            % Output: Nx3 RGB matrix. Rows that are NaN signal "skip --
+            % do not draw this zone". Callers must filter accordingly.
+            if nargin < 1 || isempty(names)
+                cmap = zeros(0, 3); return;
+            end
+            if ~iscell(names); names = cellstr(names); end
+            n = numel(names);
+            cmap = NaN(n, 3);
+            wallC   = [0.95 0.30 0.20];
+            corC    = [0.20 0.70 0.30];
+            centerC = [0.10 0.45 0.95];
+            fallback = [
+                0.95 0.65 0.10;   % orange
+                0.55 0.30 0.85;   % purple
+                0.20 0.80 0.80;   % cyan
+                0.85 0.20 0.65;   % magenta
+                0.80 0.80 0.20;   % yellow-olive
+                0.10 0.45 0.95;   % blue
+                0.95 0.30 0.20;   % red
+                0.20 0.70 0.30;   % green
+            ];
+            hasPerRegionRealout = false;
+            for k = 1:n
+                nm = names{k};
+                if ischar(nm) && ~strcmp(nm, 'arena_realout') ...
+                        && length(nm) >= 8 && strcmp(nm(end-7:end), '_realout')
+                    hasPerRegionRealout = true; break;
+                end
+            end
+            fbIdx = 0;
+            for k = 1:n
+                nm = names{k};
+                if ~ischar(nm); nm = ''; end
+                switch nm
+                    case {'walls_and_corners', 'walls_and_corners_realout'}
+                        % composite -- skip
+                    case 'arena_realout'
+                        if ~hasPerRegionRealout
+                            cmap(k, :) = wallC;
+                        end
+                    case {'wall', 'walls', 'walls_realout', 'arena'}
+                        cmap(k, :) = wallC;
+                    case {'corners', 'corners_realout'}
+                        cmap(k, :) = corC;
+                    case 'center'
+                        cmap(k, :) = centerC;
+                    otherwise
+                        fbIdx = fbIdx + 1;
+                        cmap(k, :) = fallback(mod(fbIdx - 1, size(fallback, 1)) + 1, :);
+                end
+            end
         end
     end
 end
@@ -3216,8 +3288,9 @@ function drawState(ax, S, drawZones)
     imshow(S.frame, 'Parent', ax);
     hold(ax, 'on');
     if drawZones && ~isempty(S.zones)
-        cmap = colorPaletteForZones(numel(S.zones));
+        cmap = sphynx.app.CreatePresetApp.zoneColorMap({S.zones.name});
         for k = 1:numel(S.zones)
+            if any(isnan(cmap(k,:))); continue; end
             drawZoneFilled(ax, S.zones(k), cmap(k,:), 0.22);
         end
     end
