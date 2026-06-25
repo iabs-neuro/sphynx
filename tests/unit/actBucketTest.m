@@ -95,6 +95,19 @@ function testAtPrefixActsSpatial(testCase)
     end
 end
 
+function testBpAtZoneActsSpatial(testCase)
+    % Per-body-part Barnes naming: nose_at_target, body_at_object3,
+    % head_at_platform. Any alphabetic body-part prefix counts.
+    names = {'nose_at_target', 'nose_at_platform', 'nose_at_any_hole', ...
+             'nose_at_object1', 'nose_at_object19', ...
+             'body_at_target', 'body_at_platform', ...
+             'body_at_object1', 'body_at_object19'};
+    for k = 1:numel(names)
+        verifyEqual(testCase, sphynx.util.actBucket(names{k}), 'spatial', ...
+            sprintf('expected "%s" -> spatial', names{k}));
+    end
+end
+
 function testBarnesNamedObjectZonesSpatial(testCase)
     % Barnes preset uses object types like 'target' / 'start' that emit
     % zones target_real, target_realout, target_out, target_center,

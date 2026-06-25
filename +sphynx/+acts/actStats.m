@@ -26,6 +26,12 @@ function stats = actStats(actMask, frameRate, varargin)
 %     FirstEndSec        time (s) of the first episode end
 %     LastStartSec       time (s) of the last episode start
 %     LastEndSec         time (s) of the last episode end
+%     FirstDurationSec   length (s) of the first episode (NaN if none)
+%     RestDurationSec    total time (s) of every episode AFTER the
+%                        first one. Useful for Barnes "did the animal
+%                        keep coming back to the target after the
+%                        first visit?" questions. 0 if only one
+%                        episode; NaN if no episodes.
 %     Distance           cm covered while acting (= sum of per-frame
 %                        velocity / frameRate). 0 if no Velocity given.
 %     ActMeanDistance    Distance / ActNumber
@@ -69,15 +75,23 @@ function stats = actStats(actMask, frameRate, varargin)
     % metrics (latency, time-to-completion). 0-based start so frame 1
     % maps to t = 0.
     if isempty(runs)
-        stats.FirstStartSec = NaN;
-        stats.FirstEndSec   = NaN;
-        stats.LastStartSec  = NaN;
-        stats.LastEndSec    = NaN;
+        stats.FirstStartSec    = NaN;
+        stats.FirstEndSec      = NaN;
+        stats.LastStartSec     = NaN;
+        stats.LastEndSec       = NaN;
+        stats.FirstDurationSec = NaN;
+        stats.RestDurationSec  = NaN;
     else
         stats.FirstStartSec = round((runs(1).frameIn   - 1) / frameRate, 2);
         stats.FirstEndSec   = round((runs(1).frameOut  - 1) / frameRate, 2);
         stats.LastStartSec  = round((runs(end).frameIn  - 1) / frameRate, 2);
         stats.LastEndSec    = round((runs(end).frameOut - 1) / frameRate, 2);
+        % Episode durations are inclusive frame counts -- one frame
+        % run = 1 frame = 1/fps seconds. The first-run duration is
+        % its own; the rest is the total minus the first.
+        firstDur = runs(1).duration / frameRate;
+        stats.FirstDurationSec = round(firstDur, 2);
+        stats.RestDurationSec  = round(max(0, stats.ActDuration - firstDur), 2);
     end
 
     % Velocity-derived metrics. analyzeSession passes the bodycenter

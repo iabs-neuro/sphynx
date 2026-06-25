@@ -356,10 +356,12 @@ function result = analyzeSession(config)
         Acts(line).ActMaxVelocity  = s.ActMaxVelocity;
         Acts(line).ActMinVelocity  = s.ActMinVelocity;
         Acts(line).ActVelocity     = s.ActVelocity;          % alias
-        Acts(line).FirstStartSec   = s.FirstStartSec;
-        Acts(line).FirstEndSec     = s.FirstEndSec;
-        Acts(line).LastStartSec    = s.LastStartSec;
-        Acts(line).LastEndSec      = s.LastEndSec;
+        Acts(line).FirstStartSec    = s.FirstStartSec;
+        Acts(line).FirstEndSec      = s.FirstEndSec;
+        Acts(line).LastStartSec     = s.LastStartSec;
+        Acts(line).LastEndSec       = s.LastEndSec;
+        Acts(line).FirstDurationSec = s.FirstDurationSec;
+        Acts(line).RestDurationSec  = s.RestDurationSec;
     end
 
     % --- 11. Result struct ---------------------------------------------------
@@ -373,6 +375,23 @@ function result = analyzeSession(config)
     result.ArenaAndObjects = ArenaAndObjects;
     result.n_frames = nFrames;
     result.config = config;
+
+    % --- 11b. Barnes paradigm metrics (if applicable) ----------------------
+    % Computes nose / body hole-visit counts, first-checked-hole angular
+    % error, mean angular error of checked holes, and target visit order.
+    % Triggered by Options.ExperimentType == 'Barnes'; otherwise skipped.
+    if isfield(Options, 'ExperimentType') ...
+            && ischar(Options.ExperimentType) ...
+            && strcmpi(Options.ExperimentType, 'Barnes')
+        try
+            result.BarnesMetrics = sphynx.pipeline.barnesSessionMetrics(result);
+            log('info', 'Barnes metrics computed (%d nose visits, target visit order = %s)', ...
+                result.BarnesMetrics.TotalNoseHoleVisits, ...
+                num2str(result.BarnesMetrics.TargetHoleVisitOrder));
+        catch ME
+            log('warn', 'Barnes metrics failed: %s', ME.message);
+        end
+    end
 
     % --- 12. Save ------------------------------------------------------------
     if config.io.saveWorkspace && ~isempty(config.paths.outDir)

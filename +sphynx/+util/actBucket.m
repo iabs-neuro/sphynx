@@ -25,9 +25,12 @@ function bk = actBucket(name)
 %     per-object   : <name>_(real|realout|out|center)
 %                    -- catches object1_real, objectall_realout,
 %                       target_center, start_out, etc.
-%     at-prefix    : at_<name> -- the readable-name convention for
-%                    paradigm-default zone-presence acts (e.g.
-%                    at_target, at_mistake, at_platform, at_object3)
+%     at-prefix    : at_<name> -- the original readable-name
+%                    convention (at_target, at_platform, at_object3).
+%     bp_at_zone   : <bp>_at_<name> -- per-body-part variant used by
+%                    the Barnes default library (nose_at_target,
+%                    body_at_object3, etc.). Any alphabetic prefix
+%                    before _at_ is treated as a body-part tag.
 %
 %   See +sphynx/+app/CreatePresetApp.m::zoneColorMap for the
 %   authoritative semantic-color list and +sphynx/+zones/* for the
@@ -63,7 +66,8 @@ function tf = isSpatialName(nm)
         '^strip\d+(_realout)?$', ...
         '^arenacorner\d+$', ...
         '^[a-z_][a-z0-9_]*_(real|realout|out|center)$', ...
-        '^at_[a-z_][a-z0-9_]*$' ...
+        '^at_[a-z_][a-z0-9_]*$', ...
+        '^[a-z]+_at_[a-z_][a-z0-9_]*$' ...
     };
     for i = 1:numel(patterns)
         if ~isempty(regexp(nm, patterns{i}, 'once'))

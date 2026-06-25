@@ -66,6 +66,38 @@ function testEpisodeBoundaries(testCase)
     verifyEqual(testCase, s.LastEndSec,    (90-1)/fps, 'AbsTol', 0.01);
 end
 
+function testFirstAndRestDurationSplit(testCase)
+    % First episode = frames 11..20 = 10 frames @ fps=10 -> 1.0 s.
+    % Second episode = frames 31..50 = 20 frames @ fps=10 -> 2.0 s.
+    % Third episode  = frames 71..80 = 10 frames @ fps=10 -> 1.0 s.
+    % ActDuration = 4.0; FirstDurationSec = 1.0; RestDurationSec = 3.0.
+    n = 100; fps = 10;
+    mask = false(n, 1);
+    mask(11:20) = true;
+    mask(31:50) = true;
+    mask(71:80) = true;
+    s = sphynx.acts.actStats(mask, fps);
+    verifyEqual(testCase, s.ActNumber, 3);
+    verifyEqual(testCase, s.ActDuration, 4.0, 'AbsTol', 0.05);
+    verifyEqual(testCase, s.FirstDurationSec, 1.0, 'AbsTol', 0.05);
+    verifyEqual(testCase, s.RestDurationSec, 3.0, 'AbsTol', 0.05);
+end
+
+function testSingleEpisodeRestIsZero(testCase)
+    n = 50; fps = 10;
+    mask = false(n, 1); mask(5:14) = true;       % 10 frames -> 1.0 s
+    s = sphynx.acts.actStats(mask, fps);
+    verifyEqual(testCase, s.ActNumber, 1);
+    verifyEqual(testCase, s.FirstDurationSec, 1.0, 'AbsTol', 0.05);
+    verifyEqual(testCase, s.RestDurationSec, 0);
+end
+
+function testEmptyActFirstRestAreNaN(testCase)
+    s = sphynx.acts.actStats(false(50, 1), 10);
+    verifyTrue(testCase, isnan(s.FirstDurationSec));
+    verifyTrue(testCase, isnan(s.RestDurationSec));
+end
+
 function testMaxMinVelocity(testCase)
     n = 50;
     mask = false(n, 1); mask(11:30) = true;

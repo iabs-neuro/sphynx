@@ -6,28 +6,30 @@ function acts = actsLibraryBarnesDefaults(varargin)
 %   acts = sphynx.acts.actsLibraryBarnesDefaults()
 %   acts = sphynx.acts.actsLibraryBarnesDefaults('NumObjects', 19)
 %
-%   The library covers the standard Barnes paradigm metrics:
-%     - escape target visits (at_target)
-%     - start platform residence (at_platform)
-%     - per-hole visits (at_object1 .. at_objectN), N defaults to 19
-%       so it covers the 19-mistakes layout of the Demo/BARNES_v2
-%       presets. Pass 'NumObjects' to scale.
-%     - any-hole and mistake compound (at_any_hole, at_mistake)
-%     - arena-frame acts (at_center, at_wall, at_outside)
+%   Two body-part variants per zone, matching how the Barnes maze is
+%   actually scored in the lab:
+%     - nose_at_<zone>  uses the 'nose' body part and the inflated
+%       _realout halo around the hole / target / platform / object.
+%       The standard nose-poke definition.
+%     - body_at_<zone>  uses 'bodycenter' and the stricter _real
+%       (geometric) zone -- "the animal physically sat on the spot".
 %
-%   Conventions:
-%     - Hole-related acts use 'nose' as the body part -- mice probe
-%       holes with the snout, so nose-in-zone is the more sensible
-%       proxy than bodycenter. Arena-frame acts use 'bodycenter'.
-%     - Each per-hole act gates on the _realout (inflated) variant
-%       of the object zone, matching the legacy "visit" definition
-%       used by sphynx.preset.buildObjectZones.
-%     - at_mistake = at_any_hole EXCLUDE at_target -- compound built
-%       on top of the simple acts, evaluated by evalActsLibrary in
-%       pass-2 once at_any_hole / at_target are resolved.
+%   Layout (NumObjects = 19 by default, matching Demo/BARNES_v2):
+%       1   nose_at_target              (nose / target_realout)
+%       2-20  nose_at_object1..19       (nose / objectN_realout)
+%       21  body_at_target              (bodycenter / target_real)
+%       22-40 body_at_object1..19       (bodycenter / objectN_real)
+%       41  nose_at_platform            (nose / platform_realout)
+%       42  body_at_platform            (bodycenter / platform_real)
+%       43  nose_at_any_hole            (nose / objectall_realout)
+%
+%   No center / wall / outside / mistake compound acts -- Barnes
+%   metrics derive everything from per-hole visits + the target/
+%   platform/any-hole aggregates. The mistake count is reported by
+%   sphynx.pipeline.barnesSessionMetrics, not as a separate act.
 %
 %   Does NOT include the speed/posture defaults (rest/walk/locomotion/
-%   freezing/rear); use sphynx.acts.actsLibraryDefaults for those. The
+%   freezing/rear); use sphynx.acts.actsLibraryDefaults for those. A
 %   typical Barnes session library is the concatenation of the two:
 %       acts = [sphynx.acts.actsLibraryDefaults(), ...
 %               sphynx.acts.actsLibraryBarnesDefaults()];
@@ -39,43 +41,42 @@ function acts = actsLibraryBarnesDefaults(varargin)
 
     acts = sphynx.acts.emptyActsArray();
 
-    % --- area acts (arena frame, bodycenter) ----------------------------
+    % --- nose at target ---------------------------------------------------
     acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'at_center', 'Zones', {'center'}, 'ZoneOp', 'OR', ...
-        'BodyPart', 'bodycenter');
+        'Name', 'nose_at_target', 'Zones', {'target_realout'}, ...
+        'ZoneOp', 'OR', 'BodyPart', 'nose');
 
-    acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'at_wall', 'Zones', {'wall'}, 'ZoneOp', 'OR', ...
-        'BodyPart', 'bodycenter');
-
-    acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'at_outside', 'Zones', {'arena_realout'}, 'ZoneOp', 'OR', ...
-        'BodyPart', 'bodycenter');
-
-    % --- area acts (escape target + start platform, nose) ---------------
-    acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'at_target', 'Zones', {'target_realout'}, 'ZoneOp', 'OR', ...
-        'BodyPart', 'nose');
-
-    acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'at_platform', 'Zones', {'platform_realout'}, 'ZoneOp', 'OR', ...
-        'BodyPart', 'bodycenter');
-
-    acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'at_any_hole', 'Zones', {'objectall_realout'}, 'ZoneOp', 'OR', ...
-        'BodyPart', 'nose');
-
-    % --- per-hole acts (at_object1 .. at_objectN) -----------------------
+    % --- nose at each hole ------------------------------------------------
     for n = 1:nObj
         acts(end+1) = sphynx.acts.buildSimpleAct( ...
-            'Name', sprintf('at_object%d', n), ...
+            'Name', sprintf('nose_at_object%d', n), ...
             'Zones', {sprintf('object%d_realout', n)}, ...
             'ZoneOp', 'OR', 'BodyPart', 'nose'); %#ok<AGROW>
     end
 
-    % --- compound: errors = any-hole MINUS target -----------------------
-    acts(end+1) = sphynx.acts.buildComplexAct( ...
-        'Name', 'at_mistake', ...
-        'Components', {'at_any_hole', 'at_target'}, ...
-        'Operation', 'exclude');
+    % --- body at target ---------------------------------------------------
+    acts(end+1) = sphynx.acts.buildSimpleAct( ...
+        'Name', 'body_at_target', 'Zones', {'target_real'}, ...
+        'ZoneOp', 'OR', 'BodyPart', 'bodycenter');
+
+    % --- body at each hole ------------------------------------------------
+    for n = 1:nObj
+        acts(end+1) = sphynx.acts.buildSimpleAct( ...
+            'Name', sprintf('body_at_object%d', n), ...
+            'Zones', {sprintf('object%d_real', n)}, ...
+            'ZoneOp', 'OR', 'BodyPart', 'bodycenter'); %#ok<AGROW>
+    end
+
+    % --- platform (start) -------------------------------------------------
+    acts(end+1) = sphynx.acts.buildSimpleAct( ...
+        'Name', 'nose_at_platform', 'Zones', {'platform_realout'}, ...
+        'ZoneOp', 'OR', 'BodyPart', 'nose');
+    acts(end+1) = sphynx.acts.buildSimpleAct( ...
+        'Name', 'body_at_platform', 'Zones', {'platform_real'}, ...
+        'ZoneOp', 'OR', 'BodyPart', 'bodycenter');
+
+    % --- nose at any hole (aggregate) -------------------------------------
+    acts(end+1) = sphynx.acts.buildSimpleAct( ...
+        'Name', 'nose_at_any_hole', 'Zones', {'objectall_realout'}, ...
+        'ZoneOp', 'OR', 'BodyPart', 'nose');
 end

@@ -1,125 +1,120 @@
 function tests = actsLibraryBarnesDefaultsTest
 % ACTSLIBRARYBARNESDEFAULTSTEST  Coverage for the Barnes paradigm
-%   default-acts library. Locks in: count, names, types, zone wiring,
-%   body-part conventions (nose for hole probes, bodycenter for arena
-%   frame), and the at_mistake compound dependency graph.
+%   default-acts library. Locks in: count, names, zone wiring, body-
+%   part conventions (nose for nose pokes, body for body-center
+%   visits), and the speed-defaults concat pattern.
     tests = functiontests(localfunctions);
 end
 
-function testDefaultsHas26Acts(testCase)
-    % 6 area + 19 per-hole + 1 compound
+function testDefaultsHas43Acts(testCase)
+    % 1 nose-target + 19 nose-objectN + 1 body-target + 19 body-objectN
+    %  + nose-platform + body-platform + nose-any-hole
     acts = sphynx.acts.actsLibraryBarnesDefaults();
-    verifyEqual(testCase, numel(acts), 26);
+    verifyEqual(testCase, numel(acts), 43);
 end
 
 function testCustomNumObjectsScalesCount(testCase)
+    % 1 + N + 1 + N + 2 + 1 = 2N + 5
     acts = sphynx.acts.actsLibraryBarnesDefaults('NumObjects', 5);
-    verifyEqual(testCase, numel(acts), 6 + 5 + 1);
+    verifyEqual(testCase, numel(acts), 2 * 5 + 5);
 end
 
-function testZeroObjectsKeepsAreaAndCompound(testCase)
+function testZeroObjectsKeepsTargetPlatformAnyHole(testCase)
     acts = sphynx.acts.actsLibraryBarnesDefaults('NumObjects', 0);
-    verifyEqual(testCase, numel(acts), 7);
-    % at_any_hole and at_mistake survive (compound still references them)
-    verifyTrue(testCase, hasAct(acts, 'at_any_hole'));
-    verifyTrue(testCase, hasAct(acts, 'at_mistake'));
-end
-
-function testAllExpectedAreaActsPresent(testCase)
-    acts = sphynx.acts.actsLibraryBarnesDefaults();
-    expected = {'at_center', 'at_wall', 'at_outside', ...
-                'at_target', 'at_platform', 'at_any_hole', ...
-                'at_mistake'};
+    verifyEqual(testCase, numel(acts), 5);
+    expected = {'nose_at_target', 'body_at_target', ...
+                'nose_at_platform', 'body_at_platform', 'nose_at_any_hole'};
     for k = 1:numel(expected)
         verifyTrue(testCase, hasAct(acts, expected{k}), ...
             sprintf('missing act: %s', expected{k}));
     end
 end
 
-function testPerHoleActsGenerated(testCase)
+function testAllExpectedRootActsPresent(testCase)
+    acts = sphynx.acts.actsLibraryBarnesDefaults();
+    expected = {'nose_at_target', 'body_at_target', ...
+                'nose_at_platform', 'body_at_platform', ...
+                'nose_at_any_hole'};
+    for k = 1:numel(expected)
+        verifyTrue(testCase, hasAct(acts, expected{k}), ...
+            sprintf('missing act: %s', expected{k}));
+    end
+end
+
+function testPerHoleNoseActsGenerated(testCase)
     acts = sphynx.acts.actsLibraryBarnesDefaults();
     for n = [1, 5, 10, 19]
-        nm = sprintf('at_object%d', n);
+        nm = sprintf('nose_at_object%d', n);
         verifyTrue(testCase, hasAct(acts, nm), ...
-            sprintf('missing per-hole act: %s', nm));
+            sprintf('missing per-hole nose act: %s', nm));
     end
-    verifyFalse(testCase, hasAct(acts, 'at_object20'));
-    verifyFalse(testCase, hasAct(acts, 'at_object0'));
+    verifyFalse(testCase, hasAct(acts, 'nose_at_object20'));
 end
 
-function testHoleActsUseNoseBodyPart(testCase)
+function testPerHoleBodyActsGenerated(testCase)
     acts = sphynx.acts.actsLibraryBarnesDefaults();
-    expectNose = {'at_target', 'at_any_hole', 'at_object1', 'at_object19'};
-    for k = 1:numel(expectNose)
-        a = getAct(acts, expectNose{k});
-        verifyEqual(testCase, a.bodyPart, 'nose', ...
-            sprintf('%s should probe with nose', expectNose{k}));
+    for n = [1, 5, 10, 19]
+        nm = sprintf('body_at_object%d', n);
+        verifyTrue(testCase, hasAct(acts, nm), ...
+            sprintf('missing per-hole body act: %s', nm));
     end
+    verifyFalse(testCase, hasAct(acts, 'body_at_object20'));
 end
 
-function testArenaFrameActsUseBodyCenter(testCase)
-    acts = sphynx.acts.actsLibraryBarnesDefaults();
-    expectBody = {'at_center', 'at_wall', 'at_outside', 'at_platform'};
-    for k = 1:numel(expectBody)
-        a = getAct(acts, expectBody{k});
-        verifyEqual(testCase, a.bodyPart, 'bodycenter', ...
-            sprintf('%s should use bodycenter', expectBody{k}));
-    end
-end
-
-function testHoleActsGateOnRealoutZone(testCase)
-    % Hole acts must reference the inflated (_realout) variant -- visits
-    % are detected when nose enters the soft halo, not only the geometric
-    % hole edge.
-    acts = sphynx.acts.actsLibraryBarnesDefaults();
-    a = getAct(acts, 'at_target');
-    verifyEqual(testCase, a.zones, {'target_realout'});
-    a = getAct(acts, 'at_any_hole');
-    verifyEqual(testCase, a.zones, {'objectall_realout'});
-    a = getAct(acts, 'at_object3');
-    verifyEqual(testCase, a.zones, {'object3_realout'});
-end
-
-function testAreaActsGateOnExactZone(testCase)
-    acts = sphynx.acts.actsLibraryBarnesDefaults();
-    verifyEqual(testCase, getAct(acts, 'at_center').zones,   {'center'});
-    verifyEqual(testCase, getAct(acts, 'at_wall').zones,     {'wall'});
-    verifyEqual(testCase, getAct(acts, 'at_outside').zones,  {'arena_realout'});
-    verifyEqual(testCase, getAct(acts, 'at_platform').zones, {'platform_realout'});
-end
-
-function testMistakeIsComplexExcludeOnAnyHoleMinusTarget(testCase)
-    acts = sphynx.acts.actsLibraryBarnesDefaults();
-    a = getAct(acts, 'at_mistake');
-    verifyEqual(testCase, a.type, 'complex');
-    verifyEqual(testCase, a.operation, 'exclude');
-    verifyEqual(testCase, a.components, {'at_any_hole', 'at_target'});
-end
-
-function testMistakeComponentsExist(testCase)
-    % evalActsLibrary's pass-2 needs the simple components to exist by
-    % name in pass-1 -- this would otherwise crash at runtime.
-    acts = sphynx.acts.actsLibraryBarnesDefaults();
-    a = getAct(acts, 'at_mistake');
-    for k = 1:numel(a.components)
-        verifyTrue(testCase, hasAct(acts, a.components{k}), ...
-            sprintf('at_mistake references missing component: %s', a.components{k}));
-    end
-end
-
-function testAllSimpleActsHaveZoneOpOR(testCase)
+function testNoseActsUseNoseBodyPart(testCase)
     acts = sphynx.acts.actsLibraryBarnesDefaults();
     for k = 1:numel(acts)
-        if strcmp(acts(k).type, 'simple')
-            verifyEqual(testCase, acts(k).zoneOp, 'OR', ...
-                sprintf('%s should default to OR', acts(k).name));
+        if startsWith(acts(k).name, 'nose_at_')
+            verifyEqual(testCase, acts(k).bodyPart, 'nose', ...
+                sprintf('%s should probe with nose', acts(k).name));
         end
     end
 end
 
-function testAllNamesUseAtPrefixForActBucket(testCase)
+function testBodyActsUseBodyCenter(testCase)
+    acts = sphynx.acts.actsLibraryBarnesDefaults();
+    for k = 1:numel(acts)
+        if startsWith(acts(k).name, 'body_at_')
+            verifyEqual(testCase, acts(k).bodyPart, 'bodycenter', ...
+                sprintf('%s should use bodycenter', acts(k).name));
+        end
+    end
+end
+
+function testNoseActsGateOnRealoutZone(testCase)
+    % Nose acts gate on the inflated _realout halo -- nose enters
+    % the soft halo before the rest of the body.
+    acts = sphynx.acts.actsLibraryBarnesDefaults();
+    verifyEqual(testCase, getAct(acts, 'nose_at_target').zones,    {'target_realout'});
+    verifyEqual(testCase, getAct(acts, 'nose_at_platform').zones,  {'platform_realout'});
+    verifyEqual(testCase, getAct(acts, 'nose_at_any_hole').zones,  {'objectall_realout'});
+    verifyEqual(testCase, getAct(acts, 'nose_at_object1').zones,   {'object1_realout'});
+    verifyEqual(testCase, getAct(acts, 'nose_at_object19').zones,  {'object19_realout'});
+end
+
+function testBodyActsGateOnRealZone(testCase)
+    % Body-center acts gate on the strict geometric _real zone --
+    % "the animal physically sat in the hole / platform".
+    acts = sphynx.acts.actsLibraryBarnesDefaults();
+    verifyEqual(testCase, getAct(acts, 'body_at_target').zones,   {'target_real'});
+    verifyEqual(testCase, getAct(acts, 'body_at_platform').zones, {'platform_real'});
+    verifyEqual(testCase, getAct(acts, 'body_at_object1').zones,  {'object1_real'});
+    verifyEqual(testCase, getAct(acts, 'body_at_object19').zones, {'object19_real'});
+end
+
+function testAllSimpleAndZoneOpOR(testCase)
+    acts = sphynx.acts.actsLibraryBarnesDefaults();
+    for k = 1:numel(acts)
+        verifyEqual(testCase, acts(k).type, 'simple', ...
+            sprintf('%s should be simple (Barnes defaults are flat)', acts(k).name));
+        verifyEqual(testCase, acts(k).zoneOp, 'OR', ...
+            sprintf('%s should default to OR', acts(k).name));
+    end
+end
+
+function testAllNamesBucketAsSpatial(testCase)
     % Every Barnes default act should bucket as 'spatial' via
-    % sphynx.util.actBucket (the at_* regex branch).
+    % sphynx.util.actBucket (the <bp>_at_<zone> regex branch).
     acts = sphynx.acts.actsLibraryBarnesDefaults();
     for k = 1:numel(acts)
         verifyEqual(testCase, sphynx.util.actBucket(acts(k).name), 'spatial', ...
@@ -133,7 +128,6 @@ function testConcatenatesWithSpeedDefaults(testCase)
     barnes = sphynx.acts.actsLibraryBarnesDefaults();
     combined = [speed, barnes];
     verifyEqual(testCase, numel(combined), numel(speed) + numel(barnes));
-    % Name uniqueness across the union
     names = {combined.name};
     verifyEqual(testCase, numel(unique(names)), numel(names), ...
         'combined library has duplicate act names');
