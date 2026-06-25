@@ -142,7 +142,7 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
     %   rest    -> stacked under "Acts:".
     actBuckets = cell(1, nActs);
     for k = 1:nActs
-        actBuckets{k} = actBucketLocal(actNames{k});
+        actBuckets{k} = sphynx.util.actBucket(actNames{k});
     end
 
     % Pre-resolve per-frame: which speed-act is active, which spatial
@@ -341,15 +341,3 @@ function out = mergeStruct(defaults, override)
     end
 end
 
-function bk = actBucketLocal(name)
-    nm = lower(name);
-    if any(strcmp(nm, {'rest', 'walk', 'locomotion'}))
-        bk = 'speed';
-    elseif any(strcmp(nm, {'corners', 'walls', 'walls_and_corners', 'center', 'middle_zone'}))
-        bk = 'spatial';
-    elseif any(strcmp(nm, {'freezing', 'rear'}))
-        bk = 'posture';
-    else
-        bk = 'composite';
-    end
-end

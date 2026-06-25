@@ -995,7 +995,7 @@ classdef AnalyzeSessionTabController < handle
                 hold(ax, 'off'); return;
             end
             names0 = {r.Acts.ActName};
-            buckets = cellfun(@(nm) actBucket(nm), names0, 'UniformOutput', false);
+            buckets = cellfun(@(nm) sphynx.util.actBucket(nm), names0, 'UniformOutput', false);
             [~, sortIdx] = sortActs(buckets, names0);
             actsToPlot = r.Acts(sortIdx);
             n = numel(actsToPlot);
@@ -1007,7 +1007,7 @@ classdef AnalyzeSessionTabController < handle
                                   'composite', [0.55 0.30 0.75]);
             for k = 1:n
                 a = actsToPlot(k).ActArrayRefine;
-                bk = actBucket(actsToPlot(k).ActName);
+                bk = sphynx.util.actBucket(actsToPlot(k).ActName);
                 col = bucketColors.(bk);
                 yLine = ones(size(a)) * (n - k + 1);
                 yLine(~a) = NaN;
@@ -1065,22 +1065,6 @@ end
 
 function out = ternary(cond, a, b)
     if cond; out = a; else; out = b; end
-end
-
-function bk = actBucket(name)
-    % Bucket an act by its name into one of: speed / spatial / posture
-    % / composite. Used to order the etogram and to pick what shows up
-    % under the Speed_act and Zone sections of the main-video overlay.
-    nm = lower(name);
-    if any(strcmp(nm, {'rest', 'walk', 'locomotion'}))
-        bk = 'speed';
-    elseif any(strcmp(nm, {'corners', 'walls', 'walls_and_corners', 'center', 'middle_zone'}))
-        bk = 'spatial';
-    elseif any(strcmp(nm, {'freezing', 'rear'}))
-        bk = 'posture';
-    else
-        bk = 'composite';
-    end
 end
 
 function [sortedBuckets, idx] = sortActs(buckets, names)
