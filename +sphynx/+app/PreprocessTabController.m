@@ -743,36 +743,39 @@ classdef PreprocessTabController < handle
     methods (Access = private)
         % ===== UI ===========================================================
         function buildUI(obj)
-            % R16 layout:
-            %   row 1 (36):   TopBar (Output dir + Save + Clear All)
-            %   row 2 (340):  Block1 + Block2 stacked in 570px left col |
-            %                 Plots (X+Y stacked, hist column)
-            %   row 3 (32):   ViewportRow (bodyparts < > Video |
-            %                 from/to/X | raw/interp/smooth/log Y) -- full
-            %                 width, immediately under the plots
-            %   row 4 (300):  Block 3 (per-part settings) -- full width,
-            %                 wide enough for the 12-column table
-            %   row 5 (1x):   BottomBar (regions + log)
-            % Block heights: B1 = 130, B2 = 110. Left col widened to 570
-            % (was 380); B3 promoted to its own full-width row.
-            obj.OuterGrid = uigridlayout(obj.Tab, [5, 2]);
-            obj.OuterGrid.RowHeight = {36, 340, 32, 300, '1x'};
-            obj.OuterGrid.ColumnWidth = {570, '1x'};
-            obj.OuterGrid.Padding = [4 4 4 4];
-            obj.OuterGrid.RowSpacing = 4;
+            % R17 layout. 3 proportional columns 25% / 50% / 25% so all
+            % blocks scale on window resize:
+            %   row 1 (36):    TopBar (Output dir + Save + Clear All)
+            %   row 2 (280):   [B1 Loading + B2 Outlier stacked, col 1=25%] |
+            %                  [Plots X(t) + Y(t), cols [2..3] internal 2x:1x
+            %                   = 50% trajectory + 25% histogram]
+            %   row 3 (32):    Viewport row (bodyparts/video/from-to/X/raw-
+            %                  interp-smoothed/log Y) -- full width
+            %   row 4 (300):   B3 Per-part settings -- full width
+            %   row 5 (140):   B4 Manual exclusion regions -- full width,
+            %                  pinned right under B3
+            %   row 6 ('1x'):  Log -- full width, takes leftover height
+            % B1 = 130, B2 = 140 (B2 slightly taller per user request).
+            % Plots height = B1 + B2 + spacing = 280 = row 2 height.
+            obj.OuterGrid = uigridlayout(obj.Tab, [6, 3]);
+            obj.OuterGrid.RowHeight    = {36, 280, 32, 300, 140, '1x'};
+            obj.OuterGrid.ColumnWidth  = {'1x', '2x', '1x'};
+            obj.OuterGrid.Padding      = [4 4 4 4];
+            obj.OuterGrid.RowSpacing   = 4;
             obj.OuterGrid.ColumnSpacing = 6;
 
-            obj.buildTopBar();          % row 1, cols [1 2]
-            obj.buildBlocksLeftCol();   % row 2 col 1 (Block 1 + Block 2)
-            obj.buildPlots();           % row 2 col 2 (X+Y stacked, hist column)
-            obj.buildViewportRowFull(); % row 3, cols [1 2]
-            obj.buildPerPartPanel();    % row 4, cols [1 2] -- full width
-            obj.buildBottomBar();       % row 5, cols [1 2] -- regions + log
+            obj.buildTopBar();           % row 1, cols [1 3]
+            obj.buildBlocksLeftCol();    % row 2 col 1 (B1 + B2)
+            obj.buildPlots();            % row 2 cols [2 3]
+            obj.buildViewportRowFull();  % row 3, cols [1 3]
+            obj.buildPerPartPanel();     % row 4, cols [1 3]
+            obj.buildRegionsPanelFull(); % row 5, cols [1 3]   B4
+            obj.buildLogPanelFull();     % row 6, cols [1 3]
         end
 
         function buildTopBar(obj)
             tb = uigridlayout(obj.OuterGrid, [1, 5]);
-            tb.Layout.Row = 1; tb.Layout.Column = [1 2];
+            tb.Layout.Row = 1; tb.Layout.Column = [1 3];
             tb.RowHeight = {30};
             tb.ColumnWidth = {80, '1x', 60, 130, 90};
             tb.Padding = [0 0 0 0];
@@ -801,12 +804,11 @@ classdef PreprocessTabController < handle
         end
 
         function buildBlocksLeftCol(obj)
-            % R16: only Block 1 (loading) + Block 2 (outlier) stack in the
-            % left column now. Block 3 was promoted to a full-width row
-            % under the plots so the 12-column per-part table has room.
+            % R17: B1 + B2 stack in col 1 (25% of the window). B2 a bit
+            % taller (140 vs B1 130) per user request.
             obj.LeftPanel = uigridlayout(obj.OuterGrid, [2, 1]);
             obj.LeftPanel.Layout.Row = 2; obj.LeftPanel.Layout.Column = 1;
-            obj.LeftPanel.RowHeight = {130, 110};
+            obj.LeftPanel.RowHeight = {130, 140};
             obj.LeftPanel.RowSpacing = 4;
             obj.LeftPanel.Padding = [0 0 0 0];
 
@@ -815,12 +817,13 @@ classdef PreprocessTabController < handle
         end
 
         function buildPlots(obj)
-            % Round-5: row 2 col 2. X(t) + Y(t) stacked, histogram on the
-            % right (twice as wide as before — 440 vs 220).
+            % R17: row 2 spans cols [2 3] (75% of window). Internal split
+            % 2x : 1x so X/Y plots take 50% of total and the histogram
+            % takes 25%, matching the outer 25/50/25 column rhythm.
             plotsGrid = uigridlayout(obj.OuterGrid, [2, 2]);
-            plotsGrid.Layout.Row = 2; plotsGrid.Layout.Column = 2;
+            plotsGrid.Layout.Row = 2; plotsGrid.Layout.Column = [2 3];
             plotsGrid.RowHeight = {'1x', '1x'};
-            plotsGrid.ColumnWidth = {'1x', 440};
+            plotsGrid.ColumnWidth = {'2x', '1x'};
             plotsGrid.RowSpacing = 4;
             plotsGrid.ColumnSpacing = 6;
             plotsGrid.Padding = [0 0 0 0];
@@ -839,31 +842,32 @@ classdef PreprocessTabController < handle
             obj.AxLk.Box = 'on';
         end
 
-        function buildBottomBar(obj)
-            % R16 row 5: regions + log only. ViewportRow moved to row 3
-            % (immediately under plots); Block 3 owns row 4.
-            bb = uigridlayout(obj.OuterGrid, [2, 1]);
-            bb.Layout.Row = 5; bb.Layout.Column = [1 2];
-            bb.RowHeight = {100, '1x'};
-            bb.RowSpacing = 4;
-            bb.Padding = [0 0 0 0];
-
-            obj.buildRegionsPanelInline(bb); % row 1
-            obj.buildLogInline(bb);          % row 2
-
-            obj.RightGrid = bb;   % alias for backward compat
-        end
-
         function buildViewportRowFull(obj)
-            % R16: viewport bar stretches across both columns just below
+            % R17: viewport bar stretches across all 3 columns just below
             % the plots. The legacy buildViewportRow keeps the column
             % wiring; this wrapper just hands it a parent that sits in
-            % OuterGrid row 3 cols [1 2].
+            % OuterGrid row 3 cols [1 3].
             wrap = uigridlayout(obj.OuterGrid, [1, 1]);
-            wrap.Layout.Row = 3; wrap.Layout.Column = [1 2];
+            wrap.Layout.Row = 3; wrap.Layout.Column = [1 3];
             wrap.RowHeight = {32};
             wrap.Padding = [0 0 0 0];
             obj.buildViewportRow(wrap);
+        end
+
+        function buildRegionsPanelFull(obj)
+            % R17: B4 manual exclusion regions -- promoted to its own
+            % full-width OuterGrid row, sitting right under B3 (per-part).
+            obj.buildRegionsPanelInline(obj.OuterGrid, 5, [1 3], ...
+                '4. Manual exclusion regions');
+        end
+
+        function buildLogPanelFull(obj)
+            % R17: log textarea takes the leftover bottom row across the
+            % full window width.
+            obj.LogTextArea = uitextarea(obj.OuterGrid, ...
+                'Editable', 'off', 'Value', {''});
+            obj.LogTextArea.Layout.Row = 6;
+            obj.LogTextArea.Layout.Column = [1 3];
         end
 
         function buildLoadingPanel(obj)
@@ -926,11 +930,11 @@ classdef PreprocessTabController < handle
         end
 
         function buildPerPartPanel(obj)
-            % R16: promoted from LeftPanel row 3 to OuterGrid row 4 full
-            % width so the 12-column table fits without horizontal scroll.
+            % R17: full-width across all 3 outer columns so the 12-column
+            % table can stretch with the window.
             obj.PerPartPanel = uipanel(obj.OuterGrid, 'Title', '3. Per-part settings');
             obj.PerPartPanel.Layout.Row = 4;
-            obj.PerPartPanel.Layout.Column = [1 2];
+            obj.PerPartPanel.Layout.Column = [1 3];
             g = uigridlayout(obj.PerPartPanel, [4, 1]);
             g.RowHeight = {24, '1x', 32, 32};
             g.RowSpacing = 4;
@@ -1032,7 +1036,10 @@ classdef PreprocessTabController < handle
             % row 1 next to velocity-jump.
             g = uigridlayout(obj.OutlierPanel, [3, 5]);
             g.RowHeight = {26, 26, 26};
-            g.ColumnWidth = {110, 60, 60, '1x', 50};
+            % R17: scale columns with the panel. Col 1 keeps a fixed 110 px
+            % so checkboxes stay aligned across rows; labels fit content;
+            % numeric fields expand 1x each so they scale on window resize.
+            g.ColumnWidth = {110, 'fit', '1x', '1x', 'fit'};
             g.RowSpacing = 4;
             g.ColumnSpacing = 4;
             g.Padding = [4 4 4 4];
@@ -1182,9 +1189,16 @@ classdef PreprocessTabController < handle
             obj.FrameLabel.Layout.Column = 15;
         end
 
-        function buildRegionsPanelInline(obj, parent)
-            obj.RegionsPanel = uipanel(parent, 'Title', 'Manual exclusion regions');
-            obj.RegionsPanel.Layout.Row = 3;
+        function buildRegionsPanelInline(obj, parent, row, colSpan, title)
+            % R17: parent / row / colSpan / title parameterised so the
+            % panel can sit directly in OuterGrid without an outer
+            % wrapper. Defaults preserved for legacy callers.
+            if nargin < 3 || isempty(row); row = 3; end
+            if nargin < 4 || isempty(colSpan); colSpan = []; end
+            if nargin < 5 || isempty(title); title = 'Manual exclusion regions'; end
+            obj.RegionsPanel = uipanel(parent, 'Title', title);
+            obj.RegionsPanel.Layout.Row = row;
+            if ~isempty(colSpan); obj.RegionsPanel.Layout.Column = colSpan; end
             rg = uigridlayout(obj.RegionsPanel, [3, 7]);
             rg.RowHeight = {28, 28, '1x'};
             rg.ColumnWidth = {110, 130, 100, 80, 70, 70, '1x'};
@@ -1231,12 +1245,6 @@ classdef PreprocessTabController < handle
             obj.RegionsListBox = uilistbox(rg, 'Items', {});
             obj.RegionsListBox.Layout.Row = 3;
             obj.RegionsListBox.Layout.Column = [1 7];
-        end
-
-        function buildLogInline(obj, parent)
-            obj.LogTextArea = uitextarea(parent, 'Editable', 'off', ...
-                'Value', {''});
-            obj.LogTextArea.Layout.Row = 4;
         end
 
         function buildRight_DEPRECATED(obj)   %#ok<DEFNU>
