@@ -379,10 +379,17 @@ function result = analyzeSession(config)
     % --- 11b. Barnes paradigm metrics (if applicable) ----------------------
     % Computes nose / body hole-visit counts, first-checked-hole angular
     % error, mean angular error of checked holes, and target visit order.
-    % Triggered by Options.ExperimentType == 'Barnes'; otherwise skipped.
+    % Triggered when:
+    %   (a) Options.ExperimentType == 'Barnes', AND
+    %   (b) the loaded acts library actually contains at least one
+    %       nose_at_object* act -- otherwise every Barnes metric would
+    %       trivially be zero and just spam the log. Make-video and
+    %       similar callers that pass a 1-act temp library hit this
+    %       guard and skip cleanly.
     if isfield(Options, 'ExperimentType') ...
             && ischar(Options.ExperimentType) ...
-            && strcmpi(Options.ExperimentType, 'Barnes')
+            && strcmpi(Options.ExperimentType, 'Barnes') ...
+            && hasBarnesNoseActs(Acts)
         try
             result.BarnesMetrics = sphynx.pipeline.barnesSessionMetrics(result);
             log('info', 'Barnes metrics computed (%d nose visits, target visit order = %s)', ...
@@ -488,6 +495,21 @@ function v = getOpt(Options, name, default)
         v = Options.(name);
     else
         v = default;
+    end
+end
+
+function tf = hasBarnesNoseActs(Acts)
+    % True when the analyzeSession Acts array carries any
+    % nose_at_object<N> entry -- the minimum signal Barnes session
+    % metrics need to be meaningful. Built-in speed/posture acts and
+    % standalone "rest" Make-video runs don't trip this guard.
+    tf = false;
+    if isempty(Acts); return; end
+    for k = 1:numel(Acts)
+        nm = lower(char(Acts(k).ActName));
+        if startsWith(nm, 'nose_at_object')
+            tf = true; return;
+        end
     end
 end
 
