@@ -715,7 +715,9 @@ classdef AnalyzeSessionTabController < handle
             % heatmap | etogram | speed histogram + speed trace.
             right = uigridlayout(parent, [5, 2]);
             right.Layout.Column = 2;
-            right.RowHeight = {24, 160, '1x', 180, 180};
+            % Row 1 fits two stacked lines: generic session-summary on
+            % top, Barnes-paradigm summary right beneath when applicable.
+            right.RowHeight = {44, 160, '1x', 180, 180};
             right.ColumnWidth = {'1x', '1x'};
             right.RowSpacing = 4;
             right.ColumnSpacing = 6;
@@ -838,9 +840,26 @@ classdef AnalyzeSessionTabController < handle
                     && isfield(r.Options, 'FrameRate')
                 sessSec = r.n_frames / r.Options.FrameRate;
             end
-            obj.SessionStatsLabel.Text = sprintf( ...
+            lines = { sprintf( ...
                 'Session (bodycenter): avg speed %.2f cm/s   |   total distance %.1f cm   |   duration %.1f s   |   %d frames', ...
-                avgSpeed, totalDist, sessSec, r.n_frames);
+                avgSpeed, totalDist, sessSec, r.n_frames) };
+            % Barnes-paradigm row 2: only shown when analyzeSession
+            % attached BarnesMetrics to the result (it does so when
+            % Options.ExperimentType == 'Barnes').
+            if isfield(r, 'BarnesMetrics') && isstruct(r.BarnesMetrics)
+                bm = r.BarnesMetrics;
+                lines{end + 1} = sprintf( ...
+                    ['Barnes: target visit #%s   |   %d holes checked   ' ...
+                     '|   first hole error %s deg   |   mean error %s deg   ' ...
+                     '|   nose-pokes %d   |   body visits %d'], ...
+                    formatNum(getOr(bm, 'TargetHoleVisitOrder', NaN)), ...
+                    getOr(bm, 'NumCheckedHoles', 0), ...
+                    formatNum(getOr(bm, 'FirstCheckedHoleErrorDeg', NaN)), ...
+                    formatNum(getOr(bm, 'MeanCheckedHoleErrorDeg', NaN)), ...
+                    getOr(bm, 'TotalNoseHoleVisits', 0), ...
+                    getOr(bm, 'TotalBodyHoleVisits', 0));
+            end
+            obj.SessionStatsLabel.Text = lines;
             pxlPerCm = 1;
             if isfield(r, 'Options') && isfield(r.Options, 'pxl2sm')
                 pxlPerCm = r.Options.pxl2sm;
@@ -1050,6 +1069,17 @@ end
 
 function s = formatSec(x)
     if isnan(x); s = '—'; else; s = sprintf('%.2f', x); end
+end
+
+function s = formatNum(x)
+    % Used for Barnes-metric numbers in the SessionStatsLabel header.
+    % %g trims trailing zeros so integer counts show as "4" and angles
+    % as "18.5" without forcing the trailing ".0".
+    if ~isnumeric(x) || isempty(x) || isnan(x)
+        s = '-';
+    else
+        s = sprintf('%g', x);
+    end
 end
 
 function updateDlg(dlg, frac, msg)
