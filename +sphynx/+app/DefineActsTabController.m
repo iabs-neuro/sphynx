@@ -1470,52 +1470,73 @@ function closeWriter(w)
 end
 
 function img = stampNumberCorner(img, txt, corner)
-    % Stamp a short text label in one of the image corners.
-    % Uses a persistent cache so identical strings aren't re-rendered.
+    % Stamp a short text label inside a flush-to-the-corner SQUARE
+    % overlay that is 10% of min(H, W) on each side (pixels). A
+    % semi-transparent black plate gives the white text contrast
+    % against the underlying video.
     % Supports corners: 'top-right' (default), 'bottom-right',
     % 'top-left', 'bottom-left'.
     persistent cache
     if isempty(cache); cache = containers.Map(); end
     if nargin < 3 || isempty(corner); corner = 'top-right'; end
-    key = sprintf('%s|24', txt);
+
+    [H, W, C] = size(img);
+    if C == 1; img = repmat(img, [1 1 3]); end
+    side = max(16, round(0.10 * min(H, W)));   % square side, >=16 px
+    side = min(side, min(H, W));               % can't exceed frame
+
+    % Corner placement (no margin -- flush with the edge).
+    switch corner
+        case 'bottom-right'
+            x0 = W - side + 1; y0 = H - side + 1;
+        case 'top-left'
+            x0 = 1;           y0 = 1;
+        case 'bottom-left'
+            x0 = 1;           y0 = H - side + 1;
+        otherwise % top-right
+            x0 = W - side + 1; y0 = 1;
+    end
+    x1 = x0 + side - 1; y1 = y0 + side - 1;
+
+    % Darken the square area so the text reads (50/50 blend with black).
+    region = img(y0:y1, x0:x1, :);
+    region = uint8(round(single(region) * 0.5));
+    img(y0:y1, x0:x1, :) = region;
+
+    % Render text bitmap sized so it fills most of the square. Cache
+    % per (txt, side) so each unique counter value is drawn once per
+    % video.
+    fontSize = max(8, round(0.55 * side));
+    key = sprintf('%s|%d', txt, fontSize);
     if isKey(cache, key)
         bm = cache(key);
     else
-        bm = renderTextBitmap(txt, 24);
+        bm = renderTextBitmap(txt, fontSize);
         cache(key) = bm;
     end
     if isempty(bm); return; end
-    [H, W, ~] = size(img);
+
     [bh, bw, ~] = size(bm);
-    margin = 10;
-    switch corner
-        case 'bottom-right'
-            x0 = max(1, W - bw - margin);
-            y0 = max(1, H - bh - margin);
-        case 'top-left'
-            x0 = margin; y0 = margin;
-        case 'bottom-left'
-            x0 = margin; y0 = max(1, H - bh - margin);
-        otherwise % top-right
-            x0 = max(1, W - bw - margin);
-            y0 = margin;
-    end
-    x1 = min(W, x0 + bw - 1);
-    y1 = min(H, y0 + bh - 1);
-    sub = bm(1:(y1-y0+1), 1:(x1-x0+1), :);
+    % Centre the bitmap inside the square; clip if it overflows.
+    bh = min(bh, side); bw = min(bw, side);
+    bm = bm(1:bh, 1:bw, :);
+    tx0 = x0 + floor((side - bw) / 2);
+    ty0 = y0 + floor((side - bh) / 2);
+    tx1 = tx0 + bw - 1; ty1 = ty0 + bh - 1;
+
     % Stamp pixels brighter than threshold (text is rendered white on
     % black, so the threshold isolates the glyph foreground).
-    gray = sum(single(sub), 3);
+    gray = sum(single(bm), 3);
     mask = gray > 90;
     if ~any(mask(:)); return; end
-    region = img(y0:y1, x0:x1, :);
+    region = img(ty0:ty1, tx0:tx1, :);
     for c = 1:3
         rc = region(:, :, c);
-        bc = sub(:, :, c);
+        bc = bm(:, :, c);
         rc(mask) = bc(mask);
         region(:, :, c) = rc;
     end
-    img(y0:y1, x0:x1, :) = region;
+    img(ty0:ty1, tx0:tx1, :) = region;
 end
 
 function bm = renderTextBitmap(txt, fontSize)
