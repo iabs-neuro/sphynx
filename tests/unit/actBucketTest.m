@@ -83,6 +83,18 @@ function testCenterPointZonesSpatial(testCase)
     end
 end
 
+function testAtPrefixActsSpatial(testCase)
+    % Readable Barnes default-act naming: at_target, at_platform,
+    % at_object3, at_mistake, at_any_hole, at_center, at_wall, at_outside.
+    names = {'at_target', 'at_platform', 'at_center', 'at_wall', ...
+             'at_outside', 'at_any_hole', 'at_mistake', ...
+             'at_object1', 'at_object19', 'at_objectall'};
+    for k = 1:numel(names)
+        verifyEqual(testCase, sphynx.util.actBucket(names{k}), 'spatial', ...
+            sprintf('expected "%s" -> spatial', names{k}));
+    end
+end
+
 function testBarnesNamedObjectZonesSpatial(testCase)
     % Barnes preset uses object types like 'target' / 'start' that emit
     % zones target_real, target_realout, target_out, target_center,
