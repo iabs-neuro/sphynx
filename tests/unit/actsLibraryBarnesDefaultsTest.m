@@ -87,9 +87,33 @@ function testNoseActsGateOnRealoutZone(testCase)
     acts = sphynx.acts.actsLibraryBarnesDefaults();
     verifyEqual(testCase, getAct(acts, 'nose_at_target').zones,    {'target_realout'});
     verifyEqual(testCase, getAct(acts, 'nose_at_platform').zones,  {'platform_realout'});
-    verifyEqual(testCase, getAct(acts, 'nose_at_any_hole').zones,  {'objectall_realout'});
     verifyEqual(testCase, getAct(acts, 'nose_at_object1').zones,   {'object1_realout'});
     verifyEqual(testCase, getAct(acts, 'nose_at_object19').zones,  {'object19_realout'});
+end
+
+function testNoseAtAnyHoleExcludesPlatform(testCase)
+    % "Any hole" = the escape target + every wrong hole. Platform is
+    % the start, not a hole -- it must NOT show up in the zone list.
+    % We also avoid the preset's objectall_realout aggregate because
+    % that zone is built from ALL objects including the platform.
+    acts = sphynx.acts.actsLibraryBarnesDefaults();
+    zns = getAct(acts, 'nose_at_any_hole').zones;
+    verifyEqual(testCase, numel(zns), 20);   % 1 target + 19 holes
+    verifyTrue(testCase, any(strcmp(zns, 'target_realout')));
+    verifyFalse(testCase, any(strcmp(zns, 'platform_realout')));
+    verifyFalse(testCase, any(strcmp(zns, 'platform_real')));
+    verifyFalse(testCase, any(strcmp(zns, 'objectall_realout')));
+    for n = 1:19
+        nm = sprintf('object%d_realout', n);
+        verifyTrue(testCase, any(strcmp(zns, nm)), ...
+            sprintf('any_hole zone list missing %s', nm));
+    end
+end
+
+function testNoseAtAnyHoleScalesWithNumObjects(testCase)
+    acts = sphynx.acts.actsLibraryBarnesDefaults('NumObjects', 5);
+    zns = getAct(acts, 'nose_at_any_hole').zones;
+    verifyEqual(testCase, numel(zns), 6);   % 1 target + 5 holes
 end
 
 function testBodyActsGateOnRealZone(testCase)

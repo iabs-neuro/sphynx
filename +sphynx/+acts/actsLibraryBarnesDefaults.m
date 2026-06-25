@@ -21,7 +21,9 @@ function acts = actsLibraryBarnesDefaults(varargin)
 %       22-40 body_at_object1..19       (bodycenter / objectN_real)
 %       41  nose_at_platform            (nose / platform_realout)
 %       42  body_at_platform            (bodycenter / platform_real)
-%       43  nose_at_any_hole            (nose / objectall_realout)
+%       43  nose_at_any_hole            (nose / target + object1..19,
+%                                        EXCLUDING platform -- platform
+%                                        is the start, not a hole)
 %
 %   No center / wall / outside / mistake compound acts -- Barnes
 %   metrics derive everything from per-hole visits + the target/
@@ -76,7 +78,17 @@ function acts = actsLibraryBarnesDefaults(varargin)
         'ZoneOp', 'OR', 'BodyPart', 'bodycenter');
 
     % --- nose at any hole (aggregate) -------------------------------------
+    % Explicit OR over target + per-hole zones rather than the preset's
+    % objectall_realout. objectall_* is built from every object in
+    % ArenaAndObjects, which on Barnes presets includes the start
+    % platform too. The platform is not an escape hole and must not
+    % count toward "checked any hole" -- so we list the target + each
+    % objectN zone individually.
+    anyHoleZones = {'target_realout'};
+    for n = 1:nObj
+        anyHoleZones{end+1} = sprintf('object%d_realout', n); %#ok<AGROW>
+    end
     acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'nose_at_any_hole', 'Zones', {'objectall_realout'}, ...
+        'Name', 'nose_at_any_hole', 'Zones', anyHoleZones, ...
         'ZoneOp', 'OR', 'BodyPart', 'nose');
 end
