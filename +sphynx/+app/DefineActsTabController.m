@@ -991,6 +991,18 @@ classdef DefineActsTabController < handle
                 catch
                 end
 
+                % Log which multi-animal individual the overlay points
+                % were sampled from -- when the rendered points don't
+                % look like they're following the animal in the video,
+                % this is the first place to look.
+                if isfield(result, 'SelectedIndividual') ...
+                        && ~isempty(result.SelectedIndividual)
+                    obj.applog('info', ...
+                        'Make-video: overlay points sampled from individual "%s" (of %d)', ...
+                        result.SelectedIndividual, ...
+                        max(1, numel(result.AllIndividuals)));
+                end
+
                 % --- 3. Render BA-style into a 4D uint8 stack ---------
                 dlg.Indeterminate = 'off';
                 dlg.Message = 'Rendering frames...';

@@ -56,9 +56,24 @@ function result = analyzeSession(config)
     if isfield(config.range, 'autoStart')
         autoStart = config.range.autoStart;
     end
+    % Resolve which DLC individual to feed to readDLC. Explicit
+    % cfg.preprocess.individual wins; otherwise we peek into
+    % <expRoot>/<expName>_PreprocessSettings.mat for a saved choice
+    % (Settings.metadata.individual). Empty -> readDLC auto-picks.
+    individual = '';
+    if isfield(config.preprocess, 'individual')
+        individual = config.preprocess.individual;
+    end
+    if isempty(individual)
+        individual = peekSavedIndividual(config, log);
+    end
+    if ~isempty(individual)
+        log('info', 'DLC individual override: "%s"', individual);
+    end
     if autoStart && config.range.startFrame == 1
         dlcFull = sphynx.io.readDLC(config.paths.dlc, ...
-            'EndFrame', config.range.endFrame);
+            'EndFrame', config.range.endFrame, ...
+            'Individual', individual);
         [detected, detInfo] = sphynx.preprocess.detectSessionStartFrame(dlcFull);
         if isempty(detInfo.message) && detected > 1
             log('info', 'Auto-start: detected session start at frame %d (firstPop=%d, populatedRatio=%.2f)', ...
@@ -71,7 +86,28 @@ function result = analyzeSession(config)
     end
     dlc = sphynx.io.readDLC(config.paths.dlc, ...
         'StartFrame', config.range.startFrame, ...
-        'EndFrame', config.range.endFrame);
+        'EndFrame', config.range.endFrame, ...
+        'Individual', individual);
+
+    % Frame-count sanity check vs the source video. A DLC csv that
+    % covers fewer frames than the video means downstream Make-video /
+    % renderActStitched will see a sync drift: the DLC frame index N
+    % does not necessarily land on video frame N when the export was
+    % truncated or offset. Warn so the user can investigate.
+    if ~isempty(config.paths.video) && isfile(config.paths.video)
+        try
+            vr = VideoReader(config.paths.video);
+            if vr.NumFrames > 0 && dlc.nFrames < vr.NumFrames
+                log('warn', ['DLC covers %d frames but video has %d ' ...
+                    '(diff %d). Make-video overlays assume DLC frame N == ' ...
+                    'video frame N; if your DLC export was truncated or ' ...
+                    'offset, points will not align with the animal.'], ...
+                    dlc.nFrames, vr.NumFrames, vr.NumFrames - dlc.nFrames);
+            end
+        catch
+            % video may be missing or unreadable in headless probes -- not fatal
+        end
+    end
 
     nParts = numel(dlc.bodyPartsNames);
     nFrames = dlc.nFrames;
@@ -393,6 +429,20 @@ function result = analyzeSession(config)
     result.ArenaAndObjects = ArenaAndObjects;
     result.n_frames = nFrames;
     result.config = config;
+    % Multi-animal trace: which individual the DLC reader actually used
+    % and the full list it saw. Both fields stay empty for a single-
+    % animal csv. Make-video / renderActStitched can show / log these
+    % so the user can tell at a glance which animal is being drawn.
+    if isfield(dlc, 'selectedIndividual')
+        result.SelectedIndividual = dlc.selectedIndividual;
+    else
+        result.SelectedIndividual = '';
+    end
+    if isfield(dlc, 'individuals')
+        result.AllIndividuals = dlc.individuals;
+    else
+        result.AllIndividuals = {};
+    end
 
     % --- 11b. Barnes paradigm metrics (if applicable) ----------------------
     % Computes nose / body hole-visit counts, first-checked-hole angular
@@ -453,6 +503,44 @@ end
 function restoreEnv(prevHeadless, prevLog)
     setenv('SPHYNX_HEADLESS', prevHeadless);
     setenv('SPHYNX_LOG_LEVEL', prevLog);
+end
+
+function individual = peekSavedIndividual(config, log) %#ok<INUSD>
+    % Best-effort: look up Settings.metadata.individual without
+    % re-reading the whole settings file twice. We rely on the same
+    % path-resolution logic used for the body-part settings.
+    individual = '';
+    explicit = '';
+    if isfield(config.paths, 'preprocessSettings')
+        explicit = config.paths.preprocessSettings;
+    end
+    settingsPath = '';
+    if ~isempty(explicit) && isfile(explicit)
+        settingsPath = explicit;
+    elseif ~isempty(config.paths.dlc)
+        d = fileparts(config.paths.dlc);
+        for hop = 1:4
+            if isempty(d) || ~isfolder(d); break; end
+            hits = dir(fullfile(d, '*_PreprocessSettings.mat'));
+            if ~isempty(hits)
+                settingsPath = fullfile(hits(1).folder, hits(1).name);
+                break;
+            end
+            parent = fileparts(d);
+            if strcmp(parent, d); break; end
+            d = parent;
+        end
+    end
+    if isempty(settingsPath); return; end
+    try
+        S = sphynx.io.readTracksSettings(settingsPath);
+        if isfield(S, 'metadata') && isfield(S.metadata, 'individual') ...
+                && ischar(S.metadata.individual) && ~isempty(S.metadata.individual)
+            individual = S.metadata.individual;
+        end
+    catch
+        % silent; loadPreprocessSettings will surface the real error
+    end
 end
 
 function [perPart, outlierStruct] = loadPreprocessSettings(config, log)

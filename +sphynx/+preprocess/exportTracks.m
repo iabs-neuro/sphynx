@@ -37,7 +37,13 @@ function paths = exportTracks(state, opts)
     if isempty(expName); expName = dlcBase; end
 
     paths.settings = fullfile(settingsDir, [expName '_PreprocessSettings.mat']);
-    sphynx.io.writeTracksSettings(paths.settings, state.perPart, state.outlier, expName);
+    individual = '';
+    if isfield(state, 'dlc') && isstruct(state.dlc) ...
+            && isfield(state.dlc, 'selectedIndividual')
+        individual = state.dlc.selectedIndividual;
+    end
+    sphynx.io.writeTracksSettings(paths.settings, state.perPart, ...
+        state.outlier, expName, individual);
 
     % Per-session: BodyPartsTraces struct array
     BodyPartsTraces = buildTraces(state);

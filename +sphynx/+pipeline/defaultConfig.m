@@ -39,6 +39,12 @@ function cfg = defaultConfig()
     % start indicator and never invokes the detector implicitly.
     cfg.range.autoStart  = false;
 
+    % Multi-animal DLC: which individual to analyse. '' = auto-pick the
+    % one with the most populated x/y entries (default in readDLC).
+    % Settings.metadata.individual (when present in the experiment's
+    % PreprocessSettings.mat) overrides this; explicit cfg value
+    % overrides Settings.
+    cfg.preprocess.individual = '';
     cfg.preprocess.likelihoodThreshold = 0.95;
     cfg.preprocess.smoothWindowSmallSec = 0.10;
     cfg.preprocess.smoothWindowBigSec   = 0.25;
