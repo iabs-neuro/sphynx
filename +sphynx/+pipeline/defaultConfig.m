@@ -18,10 +18,18 @@ function cfg = defaultConfig()
 %     viz             - {enabled, headless, makeVideo}
 %     verbose         - 'debug' | 'info' | 'warn' | 'error'
 
-    cfg.paths.video   = '';
-    cfg.paths.dlc     = '';
-    cfg.paths.preset  = '';
-    cfg.paths.outDir  = '';
+    cfg.paths.video             = '';
+    cfg.paths.dlc               = '';
+    cfg.paths.preset            = '';
+    cfg.paths.outDir            = '';
+    % Per-experiment Preprocess Settings .mat (sphynx.io.writeTracksSettings
+    % output: bodyparts + outlier + metadata). When non-empty,
+    % analyzeSession applies per-part likelihoodThreshold and
+    % notFoundThresholdPct to cleanBodyPart instead of the scalar
+    % cfg.preprocess.likelihoodThreshold default. When empty, the
+    % pipeline auto-discovers <expRoot>/<expName>_PreprocessSettings.mat
+    % by walking up the DLC's parent directories.
+    cfg.paths.preprocessSettings = '';
 
     cfg.range.startFrame = 1;
     cfg.range.endFrame   = 0;          % 0 = read all

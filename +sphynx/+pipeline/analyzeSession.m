@@ -89,6 +89,15 @@ function result = analyzeSession(config)
     % consume its BodyPartsTraces directly and skip clean/interp/smooth.
     [BodyPartsTraces, keepIdx] = tryLoadPrepared(config.paths.dlc, dlc, log);
     if isempty(BodyPartsTraces)
+        % Look for a per-experiment Preprocess Settings .mat. Explicit
+        % cfg.paths.preprocessSettings wins; otherwise auto-discover
+        % by walking up from the DLC dir to 4 levels and grabbing the
+        % first *_PreprocessSettings.mat found. This is the file saved
+        % by the Preprocess Tracking tab's "Save preprocessed" button.
+        perPartSettings = loadPreprocessSettings(config, log);
+        defaultThr = config.preprocess.likelihoodThreshold;
+        defaultMissPct = 90;
+
         BodyPartsTraces = struct('BodyPartName', {}, 'TraceOriginal', {}, ...
             'TraceInterpolated', {}, 'TraceSmoothed', {}, 'Status', {}, ...
             'PercentNaN', {}, 'PercentLowLikelihood', {}, ...
@@ -100,10 +109,13 @@ function result = analyzeSession(config)
             rawX = dlc.X(part, :)';
             rawY = dlc.Y(part, :)';
             lk = dlc.likelihood(part, :)';
+            [thr, missPct] = resolvePartThresholds(perPartSettings, ...
+                dlc.bodyPartsNames{part}, defaultThr, defaultMissPct);
             cleaned = sphynx.preprocess.cleanBodyPart(rawX, rawY, lk, ...
                 'FrameWidth', Options.Width, ...
                 'FrameHeight', Options.Height, ...
-                'LikelihoodThreshold', config.preprocess.likelihoodThreshold);
+                'LikelihoodThreshold', thr, ...
+                'MissingThresholdPct', missPct);
 
             BodyPartsTraces(part).BodyPartName = dlc.bodyPartsNames{part};
             BodyPartsTraces(part).TraceOriginal.X = rawX;
@@ -435,6 +447,71 @@ end
 function restoreEnv(prevHeadless, prevLog)
     setenv('SPHYNX_HEADLESS', prevHeadless);
     setenv('SPHYNX_LOG_LEVEL', prevLog);
+end
+
+function perPart = loadPreprocessSettings(config, log)
+    % Returns a struct array of per-part settings (or [] when nothing
+    % found). Explicit cfg.paths.preprocessSettings wins; otherwise we
+    % walk up from the DLC dir for up to 4 levels looking for any
+    % *_PreprocessSettings.mat.
+    perPart = [];
+
+    explicit = '';
+    if isfield(config.paths, 'preprocessSettings')
+        explicit = config.paths.preprocessSettings;
+    end
+
+    if ~isempty(explicit) && isfile(explicit)
+        try
+            S = sphynx.io.readTracksSettings(explicit);
+            perPart = S.bodyparts;
+            log('info', 'Loaded preprocess settings: %s (%d parts)', ...
+                explicit, numel(perPart));
+            return;
+        catch ME
+            log('warn', 'preprocessSettings read failed (%s): %s', ...
+                explicit, ME.message);
+        end
+    end
+
+    if isempty(config.paths.dlc); return; end
+    d = fileparts(config.paths.dlc);
+    for hop = 1:4
+        if isempty(d) || ~isfolder(d); break; end
+        hits = dir(fullfile(d, '*_PreprocessSettings.mat'));
+        if ~isempty(hits)
+            cand = fullfile(hits(1).folder, hits(1).name);
+            try
+                S = sphynx.io.readTracksSettings(cand);
+                perPart = S.bodyparts;
+                log('info', 'Auto-loaded preprocess settings: %s (%d parts)', ...
+                    cand, numel(perPart));
+                return;
+            catch ME
+                log('warn', 'Skipping %s: %s', cand, ME.message);
+            end
+        end
+        parent = fileparts(d);
+        if strcmp(parent, d); break; end
+        d = parent;
+    end
+end
+
+function [thr, missPct] = resolvePartThresholds(perPart, partName, defaultThr, defaultMissPct)
+    thr = defaultThr;
+    missPct = defaultMissPct;
+    if isempty(perPart); return; end
+    idx = find(strcmpi({perPart.name}, partName), 1);
+    if isempty(idx); return; end
+    s = perPart(idx);
+    if isfield(s, 'likelihoodThreshold') && ~isempty(s.likelihoodThreshold) ...
+            && isnumeric(s.likelihoodThreshold)
+        thr = double(s.likelihoodThreshold);
+    end
+    if isfield(s, 'notFoundThresholdPct') && ~isempty(s.notFoundThresholdPct) ...
+            && isnumeric(s.notFoundThresholdPct)
+        missPct = double(s.notFoundThresholdPct);
+    end
 end
 
 function [arr, keepIdx] = tryLoadPrepared(dlcPath, dlc, log)
