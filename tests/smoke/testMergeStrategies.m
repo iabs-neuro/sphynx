@@ -18,9 +18,11 @@ fprintf('PASS: controller class parses, methods=%d\n', numel(mt.MethodList));
 
 % Verify the new merge methods exist
 methodNames = {mt.MethodList.Name};
-for m = {'mergeIntoLibrary', 'clearAllActs', 'deleteSelectedAct', 'loadLibrary'}
+for m = {'mergeIntoLibrary', 'clearAllActs', 'deleteSelectedAct', ...
+         'loadLibrary', 'loadDefaults', 'loadBarnesDefaults', ...
+         'appendDefaultsWithChoice'}
     assert(any(strcmp(methodNames, m{1})), 'missing method: %s', m{1});
 end
-fprintf('PASS: merge/clear/delete methods all present\n');
+fprintf('PASS: merge/clear/delete/load-defaults methods all present\n');
 
 fprintf('ALL_TESTS_PASS\n');
