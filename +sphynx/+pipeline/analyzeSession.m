@@ -492,8 +492,15 @@ function v = getOpt(Options, name, default)
 end
 
 function w = pickSmoothWindow(partName, smallWin, bigWin)
-    bigParts = {'mass centre', 'mass center', 'bodycenter', 'center', ...
-                'tailbase', 'tail base'};
+    % Big-body-mass parts get the larger smoothing window. List mirrors
+    % the synonyms recognised by sphynx.bodyparts.identifyParts so a DLC
+    % schema using underscored names (mouse_center, tail_base, etc.)
+    % gets the same smoothing as the bare-word legacy schema.
+    bigParts = {'mass centre', 'mass center', ...
+                'bodycenter', 'body center', 'body_center', ...
+                'center', 'mouse_center', 'mouse center', ...
+                'mid_back', 'mid back', ...
+                'tailbase', 'tail base', 'tail_base', 'tail1'};
     if any(strcmpi(bigParts, partName))
         w = bigWin;
     else
