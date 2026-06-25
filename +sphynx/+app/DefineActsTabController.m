@@ -159,12 +159,19 @@ classdef DefineActsTabController < handle
             obj.PresetPathField.Value = path;
             obj.PresetButton.Tooltip = sprintf('Loaded: %s', path);
             obj.LoadedPresetData = pd;
-            % Zones — prepend '<any zone>' sentinel meaning "no zone gate"
+            % Zones — prepend '<any zone>' sentinel meaning "no zone gate".
+            % Composites (walls_and_corners*) are dropped by the helper.
             if isfield(pd, 'Zones') && ~isempty(pd.Zones)
-                names = [{'<any zone>'}, {pd.Zones.name}];
-                obj.SimpleZoneListBox.Items = names;
+                keep = sphynx.util.filterZoneListForActs(pd.Zones);
+                nFiltered = numel(pd.Zones) - numel(keep);
+                obj.SimpleZoneListBox.Items = [{'<any zone>'}, keep];
                 obj.SimpleZoneListBox.Value = {'<any zone>'};
-                obj.applog('info', 'Loaded %d zones from preset', numel(pd.Zones));
+                if nFiltered > 0
+                    obj.applog('info', 'Loaded %d zones from preset (filtered %d composite)', ...
+                        numel(keep), nFiltered);
+                else
+                    obj.applog('info', 'Loaded %d zones from preset', numel(keep));
+                end
             else
                 obj.SimpleZoneListBox.Items = {'<any zone>'};
                 obj.SimpleZoneListBox.Value = {'<any zone>'};
