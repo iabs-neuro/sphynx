@@ -220,7 +220,11 @@ end
 % --- helpers ---------------------------------------------------------------
 
 function idx = findPart(parts, name)
-    idx = find(strcmpi(parts, name), 1);
+    % Alias-tolerant body-part lookup. An act written against the
+    % legacy 'bodycenter'/'tailbase'/'lefthindlimb' naming still
+    % resolves correctly on a DLC schema that uses superanimal long-
+    % form names (mouse_center / tail_base / left_hip / ...).
+    idx = sphynx.bodyparts.resolvePart(parts, name);
 end
 
 function idx = findZone(zones, name)

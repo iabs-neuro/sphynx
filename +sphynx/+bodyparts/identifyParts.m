@@ -49,8 +49,7 @@ function Point = identifyParts(bodyPartsNames)
         'Tailbase',          {'tailbase', 'tail base', 'tail_base', 'tail1'};
         'Center',            {'mass centre', 'mass center', ...
                               'bodycenter', 'body_center', 'body center', ...
-                              'center', 'mouse_center', 'mouse center', ...
-                              'mid_back', 'mid back'};
+                              'center', 'mouse_center', 'mouse center'};
     };
 
     inputLower = lower(string(bodyPartsNames(:)'));

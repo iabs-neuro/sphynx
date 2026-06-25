@@ -45,9 +45,29 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
 
     n = size(BodyPartsX, 2);
 
-    switch mode
+    % Graceful mode degradation: TailbasePaws needs Tailbase +
+    % LeftHindLimb + RightHindLimb. When any of the three is missing
+    % (DLC schema drops them via NotFound, lab uses a different
+    % naming convention, etc.), fall back to AllBodyParts which only
+    % needs Center -- and if Center is also missing, computeCenter
+    % already handed us a synthetic one upstream.
+    effectiveMode = mode;
+    if strcmp(mode, 'TailbasePaws')
+        if isempty(getOrEmpty(Point, 'Tailbase')) ...
+                || isempty(getOrEmpty(Point, 'LeftHindLimb')) ...
+                || isempty(getOrEmpty(Point, 'RightHindLimb'))
+            sphynx.util.log('warn', ['rear: mode TailbasePaws needs Tailbase + Left/RightHindLimb ' ...
+                'but at least one is unresolved -- falling back to AllBodyParts.']);
+            effectiveMode = 'AllBodyParts';
+        end
+    end
+
+    switch effectiveMode
         case 'AllBodyParts'
-            requirePart(Point, 'Center');
+            if isempty(getOrEmpty(Point, 'Center'))
+                sphynx.util.log('warn', 'rear: Point.Center unresolved -- skipping (empty mask).');
+                rearMask = false(n, 1); return;
+            end
             cx = BodyPartsX(Point.Center, :);
             cy = BodyPartsY(Point.Center, :);
             sumDist = zeros(1, n);
@@ -61,9 +81,6 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
             raw = smoothed' < p.Results.AllBodyPartsThresholdPxl;
 
         case 'TailbasePaws'
-            requirePart(Point, 'Tailbase');
-            requirePart(Point, 'LeftHindLimb');
-            requirePart(Point, 'RightHindLimb');
             tx = BodyPartsX(Point.Tailbase, :);
             ty = BodyPartsY(Point.Tailbase, :);
             sumDist = zeros(1, n);
@@ -94,11 +111,8 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
     rearMask = refined(:);
 end
 
-function requirePart(Point, name)
-    if isempty(Point.(name))
-        error('sphynx:rear:missingPart', ...
-            'Mode requires Point.%s but it is empty', name);
-    end
+function v = getOrEmpty(Point, name)
+    if isfield(Point, name); v = Point.(name); else; v = []; end
 end
 
 function v = orDefault(value, fallback)
