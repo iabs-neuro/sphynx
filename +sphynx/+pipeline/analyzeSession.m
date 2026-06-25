@@ -94,9 +94,7 @@ function result = analyzeSession(config)
         % by walking up from the DLC dir to 4 levels and grabbing the
         % first *_PreprocessSettings.mat found. This is the file saved
         % by the Preprocess Tracking tab's "Save preprocessed" button.
-        perPartSettings = loadPreprocessSettings(config, log);
-        defaultThr = config.preprocess.likelihoodThreshold;
-        defaultMissPct = 90;
+        [perPart, outlierSettings] = loadPreprocessSettings(config, log);
 
         BodyPartsTraces = struct('BodyPartName', {}, 'TraceOriginal', {}, ...
             'TraceInterpolated', {}, 'TraceSmoothed', {}, 'Status', {}, ...
@@ -105,47 +103,55 @@ function result = analyzeSession(config)
             'AverageDistance', {});
         keepIdx = false(1, nParts);
 
+        % Shared context for the per-part orchestrator.
+        ctxBase.frameWidth   = Options.Width;
+        ctxBase.frameHeight  = Options.Height;
+        ctxBase.frameRate    = frameRate;
+        ctxBase.pixelsPerCm  = pxlPerCm;
+        if ~isempty(outlierSettings); ctxBase.outlier = outlierSettings; end
+
         for part = 1:nParts
+            partName = dlc.bodyPartsNames{part};
             rawX = dlc.X(part, :)';
             rawY = dlc.Y(part, :)';
-            lk = dlc.likelihood(part, :)';
-            [thr, missPct] = resolvePartThresholds(perPartSettings, ...
-                dlc.bodyPartsNames{part}, defaultThr, defaultMissPct);
-            cleaned = sphynx.preprocess.cleanBodyPart(rawX, rawY, lk, ...
-                'FrameWidth', Options.Width, ...
-                'FrameHeight', Options.Height, ...
-                'LikelihoodThreshold', thr, ...
-                'MissingThresholdPct', missPct);
+            lk   = dlc.likelihood(part, :)';
+            partSettings = resolvePartSettings(perPart, partName, config);
 
-            BodyPartsTraces(part).BodyPartName = dlc.bodyPartsNames{part};
+            BodyPartsTraces(part).BodyPartName = partName;
             BodyPartsTraces(part).TraceOriginal.X = rawX;
             BodyPartsTraces(part).TraceOriginal.Y = rawY;
             BodyPartsTraces(part).TraceLikelihood = lk;
-            BodyPartsTraces(part).PercentNaN = cleaned.PercentNaN;
-            BodyPartsTraces(part).PercentLowLikelihood = cleaned.PercentLowLikelihood;
-            BodyPartsTraces(part).Status = cleaned.Status;
 
-            if strcmp(cleaned.Status, 'NotFound')
-                log('warn', 'BodyPart "%s" status NotFound, skipping', dlc.bodyPartsNames{part});
+            % Honor per-part "use" flag from the Settings table.
+            if isfield(partSettings, 'use') && ~isempty(partSettings.use) ...
+                    && ~partSettings.use
+                BodyPartsTraces(part).PercentNaN = NaN;
+                BodyPartsTraces(part).PercentLowLikelihood = NaN;
+                BodyPartsTraces(part).Status = 'NotFound';
+                log('warn', 'BodyPart "%s" use=false in Settings, skipping', partName);
+                continue;
+            end
+
+            ctx = ctxBase;
+            ctx.partName = partName;
+
+            res = sphynx.preprocess.applyPerPartSettings( ...
+                rawX, rawY, lk, partSettings, ctx);
+
+            BodyPartsTraces(part).PercentNaN = res.percentNaN;
+            BodyPartsTraces(part).PercentLowLikelihood = res.percentLowLikelihood;
+            BodyPartsTraces(part).Status = res.status;
+
+            if strcmp(res.status, 'NotFound')
+                log('warn', 'BodyPart "%s" status NotFound, skipping', partName);
                 continue;
             end
             keepIdx(part) = true;
 
-            % Interpolate gaps
-            intX = sphynx.preprocess.interpolateGaps(cleaned.X, 'Method', config.preprocess.interpolationMethod);
-            intY = sphynx.preprocess.interpolateGaps(cleaned.Y, 'Method', config.preprocess.interpolationMethod);
-            % Clamp to frame bounds (legacy behavior)
-            intX = clamp(intX, 1, Options.Width);
-            intY = clamp(intY, 1, Options.Height);
-            BodyPartsTraces(part).TraceInterpolated.X = intX;
-            BodyPartsTraces(part).TraceInterpolated.Y = intY;
-
-            % Smooth (bigger window for body-center / tailbase)
-            win = pickSmoothWindow(dlc.bodyPartsNames{part}, smallWin, bigWin);
-            smX = sphynx.preprocess.smoothTrace(intX, win);
-            smY = sphynx.preprocess.smoothTrace(intY, win);
-            BodyPartsTraces(part).TraceSmoothed.X = smX;
-            BodyPartsTraces(part).TraceSmoothed.Y = smY;
+            BodyPartsTraces(part).TraceInterpolated.X = res.X_interp;
+            BodyPartsTraces(part).TraceInterpolated.Y = res.Y_interp;
+            BodyPartsTraces(part).TraceSmoothed.X    = res.X_smooth;
+            BodyPartsTraces(part).TraceSmoothed.Y    = res.Y_smooth;
         end
     end
 
@@ -449,12 +455,19 @@ function restoreEnv(prevHeadless, prevLog)
     setenv('SPHYNX_LOG_LEVEL', prevLog);
 end
 
-function perPart = loadPreprocessSettings(config, log)
-    % Returns a struct array of per-part settings (or [] when nothing
-    % found). Explicit cfg.paths.preprocessSettings wins; otherwise we
-    % walk up from the DLC dir for up to 4 levels looking for any
-    % *_PreprocessSettings.mat.
+function [perPart, outlierStruct] = loadPreprocessSettings(config, log)
+    % Returns (perPart, outlier). perPart is the Settings.bodyparts
+    % struct array (or [] if nothing found). outlier is the
+    % Settings.outlier struct (or [] if nothing found / missing field).
+    %
+    % Explicit cfg.paths.preprocessSettings wins; otherwise we walk
+    % up from the DLC dir for up to 4 levels looking for the first
+    % *_PreprocessSettings.mat. The same loader serves single-session
+    % analyzeSession AND batch (Batch tab calls analyzeSession per
+    % session, so the auto-discovery runs per session and naturally
+    % picks up the experiment-level settings file).
     perPart = [];
+    outlierStruct = [];
 
     explicit = '';
     if isfield(config.paths, 'preprocessSettings')
@@ -465,8 +478,9 @@ function perPart = loadPreprocessSettings(config, log)
         try
             S = sphynx.io.readTracksSettings(explicit);
             perPart = S.bodyparts;
-            log('info', 'Loaded preprocess settings: %s (%d parts)', ...
-                explicit, numel(perPart));
+            if isfield(S, 'outlier'); outlierStruct = S.outlier; end
+            log('info', 'Loaded preprocess settings: %s (%d parts%s)', ...
+                explicit, numel(perPart), ifEmpty(outlierTag(outlierStruct), ''));
             return;
         catch ME
             log('warn', 'preprocessSettings read failed (%s): %s', ...
@@ -484,8 +498,9 @@ function perPart = loadPreprocessSettings(config, log)
             try
                 S = sphynx.io.readTracksSettings(cand);
                 perPart = S.bodyparts;
-                log('info', 'Auto-loaded preprocess settings: %s (%d parts)', ...
-                    cand, numel(perPart));
+                if isfield(S, 'outlier'); outlierStruct = S.outlier; end
+                log('info', 'Auto-loaded preprocess settings: %s (%d parts%s)', ...
+                    cand, numel(perPart), ifEmpty(outlierTag(outlierStruct), ''));
                 return;
             catch ME
                 log('warn', 'Skipping %s: %s', cand, ME.message);
@@ -497,20 +512,48 @@ function perPart = loadPreprocessSettings(config, log)
     end
 end
 
-function [thr, missPct] = resolvePartThresholds(perPart, partName, defaultThr, defaultMissPct)
-    thr = defaultThr;
-    missPct = defaultMissPct;
+function tag = outlierTag(outlier)
+    tag = '';
+    if isempty(outlier) || ~isstruct(outlier); return; end
+    parts = {};
+    if isfield(outlier, 'velocityJump') && isfield(outlier.velocityJump, 'enabled') ...
+            && outlier.velocityJump.enabled
+        parts{end+1} = 'vj';
+    end
+    if isfield(outlier, 'hampel') && isfield(outlier.hampel, 'enabled') ...
+            && outlier.hampel.enabled
+        parts{end+1} = 'hampel';
+    end
+    if ~isempty(parts)
+        tag = sprintf(', outlier=%s', strjoin(parts, '+'));
+    end
+end
+
+function s = resolvePartSettings(perPart, partName, config)
+    % Build the settings struct expected by applyPerPartSettings.
+    % Per-part Settings.bodyparts row wins; falls back to defaults
+    % from sphynx.preprocess.perPartDefault, finally to config-level
+    % scalars (likelihoodThreshold / interpolationMethod) so legacy
+    % callers without a Settings .mat still work.
+    base = sphynx.preprocess.perPartDefault(partName, config);
+    % `use` default true so a part without an explicit Settings row
+    % still gets processed.
+    base.use = true;
+
+    s = base;
     if isempty(perPart); return; end
     idx = find(strcmpi({perPart.name}, partName), 1);
     if isempty(idx); return; end
-    s = perPart(idx);
-    if isfield(s, 'likelihoodThreshold') && ~isempty(s.likelihoodThreshold) ...
-            && isnumeric(s.likelihoodThreshold)
-        thr = double(s.likelihoodThreshold);
-    end
-    if isfield(s, 'notFoundThresholdPct') && ~isempty(s.notFoundThresholdPct) ...
-            && isnumeric(s.notFoundThresholdPct)
-        missPct = double(s.notFoundThresholdPct);
+    row = perPart(idx);
+    % Override with whatever fields the saved row actually carries.
+    fns = {'use', 'likelihoodThreshold', 'smoothWindowSec', ...
+           'interpolationMethod', 'smoothingMethod', 'smoothingPolyOrder', ...
+           'notFoundThresholdPct'};
+    for k = 1:numel(fns)
+        f = fns{k};
+        if isfield(row, f) && ~isempty(row.(f))
+            s.(f) = row.(f);
+        end
     end
 end
 
