@@ -56,19 +56,28 @@ function result = analyzeSession(config)
     if isfield(config.range, 'autoStart')
         autoStart = config.range.autoStart;
     end
-    % Resolve which DLC individual to feed to readDLC. Explicit
-    % cfg.preprocess.individual wins; otherwise we peek into
-    % <expRoot>/<expName>_PreprocessSettings.mat for a saved choice
-    % (Settings.metadata.individual). Empty -> readDLC auto-picks.
+    % Resolve which DLC individual to feed to readDLC.
+    %
+    % Policy (per-session correctness over experiment-level caching):
+    %   1. explicit cfg.preprocess.individual wins -- programmatic
+    %      callers can force a specific animal.
+    %   2. otherwise readDLC auto-picks the most-populated individual
+    %      fresh for THIS session. Once picked, the same individual
+    %      is reused for every downstream readDLC call in this same
+    %      analyzeSession run (so the autostart pre-scan + main slice
+    %      never drift apart) and surfaces in result.SelectedIndividual.
+    %
+    % We deliberately do NOT consult Settings.metadata.individual or
+    % similar experiment-level caches: different sessions in one
+    % experiment can have different "best" individuals (animal0 in
+    % one trial, animal3 in another), and a sticky cache would
+    % silently force the wrong one.
     individual = '';
     if isfield(config.preprocess, 'individual')
         individual = config.preprocess.individual;
     end
-    if isempty(individual)
-        individual = peekSavedIndividual(config, log);
-    end
     if ~isempty(individual)
-        log('info', 'DLC individual override: "%s"', individual);
+        log('info', 'DLC individual override (from cfg): "%s"', individual);
     end
     if autoStart && config.range.startFrame == 1
         dlcFull = sphynx.io.readDLC(config.paths.dlc, ...
@@ -88,6 +97,16 @@ function result = analyzeSession(config)
         'StartFrame', config.range.startFrame, ...
         'EndFrame', config.range.endFrame, ...
         'Individual', individual);
+
+    % Lock the resolved individual back into config so any later
+    % readDLC re-invocation in this same analyzeSession run reuses
+    % the same animal. Empty -> readDLC's auto-pick result; non-empty
+    % -> the explicit cfg value. Either way, within this session
+    % everything points at one animal.
+    if isempty(individual) && isfield(dlc, 'selectedIndividual')
+        individual = dlc.selectedIndividual;
+        config.preprocess.individual = individual;
+    end
 
     % Frame-count sanity check vs the source video. A DLC csv that
     % covers fewer frames than the video means downstream Make-video /
@@ -503,44 +522,6 @@ end
 function restoreEnv(prevHeadless, prevLog)
     setenv('SPHYNX_HEADLESS', prevHeadless);
     setenv('SPHYNX_LOG_LEVEL', prevLog);
-end
-
-function individual = peekSavedIndividual(config, log) %#ok<INUSD>
-    % Best-effort: look up Settings.metadata.individual without
-    % re-reading the whole settings file twice. We rely on the same
-    % path-resolution logic used for the body-part settings.
-    individual = '';
-    explicit = '';
-    if isfield(config.paths, 'preprocessSettings')
-        explicit = config.paths.preprocessSettings;
-    end
-    settingsPath = '';
-    if ~isempty(explicit) && isfile(explicit)
-        settingsPath = explicit;
-    elseif ~isempty(config.paths.dlc)
-        d = fileparts(config.paths.dlc);
-        for hop = 1:4
-            if isempty(d) || ~isfolder(d); break; end
-            hits = dir(fullfile(d, '*_PreprocessSettings.mat'));
-            if ~isempty(hits)
-                settingsPath = fullfile(hits(1).folder, hits(1).name);
-                break;
-            end
-            parent = fileparts(d);
-            if strcmp(parent, d); break; end
-            d = parent;
-        end
-    end
-    if isempty(settingsPath); return; end
-    try
-        S = sphynx.io.readTracksSettings(settingsPath);
-        if isfield(S, 'metadata') && isfield(S.metadata, 'individual') ...
-                && ischar(S.metadata.individual) && ~isempty(S.metadata.individual)
-            individual = S.metadata.individual;
-        end
-    catch
-        % silent; loadPreprocessSettings will surface the real error
-    end
 end
 
 function [perPart, outlierStruct] = loadPreprocessSettings(config, log)

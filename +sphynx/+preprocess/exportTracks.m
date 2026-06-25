@@ -37,13 +37,13 @@ function paths = exportTracks(state, opts)
     if isempty(expName); expName = dlcBase; end
 
     paths.settings = fullfile(settingsDir, [expName '_PreprocessSettings.mat']);
-    individual = '';
-    if isfield(state, 'dlc') && isstruct(state.dlc) ...
-            && isfield(state.dlc, 'selectedIndividual')
-        individual = state.dlc.selectedIndividual;
-    end
+    % NOTE: do NOT persist the multi-animal auto-pick into Settings.
+    % Each session is supposed to redo its own auto-pick at
+    % analyzeSession time (per-session correctness); a sticky choice
+    % cached at experiment level would silently force the wrong animal
+    % on sessions where a different individual is more populated.
     sphynx.io.writeTracksSettings(paths.settings, state.perPart, ...
-        state.outlier, expName, individual);
+        state.outlier, expName);
 
     % Per-session: BodyPartsTraces struct array
     BodyPartsTraces = buildTraces(state);
