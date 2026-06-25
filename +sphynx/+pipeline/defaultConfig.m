@@ -25,10 +25,11 @@ function cfg = defaultConfig()
 
     cfg.range.startFrame = 1;
     cfg.range.endFrame   = 0;          % 0 = read all
-    % R11: when true and startFrame == 1, auto-detect the first
-    % consistently-tracked frame from DLC and use it as the effective
-    % start. Lets batch runs skip pre-session footage automatically.
-    cfg.range.autoStart  = true;
+    % R11/R16: detector exists at sphynx.preprocess.detectSessionStartFrame
+    % but auto-application is OFF by default. Set true per call to
+    % opt in. The Preprocess Tracking tab no longer surfaces a session-
+    % start indicator and never invokes the detector implicitly.
+    cfg.range.autoStart  = false;
 
     cfg.preprocess.likelihoodThreshold = 0.95;
     cfg.preprocess.smoothWindowSmallSec = 0.10;

@@ -26,7 +26,6 @@ classdef PreprocessTabController < handle
         DLCField
         VideoField
         PresetField
-        SessionStartLabel       % R13: auto-detected session start info
 
         % Block 2: per-part settings
         PerPartPanel
@@ -172,11 +171,6 @@ classdef PreprocessTabController < handle
                 return;
             end
 
-            % R13: auto-detect the session start frame and surface it in
-            % the UI + log. analyzeSession uses the same helper at batch
-            % time -- this preview shows the user what to expect.
-            obj.reportSessionStart();
-
             % Optional: load preset for frame + pxl2sm (used in Slice 4+)
             if ~isempty(obj.State.paths.preset) && isfile(obj.State.paths.preset)
                 try
@@ -199,47 +193,6 @@ classdef PreprocessTabController < handle
             obj.State.currentBodyPart = 1;
             obj.State.currentFrame = 1;
             obj.refreshPreview();
-        end
-
-        function reportSessionStart(obj)
-            % R13: run sphynx.preprocess.detectSessionStartFrame on the
-            % loaded DLC, post a one-liner to the log, and update the
-            % loading-panel label. Same detector that analyzeSession
-            % uses for batch auto-start, so the two stay in sync.
-            if isempty(obj.State.dlc); return; end
-            try
-                [startF, info] = sphynx.preprocess.detectSessionStartFrame( ...
-                    obj.State.dlc);
-            catch ME
-                obj.applog('warn', 'session-start detect failed: %s', ME.message);
-                obj.setSessionStartLabel('Session start: detection failed');
-                return;
-            end
-            ctx = obj.computeContext();
-            fps = ctx.frameRate;
-            timeStr = '';
-            if isnumeric(fps) && fps > 0
-                timeStr = sprintf(', t=%.2fs @ %g fps', (startF - 1) / fps, fps);
-            end
-            if isempty(info.message)
-                msg = sprintf(['Session start: frame %d%s ' ...
-                    '(first populated %d, populated ratio %.2f, ' ...
-                    'window=%d, threshold=%.2f)'], ...
-                    startF, timeStr, info.firstPopulatedFrame, ...
-                    info.totalPopulatedRatio, info.windowFrames, info.threshold);
-            else
-                msg = sprintf('Session start: frame %d%s (fallback: %s)', ...
-                    startF, timeStr, info.message);
-            end
-            obj.applog('info', '%s', msg);
-            obj.setSessionStartLabel(msg);
-        end
-
-        function setSessionStartLabel(obj, text)
-            if ~isempty(obj.SessionStartLabel) && isvalid(obj.SessionStartLabel)
-                obj.SessionStartLabel.Text = text;
-                obj.SessionStartLabel.FontAngle = 'normal';
-            end
         end
 
         % --- Compute API -----------------------------------------------------
@@ -541,10 +494,6 @@ classdef PreprocessTabController < handle
                 obj.VideoWindow = [];
             end
             obj.VideoReader_ = [];
-            if ~isempty(obj.SessionStartLabel) && isvalid(obj.SessionStartLabel)
-                obj.SessionStartLabel.Text = 'Session start: (load DLC to detect)';
-                obj.SessionStartLabel.FontAngle = 'italic';
-            end
             obj.applog('info', 'Cleared all (paths kept)');
         end
 
@@ -794,26 +743,31 @@ classdef PreprocessTabController < handle
     methods (Access = private)
         % ===== UI ===========================================================
         function buildUI(obj)
-            % Round-5 layout:
-            %   row 1: TopBar (Output dir + Save + Clear All)
-            %   row 2: Blocks 1+2+3 stacked in 380px left column | Plots full
-            %          width on the right (X(t) + Y(t) + tall histogram)
-            %   row 3: Bottom bar (viewport / switcher / regions / log)
-            % Block heights: 1 = ~130 (3 input rows + Load), 2 = ~140
-            % (4 rows incl. INFO+velocity-jump on the same line),
-            % 3 = ~270 (= B1 + B2 per user request).
-            obj.OuterGrid = uigridlayout(obj.Tab, [3, 2]);
-            obj.OuterGrid.RowHeight = {36, 540, '1x'};
-            obj.OuterGrid.ColumnWidth = {380, '1x'};
+            % R16 layout:
+            %   row 1 (36):   TopBar (Output dir + Save + Clear All)
+            %   row 2 (340):  Block1 + Block2 stacked in 570px left col |
+            %                 Plots (X+Y stacked, hist column)
+            %   row 3 (32):   ViewportRow (bodyparts < > Video |
+            %                 from/to/X | raw/interp/smooth/log Y) -- full
+            %                 width, immediately under the plots
+            %   row 4 (300):  Block 3 (per-part settings) -- full width,
+            %                 wide enough for the 12-column table
+            %   row 5 (1x):   BottomBar (regions + log)
+            % Block heights: B1 = 130, B2 = 110. Left col widened to 570
+            % (was 380); B3 promoted to its own full-width row.
+            obj.OuterGrid = uigridlayout(obj.Tab, [5, 2]);
+            obj.OuterGrid.RowHeight = {36, 340, 32, 300, '1x'};
+            obj.OuterGrid.ColumnWidth = {570, '1x'};
             obj.OuterGrid.Padding = [4 4 4 4];
             obj.OuterGrid.RowSpacing = 4;
             obj.OuterGrid.ColumnSpacing = 6;
 
             obj.buildTopBar();          % row 1, cols [1 2]
-            obj.buildBlocksLeftCol();   % row 2 col 1 (Block1 + Block2 + Block3)
-            obj.buildPerPartPanel();    % parented to LeftPanel as row 3
+            obj.buildBlocksLeftCol();   % row 2 col 1 (Block 1 + Block 2)
             obj.buildPlots();           % row 2 col 2 (X+Y stacked, hist column)
-            obj.buildBottomBar();       % row 3, cols [1 2]
+            obj.buildViewportRowFull(); % row 3, cols [1 2]
+            obj.buildPerPartPanel();    % row 4, cols [1 2] -- full width
+            obj.buildBottomBar();       % row 5, cols [1 2] -- regions + log
         end
 
         function buildTopBar(obj)
@@ -847,20 +801,17 @@ classdef PreprocessTabController < handle
         end
 
         function buildBlocksLeftCol(obj)
-            % Round-5: stack Block 1 + Block 2 + Block 3 vertically in
-            % the 380px left column. Heights add up exactly: B1=130,
-            % B2=140 (so they only take what their content needs),
-            % B3 = '1x' = remaining = 270 (= B1 + B2 per user request).
-            obj.LeftPanel = uigridlayout(obj.OuterGrid, [3, 1]);
+            % R16: only Block 1 (loading) + Block 2 (outlier) stack in the
+            % left column now. Block 3 was promoted to a full-width row
+            % under the plots so the 12-column per-part table has room.
+            obj.LeftPanel = uigridlayout(obj.OuterGrid, [2, 1]);
             obj.LeftPanel.Layout.Row = 2; obj.LeftPanel.Layout.Column = 1;
-            obj.LeftPanel.RowHeight = {158, 140, '1x'};
+            obj.LeftPanel.RowHeight = {130, 110};
             obj.LeftPanel.RowSpacing = 4;
             obj.LeftPanel.Padding = [0 0 0 0];
 
             obj.buildLoadingPanel();   % parent = LeftPanel, Row 1
             obj.buildOutlierPanel();   % parent = LeftPanel, Row 2
-            % buildPerPartPanel called separately from buildUI; it parents
-            % to LeftPanel via Layout.Row = 3.
         end
 
         function buildPlots(obj)
@@ -889,27 +840,37 @@ classdef PreprocessTabController < handle
         end
 
         function buildBottomBar(obj)
-            % Round-5 row 3: viewport (with bodyparts switcher merged in) +
-            % regions + log. FrameLabel removed (frame info shows in video).
-            bb = uigridlayout(obj.OuterGrid, [3, 1]);
-            bb.Layout.Row = 3; bb.Layout.Column = [1 2];
-            bb.RowHeight = {32, 100, '1x'};
+            % R16 row 5: regions + log only. ViewportRow moved to row 3
+            % (immediately under plots); Block 3 owns row 4.
+            bb = uigridlayout(obj.OuterGrid, [2, 1]);
+            bb.Layout.Row = 5; bb.Layout.Column = [1 2];
+            bb.RowHeight = {100, '1x'};
             bb.RowSpacing = 4;
             bb.Padding = [0 0 0 0];
 
-            obj.buildViewportRow(bb);   % row 1 — merged viewport+switcher
-            obj.buildRegionsPanelInline(bb); % row 2
-            obj.buildLogInline(bb);     % row 3
-            % buildSwitcherRow no longer used — merged into viewport.
+            obj.buildRegionsPanelInline(bb); % row 1
+            obj.buildLogInline(bb);          % row 2
 
             obj.RightGrid = bb;   % alias for backward compat
+        end
+
+        function buildViewportRowFull(obj)
+            % R16: viewport bar stretches across both columns just below
+            % the plots. The legacy buildViewportRow keeps the column
+            % wiring; this wrapper just hands it a parent that sits in
+            % OuterGrid row 3 cols [1 2].
+            wrap = uigridlayout(obj.OuterGrid, [1, 1]);
+            wrap.Layout.Row = 3; wrap.Layout.Column = [1 2];
+            wrap.RowHeight = {32};
+            wrap.Padding = [0 0 0 0];
+            obj.buildViewportRow(wrap);
         end
 
         function buildLoadingPanel(obj)
             p = uipanel(obj.LeftPanel, 'Title', '1. Loading');
             p.Layout.Row = 1;
-            g = uigridlayout(p, [4, 4]);
-            g.RowHeight = {26, 26, 32, 22};
+            g = uigridlayout(p, [3, 4]);
+            g.RowHeight = {26, 26, 32};
             g.ColumnWidth = {'1x', '1x', '1x', '1x'};
             g.ColumnSpacing = 4;
             g.RowSpacing = 4;
@@ -960,24 +921,16 @@ classdef PreprocessTabController < handle
                 'ButtonPushedFcn', @(~,~) obj.loadSynthetic());
             btnSynth.Layout.Row = 3; btnSynth.Layout.Column = 4;
 
-            % R13: auto-detected session start (filled after loadAll).
-            obj.SessionStartLabel = uilabel(g, ...
-                'Text', 'Session start: (load DLC to detect)', ...
-                'FontAngle', 'italic', ...
-                'Tooltip', ['Auto-detected from the DLC trace: first ', ...
-                            'frame where the animal is consistently ', ...
-                            'tracked. Used by analyzeSession as ', ...
-                            'config.range.startFrame when autoStart=on.']);
-            obj.SessionStartLabel.Layout.Row = 4;
-            obj.SessionStartLabel.Layout.Column = [1 4];
-
             % Try to inherit project root from sibling Preset tab
             obj.inheritRootFromParentApp();
         end
 
         function buildPerPartPanel(obj)
-            obj.PerPartPanel = uipanel(obj.LeftPanel, 'Title', '3. Per-part settings');
-            obj.PerPartPanel.Layout.Row = 3;
+            % R16: promoted from LeftPanel row 3 to OuterGrid row 4 full
+            % width so the 12-column table fits without horizontal scroll.
+            obj.PerPartPanel = uipanel(obj.OuterGrid, 'Title', '3. Per-part settings');
+            obj.PerPartPanel.Layout.Row = 4;
+            obj.PerPartPanel.Layout.Column = [1 2];
             g = uigridlayout(obj.PerPartPanel, [4, 1]);
             g.RowHeight = {24, '1x', 32, 32};
             g.RowSpacing = 4;
@@ -1151,16 +1104,20 @@ classdef PreprocessTabController < handle
 
         function buildViewportRow(obj, parent)
             % Round-5: merged switcher into the viewport row.
-            % Layout: [<] [bodyparts dropdown] [>] [Video] | from / to /
-            % X units / [raw] [interp] [smoothed] | (flex) | [log Y]
-            viewport = uigridlayout(parent, [1, 13]);
+            % R16 layout (15 explicit columns; every widget pins its own
+            % Layout.Column so log Y can't collide with smoothed any more):
+            %   1  2          3  4      5     6     7    8     9   10
+            %   <  bodyparts  >  Video  from: from  to:  to    X:  units
+            %   11   12      13        14     15
+            %   raw  interp  smoothed  logY   (flex)
+            viewport = uigridlayout(parent, [1, 15]);
             viewport.Layout.Row = 1;
             viewport.RowHeight = {28};
-            viewport.ColumnWidth = {28, 160, 28, 70, ...
-                                    50, 60, 30, 60, 50, 70, ...
-                                    60, 70, 60};
+            viewport.ColumnWidth = {28, 180, 28, 60, ...
+                                    40, 70, 30, 70, 20, 70, ...
+                                    60, 75, 85, 60, '1x'};
             viewport.Padding = [0 0 0 0];
-            viewport.ColumnSpacing = 4;
+            viewport.ColumnSpacing = 6;
 
             % Bodyparts switcher (cols 1-3) + Video toggle (col 4)
             obj.PrevButton = uibutton(viewport, 'Text', '<', ...
@@ -1181,63 +1138,48 @@ classdef PreprocessTabController < handle
             obj.ShowVideoButton.Layout.Column = 4;
 
             % Viewport edits with debounce (500ms)
-            uilabel(viewport, 'Text', 'from:', 'HorizontalAlignment', 'right');
+            lblFrom = uilabel(viewport, 'Text', 'from:', 'HorizontalAlignment', 'right');
+            lblFrom.Layout.Column = 5;
             obj.FromFrameField = uieditfield(viewport, 'numeric', ...
                 'Value', 1, 'Limits', [1 Inf], 'RoundFractionalValues', 'on', ...
                 'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
-            uilabel(viewport, 'Text', 'to:', 'HorizontalAlignment', 'right');
+            obj.FromFrameField.Layout.Column = 6;
+            lblTo = uilabel(viewport, 'Text', 'to:', 'HorizontalAlignment', 'right');
+            lblTo.Layout.Column = 7;
             obj.ToFrameField = uieditfield(viewport, 'numeric', ...
                 'Value', 0, 'Limits', [0 Inf], 'RoundFractionalValues', 'on', ...
                 'Tooltip', '0 = last frame', ...
                 'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
-            uilabel(viewport, 'Text', 'X:', 'HorizontalAlignment', 'right');
+            obj.ToFrameField.Layout.Column = 8;
+            lblX = uilabel(viewport, 'Text', 'X:', 'HorizontalAlignment', 'right');
+            lblX.Layout.Column = 9;
             obj.XUnitsDropDown = uidropdown(viewport, ...
                 'Items', {'frame', 'sec', 'min'}, 'Value', 'sec', ...
                 'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.XUnitsDropDown.Layout.Column = 10;
 
-            % Curve overlays
+            % Curve overlays -- explicit columns, widened so labels don't clip.
             obj.ShowRawChk = uicheckbox(viewport, 'Text', 'raw', 'Value', true, ...
                 'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.ShowRawChk.Layout.Column = 11;
             obj.ShowInterpChk = uicheckbox(viewport, 'Text', 'interp', 'Value', true, ...
                 'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.ShowInterpChk.Layout.Column = 12;
             obj.ShowSmoothChk = uicheckbox(viewport, 'Text', 'smoothed', 'Value', true, ...
                 'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.ShowSmoothChk.Layout.Column = 13;
 
-            % log Y at the right edge (under the histogram)
+            % log Y -- one slot to the right of "smoothed". Toggles the
+            % likelihood-histogram Y axis between linear and log.
             obj.LogScaleButton = uibutton(viewport, 'state', 'Text', 'log Y', ...
                 'BackgroundColor', semanticColor('info'), ...
+                'Tooltip', 'Log-scale Y axis on the likelihood histogram', ...
                 'ValueChangedFcn', @(~,~) obj.refreshPreview());
-            obj.LogScaleButton.Layout.Column = 13;
+            obj.LogScaleButton.Layout.Column = 14;
 
-            % FrameLabel removed in round-5 — frame info lives in video window.
+            % FrameLabel removed in round-5 -- frame info lives in video window.
             obj.FrameLabel = uilabel(viewport, 'Text', '', 'Visible', 'off');
-        end
-
-        function buildSwitcherRow(obj, parent)
-            switcher = uigridlayout(parent, [1, 6]);
-            switcher.Layout.Row = 2;
-            switcher.RowHeight = {28};
-            switcher.ColumnWidth = {28, 200, 28, 80, 80, '1x'};
-            switcher.Padding = [0 0 0 0];
-            switcher.ColumnSpacing = 4;
-
-            obj.PrevButton = uibutton(switcher, 'Text', '<', ...
-                'BackgroundColor', semanticColor('geometry'), ...
-                'ButtonPushedFcn', @(~,~) obj.prevBodyPart());
-            obj.BodyPartDropDown = uidropdown(switcher, 'Items', {'(no DLC loaded)'}, ...
-                'Value', '(no DLC loaded)', ...
-                'ValueChangedFcn', @(s,~) obj.onDropDownChanged(s.Value));
-            obj.NextButton = uibutton(switcher, 'Text', '>', ...
-                'BackgroundColor', semanticColor('geometry'), ...
-                'ButtonPushedFcn', @(~,~) obj.nextBodyPart());
-            obj.LogScaleButton = uibutton(switcher, 'state', 'Text', 'log Y', ...
-                'BackgroundColor', semanticColor('info'), ...
-                'ValueChangedFcn', @(~,~) obj.refreshPreview());
-            obj.ShowVideoButton = uibutton(switcher, 'state', 'Text', 'Video', ...
-                'BackgroundColor', semanticColor('info'), ...
-                'ValueChangedFcn', @(s, ~) obj.toggleVideoPanel(s.Value));
-            obj.FrameLabel = uilabel(switcher, 'Text', 'Frame -/-', ...
-                'HorizontalAlignment', 'right');
+            obj.FrameLabel.Layout.Column = 15;
         end
 
         function buildRegionsPanelInline(obj, parent)
