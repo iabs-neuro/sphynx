@@ -1,0 +1,255 @@
+// sphynx defaults reference (JSON-with-comments)
+// ---------------------------------------------------
+// Single-source documentation of every default value the pipeline
+// uses. Mirrors `sphynx.pipeline.defaultConfig()` + per-part /
+// outlier defaults from the Preprocess Tracking tab + preset
+// strategies from CreatePreset.
+//
+// This file is for HUMAN reference / per-experiment override.
+// To override at runtime, edit a copy in MATLAB after
+//   cfg = sphynx.pipeline.defaultConfig()
+// and pass it to `sphynx.pipeline.analyzeSession(cfg)`. There is
+// no auto-loader for this .jsonc -- it documents intent, not
+// machine state.
+//
+// `//` line comments are deliberate; standard json parsers won't
+// read them. VSCode / PyCharm render them fine.
+// ===================================================
+
+{
+  // ---------- paths -----------------------------------------------
+  // All defaults empty -- callers fill these in.
+  "paths": {
+    "video":               "",
+    "dlc":                 "",
+    "preset":              "",
+    "outDir":              "",
+    // Per-experiment Preprocess Settings .mat saved by the
+    // Preprocess Tracking tab. Empty -> analyzeSession walks up to
+    // 4 directories from the DLC path and auto-loads the first
+    // *_PreprocessSettings.mat it finds. Explicit path wins.
+    "preprocessSettings":  ""
+  },
+
+  // ---------- frame range -----------------------------------------
+  "range": {
+    "startFrame": 1,
+    // 0 means "read to end of csv"
+    "endFrame":   0,
+    // R11 detector lives at sphynx.preprocess.detectSessionStartFrame.
+    // When `true` and startFrame == 1, the pipeline auto-detects the
+    // first consistently-tracked frame and uses it. Off by default
+    // since R16 -- Preprocess Tracking tab no longer surfaces it.
+    "autoStart":  false
+  },
+
+  // ---------- preprocess ------------------------------------------
+  "preprocess": {
+    // Multi-animal DLC: which individual to use.
+    //   ""         -> readDLC auto-picks the most-populated one
+    //                 (best per-session correctness, not cached)
+    //   "animal0"  -> force a specific name
+    "individual":            "",
+
+    // Single-scalar fallback. Per-part likelihoodThreshold from
+    // <expName>_PreprocessSettings.mat (when present) overrides
+    // this. superanimal_topviewmouse DLCs typically need <= 0.5.
+    "likelihoodThreshold":   0.95,
+
+    // Smoothing window length (seconds), used by perPartDefault to
+    // size the Savitzky-Golay window. Big window applies to body-
+    // center / tailbase parts; small window to limbs / head / nose.
+    "smoothWindowSmallSec":  0.10,
+    "smoothWindowBigSec":    0.25,
+
+    // Biological velocity clipping cap (cm/s). Frames with per-step
+    // velocity above this become NaN before interpolation, so a
+    // single noisy DLC point can't drag the smoothed trace through
+    // the ceiling.
+    "maxVelocityCmS":        50,
+
+    // Interpolation method for gap-filling missing frames.
+    // Options: "pchip" | "linear" | "spline" | "makima"
+    "interpolationMethod":   "pchip",
+
+    // Per-part defaults consumed by sphynx.preprocess.perPartDefault.
+    // The Preprocess Tracking table edits these per body part and
+    // saves them into Settings.bodyparts[i].
+    "perPart": {
+      // Parts whose name matches any of these get the BIG smoothing
+      // window. Matching is case-insensitive; aliases come from
+      // sphynx.bodyparts.identifyParts synonymMap.
+      "bigParts":              ["mass centre", "mass center",
+                                "bodycenter",  "body_center",  "center",
+                                "mouse_center",
+                                "tailbase",    "tail base",    "tail_base",
+                                "tail1"],
+      // Smoothing algorithm. Options:
+      //   "sgolay"    Savitzky-Golay (default; needs Signal Toolbox)
+      //   "movmean"   moving average (base MATLAB)
+      //   "movmedian" moving median (base MATLAB)
+      //   "gaussian"  gaussian-weighted moving average
+      //   "kalman"    constant-velocity Kalman filter (uses
+      //               outlier.kalman params; likelihood modulates
+      //               measurement noise)
+      "smoothingMethod":       "sgolay",
+      // Only used when smoothingMethod == "sgolay"
+      "smoothingPolyOrder":    3,
+      // Part is marked "NotFound" if more than this % of frames are
+      // bad (NaN raw / below likelihoodThreshold / out of bounds).
+      // NotFound parts are dropped from the session.
+      "notFoundThresholdPct":  90
+    },
+
+    // Outlier-filter defaults persisted in Settings.outlier and
+    // applied by sphynx.preprocess.applyPerPartSettings BEFORE
+    // interpolation. Edited in the Preprocess Tracking tab.
+    "outlier": {
+      "velocityJump": {
+        // Drops single-frame jumps that exceed maxVelocityCmS.
+        "enabled":         true,
+        "maxVelocityCmS":  50
+      },
+      "hampel": {
+        // Per-axis Hampel identifier (median + 1.4826 * MAD).
+        // OFF by default -- enable per experiment if needed.
+        "enabled":     false,
+        // Window in seconds (preferred). Falls back to windowSize
+        // when windowSec is empty / 0.
+        "windowSec":   0.25,
+        "windowSize":  7,
+        "nSigma":      3
+      },
+      "kalman": {
+        // Only used when perPart.smoothingMethod == "kalman".
+        "processNoise":    0.01,
+        "measNoiseScale":  1.0
+      }
+    }
+  },
+
+  // ---------- acts ------------------------------------------------
+  "acts": {
+    // Optional path to a custom acts library .mat saved by
+    // sphynx.io.saveActsSet. Empty -> built-in defaults
+    // (rest/walk/locomotion/freezing/rear) only.
+    "libraryPath":      "",
+    // Speed gate thresholds (cm/s).
+    //   rest       speed in [0, restThresholdCmS]
+    //   walk       speed in (restThresholdCmS, locThresholdCmS]
+    //   locomotion speed in (locThresholdCmS, +Inf)
+    "restThresholdCmS": 1,
+    "locThresholdCmS":  5,
+    // Drop short runs and bridge short gaps in seconds.
+    "minRunSeconds":    0.25,
+
+    // Freezing mode. Options:
+    //   "HeadAndCenter" (default)  HeadCenter & Center velocity < rest
+    //   "NoseAndCenter"            Nose & Center velocity < rest
+    //   "AllBodyParts"             sum of all parts < rest * #parts
+    // Falls back gracefully to AllBodyParts when the preferred
+    // parts aren't resolvable in this DLC schema.
+    "freezingMode":     "HeadAndCenter",
+
+    // Rear mode. Options:
+    //   "TailbasePaws" (default)  sum(dist(Tailbase, hindlimbs)) low
+    //   "AllBodyParts"            sum(dist(Center, all parts)) low
+    // Falls back to AllBodyParts when Tailbase/HindLimb missing.
+    "rearMode":                       "TailbasePaws",
+    "rearThresholdAllBodyPartsPxl":   170,
+    // 2.8 cm (tightened from legacy 3.6 cm -- 3.6 cut through the
+    // main mode of the (tailbase->hindlimb) sum distribution and
+    // flagged 11-20% of frames as rear on real sessions).
+    "rearThresholdTailbasePawsCm":    2.8,
+    // When true (default) per-session threshold comes from
+    // sphynx.acts.autoRearThresholdCm -- a robust statistic over
+    // the smoothed sumDist distribution. Set false to use the
+    // hard-coded rearThresholdTailbasePawsCm above.
+    "rearAutoThreshold":              true
+  },
+
+  // ---------- I/O -------------------------------------------------
+  "io": {
+    "saveWorkspace": true,
+    // Empty -> name derived from DLC csv basename.
+    "sessionName":   ""
+  },
+
+  // ---------- visualisation --------------------------------------
+  "viz": {
+    "enabled":   false,
+    // headless = no figures pop up during analyzeSession.
+    "headless":  true,
+    "makeVideo": false
+  },
+
+  // Verbosity. Options: "debug" | "info" | "warn" | "error"
+  "verbose": "info",
+
+  // ---------- CreatePreset strategies (reference only) -----------
+  // Documented here so users know which `Options.ArenaGeometry` /
+  // zone-builder combinations the preset .mat can carry. Each
+  // strategy is selected in CreatePreset; the chosen one ends up
+  // in preset.Options.ArenaGeometry and the corresponding zones
+  // get built into preset.Zones.
+  "presetStrategies": {
+    "arenaGeometry": {
+      // Available strategies (string identifiers used in preset).
+      // Each one is implemented in +sphynx/+preset/buildZones*.m
+      // or +sphynx/+zones/.
+      "options": [
+        "Square",     // 4-corner polygon; classifySquare picks one of:
+                      //   corners-walls-center  (default for Barnes-square)
+                      //   strips                (horizontal or vertical bands)
+        "Polygon",    // arbitrary polygon; +sphynx/+zones/classifySquare
+                      // emits arenacorner<N> zones at each vertex
+        "Circle",     // single circular arena -- buildZonesCircle: just
+                      // wall + arena_realout
+        "Ellipse",    // ellipse arena -- used by Barnes presets in
+                      // Demo/BARNES_v2 (BARNES uses circle-with-center
+                      // strategy under the hood)
+        "O-maze"      // two consecutive polygons (inner + outer rim)
+      ]
+    },
+
+    // Strategy for the square arena. Selected by CornerType in
+    // CreatePreset Block 4.
+    "squareStrategy": {
+      "options": [
+        "corners-walls-center", // classic 9-zone layout
+        "strips",               // N parallel strips
+        "none"                  // single arena + arena_realout
+      ]
+    },
+
+    // Strategy for the circle arena. Selected by Block 5 in
+    // CreatePreset.
+    "circleStrategy": {
+      "options": [
+        "circle",              // wall + arena_realout
+        "circle-with-center",  // wall + middle + center + arena_realout
+                               // (default for Barnes)
+        "circle-rings"         // wall + middle1 + middle2 + ... + center
+      ]
+    },
+
+    // Strip direction (only meaningful when squareStrategy == "strips").
+    "stripDirection": {
+      "options": ["horizontal", "vertical"]
+    }
+  },
+
+  // ---------- Auto-threshold strategies (Preprocess Tracking) ----
+  // The Preprocess Tracking tab's "Auto" dropdown picks per-part
+  // likelihoodThreshold from the actual likelihood distribution.
+  "autoThreshold": {
+    "method": {
+      "options": [
+        "otsu",      // Otsu's bimodal split (default; no param)
+        "knee",      // knee/elbow of the sorted-CDF (no param)
+        "quantile",  // q-th quantile, param = fraction (e.g. 0.05)
+        "preset"     // user-supplied fixed value, param = threshold
+      ]
+    }
+  }
+}
