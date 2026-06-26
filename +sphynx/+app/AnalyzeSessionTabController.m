@@ -43,6 +43,9 @@ classdef AnalyzeSessionTabController < handle
         SpeedHistAxes
         SpeedTraceAxes
 
+        % Etogram acts filter (R21)
+        EtogramActsListBox
+
         % Output options — main video
         MainVideoEnableCheckbox
         MainVideoStartField
@@ -94,6 +97,7 @@ classdef AnalyzeSessionTabController < handle
             cfg = sphynx.pipeline.defaultConfig();
             cfg.paths.dlc    = obj.DLCPathField.Value;
             cfg.paths.preset = obj.PresetPathField.Value;
+            cfg.paths.video  = obj.VideoPathField.Value;
             % Session subfolder: per-session outputs all go into one
             % directory named after the video stem. Skip when there's
             % no output dir (saveWorkspace stays disabled then).
@@ -138,9 +142,10 @@ classdef AnalyzeSessionTabController < handle
                 obj.applog('warn', 'Main-video render is disabled in Options');
                 return;
             end
-            videoPath = obj.VideoPathField.Value;
+            videoPath = obj.resolveVideoPath();
             if isempty(videoPath) || ~isfile(videoPath)
-                obj.applog('warn', 'Pick a video first'); return;
+                obj.applog('warn', 'Pick a video first (current: "%s")', ...
+                    videoPath); return;
             end
             outDir = obj.sessionDir();
             startSec = obj.MainVideoStartField.Value;
@@ -190,9 +195,10 @@ classdef AnalyzeSessionTabController < handle
                 obj.applog('warn', 'Select acts to render in the Options panel');
                 return;
             end
-            videoPath = obj.VideoPathField.Value;
+            videoPath = obj.resolveVideoPath();
             if isempty(videoPath) || ~isfile(videoPath)
-                obj.applog('warn', 'Pick a video first'); return;
+                obj.applog('warn', 'Pick a video first (current: "%s")', ...
+                    videoPath); return;
             end
             actsDir = fullfile(obj.sessionDir(), 'Acts_video');
             if ~isfolder(actsDir); mkdir(actsDir); end
@@ -717,6 +723,29 @@ classdef AnalyzeSessionTabController < handle
             if isempty(s); s = 'session'; end
         end
 
+        function v = resolveVideoPath(obj)
+            % Prefer the UI field. Trim whitespace + strip wrapping
+            % quotes (drag-and-drop from Explorer sometimes wraps the
+            % path in "..."). Fall back to the path baked into the
+            % completed Run's config so Render still works even if the
+            % field was cleared after analysis.
+            v = '';
+            if ~isempty(obj.VideoPathField) && isvalid(obj.VideoPathField)
+                raw = strtrim(char(obj.VideoPathField.Value));
+                if numel(raw) >= 2 && raw(1) == '"' && raw(end) == '"'
+                    raw = raw(2:end-1);
+                end
+                v = raw;
+            end
+            if (isempty(v) || ~isfile(v)) && ~isempty(obj.State.result)
+                try
+                    cv = obj.State.result.config.paths.video;
+                    if ~isempty(cv) && isfile(cv); v = cv; end
+                catch
+                end
+            end
+        end
+
         function d = sessionDir(obj, parent)
             % All saves for one Run go into <parent>/<sessionStem>/.
             % `parent` is whatever the caller picked as the output root
@@ -748,14 +777,15 @@ classdef AnalyzeSessionTabController < handle
         end
 
         function buildRightResults(obj, parent)
-            % 5 rows: session summary | results table | trajectory +
-            % heatmap | etogram | speed histogram + speed trace.
-            right = uigridlayout(parent, [5, 2]);
+            % R21: 5 rows x 3 cols. Col 1 is a vertical strip from row 3
+            % to row 5 hosting an Etogram-acts filter listbox; rows 1-2
+            % (header + results table) still span the full width; the
+            % plot pairs (traj/heatmap, speedhist/speedtrace) and the
+            % etogram occupy cols 2-3.
+            right = uigridlayout(parent, [5, 3]);
             right.Layout.Column = 2;
-            % Row 1 fits two stacked lines: generic session-summary on
-            % top, Barnes-paradigm summary right beneath when applicable.
             right.RowHeight = {44, 160, '1x', 180, 180};
-            right.ColumnWidth = {'1x', '1x'};
+            right.ColumnWidth = {180, '1x', '1x'};
             right.RowSpacing = 4;
             right.ColumnSpacing = 6;
             right.Padding = [0 0 0 0];
@@ -767,7 +797,7 @@ classdef AnalyzeSessionTabController < handle
                 'FontWeight', 'bold', 'FontSize', 13, ...
                 'HorizontalAlignment', 'left');
             obj.SessionStatsLabel.Layout.Row = 1;
-            obj.SessionStatsLabel.Layout.Column = [1 2];
+            obj.SessionStatsLabel.Layout.Column = [1 3];
 
             % Row 2: per-act results table.
             obj.ResultTable = uitable(right, 'ColumnName', ...
@@ -775,42 +805,76 @@ classdef AnalyzeSessionTabController < handle
                  'mean v, cm/s', 'distance, cm', ...
                  'first start, s', 'first end, s'});
             obj.ResultTable.Layout.Row = 2;
-            obj.ResultTable.Layout.Column = [1 2];
+            obj.ResultTable.Layout.Column = [1 3];
+
+            % R21: Etogram-acts filter -- vertical strip in col 1,
+            % spans rows 3-5 (from the trajectory row to the bottom).
+            % Multi-select; redraws etogram on selection change so the
+            % user can focus on a subset of acts.
+            obj.EtogramActsListBox = uilistbox(right, ...
+                'Items', {'(run analyze first)'}, ...
+                'Multiselect', 'on', 'Value', {}, ...
+                'Tooltip', 'Check which acts to render on the etogram', ...
+                'ValueChangedFcn', @(~,~) obj.onEtogramSelectionChanged());
+            obj.EtogramActsListBox.Layout.Row = [3 5];
+            obj.EtogramActsListBox.Layout.Column = 1;
 
             % Row 3: trajectory (over GoodVideoFrame, axes in cm) + heatmap
             obj.TrajAxes = uiaxes(right);
-            obj.TrajAxes.Layout.Row = 3; obj.TrajAxes.Layout.Column = 1;
+            obj.TrajAxes.Layout.Row = 3; obj.TrajAxes.Layout.Column = 2;
             title(obj.TrajAxes, 'Trajectory');
             obj.TrajAxes.DataAspectRatio = [1 1 1];
             obj.TrajAxes.YDir = 'reverse';
             obj.TrajAxes.Box = 'on';
 
             obj.HeatmapAxes = uiaxes(right);
-            obj.HeatmapAxes.Layout.Row = 3; obj.HeatmapAxes.Layout.Column = 2;
+            obj.HeatmapAxes.Layout.Row = 3; obj.HeatmapAxes.Layout.Column = 3;
             title(obj.HeatmapAxes, 'Occupancy heatmap');
             obj.HeatmapAxes.DataAspectRatio = [1 1 1];
             obj.HeatmapAxes.YDir = 'reverse';
             obj.HeatmapAxes.Box = 'on';
 
-            % Row 4: etogram (full width)
+            % Row 4: etogram (cols 2-3)
             obj.TimelineAxes = uiaxes(right);
             obj.TimelineAxes.Layout.Row = 4;
-            obj.TimelineAxes.Layout.Column = [1 2];
+            obj.TimelineAxes.Layout.Column = [2 3];
             title(obj.TimelineAxes, 'Acts etogram');
             obj.TimelineAxes.Box = 'on';
 
             % Row 5: speed histogram + speed-vs-time trace
             obj.SpeedHistAxes = uiaxes(right);
             obj.SpeedHistAxes.Layout.Row = 5;
-            obj.SpeedHistAxes.Layout.Column = 1;
+            obj.SpeedHistAxes.Layout.Column = 2;
             title(obj.SpeedHistAxes, 'Speed histogram');
             obj.SpeedHistAxes.Box = 'on';
 
             obj.SpeedTraceAxes = uiaxes(right);
             obj.SpeedTraceAxes.Layout.Row = 5;
-            obj.SpeedTraceAxes.Layout.Column = 2;
+            obj.SpeedTraceAxes.Layout.Column = 3;
             title(obj.SpeedTraceAxes, 'Speed vs time');
             obj.SpeedTraceAxes.Box = 'on';
+        end
+
+        function onEtogramSelectionChanged(obj)
+            if isempty(obj.State.result); return; end
+            obj.drawEtogram(obj.State.result);
+        end
+
+        function refreshEtogramActsList(obj, r)
+            % Populate the filter listbox to mirror the current run.
+            % Default = all checked so the etogram looks unchanged
+            % until the user opts to filter.
+            if isempty(obj.EtogramActsListBox) || ~isvalid(obj.EtogramActsListBox)
+                return;
+            end
+            if isempty(r) || isempty(r.Acts)
+                obj.EtogramActsListBox.Items = {'(run analyze first)'};
+                obj.EtogramActsListBox.Value = {};
+                return;
+            end
+            names = {r.Acts.ActName};
+            obj.EtogramActsListBox.Items = names;
+            obj.EtogramActsListBox.Value = names;
         end
 
         function pickPath(obj, kind)
@@ -937,6 +1001,7 @@ classdef AnalyzeSessionTabController < handle
             end
 
             % --- Etogram (filtered + categorized) ---------------------
+            obj.refreshEtogramActsList(r);
             obj.drawEtogram(r);
         end
 
@@ -1055,9 +1120,28 @@ classdef AnalyzeSessionTabController < handle
                 hold(ax, 'off'); return;
             end
             names0 = {r.Acts.ActName};
+            % R21: filter by EtogramActsListBox selection. Empty
+            % selection or never-populated listbox = show all.
+            selected = {};
+            if ~isempty(obj.EtogramActsListBox) ...
+                    && isvalid(obj.EtogramActsListBox)
+                selected = obj.EtogramActsListBox.Value;
+                if ischar(selected); selected = {selected}; end
+            end
+            if ~isempty(selected)
+                keep = ismember(names0, selected);
+                if ~any(keep)
+                    title(ax, 'Acts etogram — no acts selected');
+                    hold(ax, 'off'); return;
+                end
+                r2 = r; r2.Acts = r.Acts(keep);
+                names0 = {r2.Acts.ActName};
+            else
+                r2 = r;
+            end
             buckets = cellfun(@(nm) sphynx.util.actBucket(nm), names0, 'UniformOutput', false);
             [~, sortIdx] = sortActs(buckets, names0);
-            actsToPlot = r.Acts(sortIdx);
+            actsToPlot = r2.Acts(sortIdx);
             n = numel(actsToPlot);
 
             % Colors per bucket so the visual grouping is obvious.

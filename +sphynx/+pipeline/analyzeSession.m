@@ -326,27 +326,7 @@ function result = analyzeSession(config)
         end
     end
 
-    % --- 9. Zone acts -------------------------------------------------------
-    if ~isempty(Zones)
-        zoneSpec = legacyZoneActSpec();
-        for k = 1:size(zoneSpec, 1)
-            zoneName = zoneSpec{k, 1};
-            actName  = zoneSpec{k, 2};
-            partName = zoneSpec{k, 3};
-            zIdx = find(strcmp({Zones.name}, zoneName), 1);
-            if isempty(zIdx); continue; end
-            partIdx = find(strcmpi(bodyPartsNames, partName), 1);
-            if isempty(partIdx); continue; end
-            mask = sphynx.acts.zoneAct(Zones(zIdx).maskfilled, BPX, BPY, partIdx, minRunFrames);
-            Acts(end+1).ActName = actName; %#ok<AGROW>
-            Acts(end).ActArrayRefine = double(mask(:)');
-            Acts(end).Category = 'zone';
-            Acts(end).Definition = struct('zones', {{zoneName}}, ...
-                'bodyPart', partName);
-        end
-    end
-
-    % --- 9b. Custom acts library (optional) ----------------------------------
+    % --- 9. Custom acts library (optional) ----------------------------------
     % If config.acts.libraryPath points to a saved acts library, evaluate
     % every act in it and append the results to Acts. Names are unique-d
     % so a custom act named "rest" doesn't collide with the built-in.
@@ -718,29 +698,3 @@ function w = pickSmoothWindow(partName, smallWin, bigWin)
     end
 end
 
-function spec = legacyZoneActSpec()
-    % { zoneName,                actName,    bodyPartName }
-    %
-    % Zone names match what sphynx.zones.classifySquare and
-    % sphynx.preset.buildObjectZones actually produce in CreatePresetApp:
-    %   classifySquare 'corners-walls-center':
-    %     corners / walls / walls_and_corners / center /
-    %     arena_realout / corners_realout / walls_realout /
-    %     walls_and_corners_realout
-    %   buildObjectZones (R8.4 lowercase):
-    %     object1_real / object1_realout / object1_out / ... /
-    %     objectall_real / objectall_realout / objectall_out
-    %
-    % If a zone isn't in the preset (e.g. object3_realout for a 2-object
-    % session), the loop in step 9 silently skips it — no error.
-    spec = {
-        'corners_realout',        'corners',  'tailbase';
-        'walls_realout',          'walls',    'tailbase';
-        'center',                 'center',   'tailbase';
-        'object1_realout',        'object1',  'nose';
-        'object2_realout',        'object2',  'nose';
-        'object3_realout',        'object3',  'nose';
-        'object4_realout',        'object4',  'nose';
-        'objectall_realout',      'objects',  'nose';
-    };
-end
