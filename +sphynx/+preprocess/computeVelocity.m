@@ -60,8 +60,14 @@ function v = computeVelocity(x, y, frameRate, pxlPerCm, varargin)
     cleanedV(cleanedV > p.Results.MaxVelocityCmS) = p.Results.MaxVelocityCmS;
     cleanedV(cleanedV < 0) = 0;
 
-    % Smooth with edge-aware sgolayfilt via smoothTrace
-    v = sphynx.preprocess.smoothTrace(cleanedV, p.Results.SmoothWindow);
+    % Smooth velocity (a DERIVED signal) with the generic moving-
+    % average helper. Position traces already came through the
+    % user's smoothingMethod; here we just denoise the per-frame
+    % diff so a single noisy frame doesn't blow up the rest. Using
+    % smoothdata (base MATLAB) avoids the sgolayfilt "real-valued
+    % vector of type double" failures some MATLAB releases hit when
+    % the input drifts to single precision.
+    v = sphynx.util.smoothDerived(cleanedV, p.Results.SmoothWindow);
 
     % Final cap (smoothing can over- or under-shoot slightly)
     v(v > p.Results.MaxVelocityCmS) = p.Results.MaxVelocityCmS;

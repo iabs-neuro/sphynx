@@ -77,7 +77,10 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
                 sumDist = sumDist + sqrt(dx.^2 + dy.^2);
             end
             window = orDefault(p.Results.SmoothWindowFrames, makeOdd(round(p.Results.FrameRate)));
-            smoothed = sphynx.preprocess.smoothTrace(sumDist(:), window);
+            % Derived-signal denoising -- generic moving average so it
+            % doesn't depend on Signal Processing Toolbox precision
+            % nor on the user's per-part smoothingMethod setting.
+            smoothed = sphynx.util.smoothDerived(sumDist(:), window);
             raw = smoothed' < p.Results.AllBodyPartsThresholdPxl;
 
         case 'TailbasePaws'
@@ -90,7 +93,7 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
                 sumDist = sumDist + sqrt(dx.^2 + dy.^2);
             end
             window = orDefault(p.Results.SmoothWindowFrames, makeOdd(ceil(p.Results.FrameRate / 2)));
-            smoothed = sphynx.preprocess.smoothTrace(sumDist(:), window);
+            smoothed = sphynx.util.smoothDerived(sumDist(:), window);
             % Decide threshold: explicit cm value, or auto from
             % distribution of smoothed sumDist (cm). Auto wins when
             % the AutoThreshold flag is set.

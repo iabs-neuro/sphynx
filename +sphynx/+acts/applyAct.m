@@ -191,7 +191,7 @@ function b = applyRears(act, ctx, nFrames)
         % uses, so threshold semantics line up.
         if isfield(ctx, 'frameRate') && ctx.frameRate > 0
             win = max(3, 2*ceil(ctx.frameRate/4) + 1);  % nearest odd
-            sumPx = sphynx.preprocess.smoothTrace(sumPx(:), win)';
+            sumPx = sphynx.util.smoothDerived(sumPx(:), win)';
         end
         sumCm = sumPx / ctx.pixelsPerCm;
         % Default auto-threshold ON when the field is missing — this

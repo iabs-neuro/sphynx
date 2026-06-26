@@ -37,6 +37,14 @@ function out = smoothTrace(trace, windowLen, varargin)
     end
 
     trace = trace(:);
+    % sgolayfilt is picky on some MATLAB releases: it errors with
+    % "Value must be a real-valued vector of type double" if the
+    % input drifts to single precision or contains complex parts.
+    % Cast to double up front so the smoothing succeeds regardless
+    % of how the caller built the trace.
+    if ~isa(trace, 'double')
+        trace = double(trace);
+    end
     n = numel(trace);
     if n < windowLen
         out = trace;
@@ -45,6 +53,18 @@ function out = smoothTrace(trace, windowLen, varargin)
 
     polyOrder = min(p.Results.PolyOrder, windowLen - 1);
     halfPad = (windowLen - 1) / 2;
+
+    % Interior NaN runs make sgolayfilt either error or propagate
+    % NaN forward. Fill them linearly so we get a smooth interior;
+    % the caller is responsible for masking back out if it cares.
+    if any(isnan(trace))
+        trace = fillmissing(trace, 'linear', 'EndValues', 'nearest');
+        % If the whole trace was NaN even after fill, bail with
+        % zeros so sgolayfilt doesn't choke.
+        if any(isnan(trace))
+            trace(isnan(trace)) = 0;
+        end
+    end
 
     % Anti-symmetric mirror-padding: reflect around the endpoint value
     % so that linear trends are preserved across the boundary.
