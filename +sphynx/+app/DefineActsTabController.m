@@ -546,7 +546,10 @@ classdef DefineActsTabController < handle
         function buildLeftLibraryColumn(obj)
             left = uigridlayout(obj.OuterGrid, [6, 1]);
             left.Layout.Column = 1;
-            left.RowHeight = {28, 26, 28, '1x', 32, 80};
+            % Row 6 (info / log) doubled in height (80 -> 160) per user
+            % request; row 4 (acts listbox, '1x') shrinks to absorb the
+            % loss -- it was the only row with a flexible weight.
+            left.RowHeight = {28, 26, 28, '1x', 32, 160};
             left.RowSpacing = 4;
             left.Padding = [0 0 0 0];
 
@@ -809,11 +812,30 @@ classdef DefineActsTabController < handle
             obj.refreshZonePreview();
         end
 
-        function refreshZonePreview(obj)
+        function refreshZonePreview(obj, zoneNames, titleStr)
             % Show the preset's GoodVideoFrame (Options.GoodVideoFrame in
-            % the legacy preset shape) with the zone(s) selected in the
-            % Zones listbox overlaid as filled translucent regions plus
-            % a boundary line, mimicking the BehaviorAnalyzer style.
+            % the legacy preset shape) with the zone(s) overlaid as filled
+            % translucent regions plus a boundary line, mimicking the
+            % BehaviorAnalyzer style.
+            %
+            % Optional args:
+            %   zoneNames - cellstr of zone names to overlay. Defaults to
+            %               obj.SimpleZoneListBox.Value (the constructor
+            %               panel selection). The ActsListBox selection
+            %               handler passes the union of zones across the
+            %               selected acts instead.
+            %   titleStr  - title text drawn above the frame. Defaults to
+            %               "Preview - <zone names>" / "select zone(s) to
+            %               overlay" / "load preset first".
+            if nargin < 2 || isempty(zoneNames)
+                zoneNames = obj.SimpleZoneListBox.Value;
+            end
+            if ischar(zoneNames) || isstring(zoneNames)
+                zoneNames = cellstr(zoneNames);
+            end
+            zoneNames = zoneNames(~strcmp(zoneNames, '<any zone>'));
+            useDefaultTitle = nargin < 3 || isempty(titleStr);
+
             ax = obj.PreviewAxes;
             if isempty(ax) || ~isvalid(ax); return; end
             cla(ax); ax.XTick = []; ax.YTick = [];
@@ -823,9 +845,6 @@ classdef DefineActsTabController < handle
                 return;
             end
             frame = obj.extractPresetFrame(pd);
-            sel = obj.SimpleZoneListBox.Value;
-            if ischar(sel); sel = {sel}; end
-            sel = sel(~strcmp(sel, '<any zone>'));
             zones = [];
             if isfield(pd, 'Zones'); zones = pd.Zones; end
             if isempty(frame)
@@ -834,10 +853,10 @@ classdef DefineActsTabController < handle
             end
             % Compose: blend zone masks with the frame (BA-style 50/50)
             % so the zone tint is visible even on bright background.
-            if ~isempty(sel) && ~isempty(zones)
+            if ~isempty(zoneNames) && ~isempty(zones)
                 mask = false(size(frame, 1), size(frame, 2));
-                for k = 1:numel(sel)
-                    idx = find(strcmp({zones.name}, sel{k}), 1);
+                for k = 1:numel(zoneNames)
+                    idx = find(strcmp({zones.name}, zoneNames{k}), 1);
                     if isempty(idx); continue; end
                     if isfield(zones(idx), 'maskfilled') ...
                             && ~isempty(zones(idx).maskfilled)
@@ -849,11 +868,10 @@ classdef DefineActsTabController < handle
                 end
             end
             imshow(frame, 'Parent', ax); hold(ax, 'on');
-            % Boundary lines for clarity
-            if ~isempty(sel) && ~isempty(zones)
-                colors = lines(max(1, numel(sel)));
-                for k = 1:numel(sel)
-                    idx = find(strcmp({zones.name}, sel{k}), 1);
+            if ~isempty(zoneNames) && ~isempty(zones)
+                colors = lines(max(1, numel(zoneNames)));
+                for k = 1:numel(zoneNames)
+                    idx = find(strcmp({zones.name}, zoneNames{k}), 1);
                     if isempty(idx); continue; end
                     if isfield(zones(idx), 'maskfilled') ...
                             && ~isempty(zones(idx).maskfilled)
@@ -864,10 +882,15 @@ classdef DefineActsTabController < handle
                         end
                     end
                 end
-                title(ax, sprintf('Preview — %s', strjoin(sel, ', ')));
+                if useDefaultTitle
+                    titleStr = sprintf('Preview — %s', strjoin(zoneNames, ', '));
+                end
             else
-                title(ax, 'Preview — select zone(s) to overlay');
+                if useDefaultTitle
+                    titleStr = 'Preview — select zone(s) to overlay';
+                end
             end
+            title(ax, titleStr, 'Interpreter', 'none');
             hold(ax, 'off');
         end
 
@@ -1322,11 +1345,40 @@ classdef DefineActsTabController < handle
         end
 
         function refreshInfoForSelected(obj)
+            % Library list-box selection handler. Three jobs:
+            %  1. Push the canonical text description of the FIRST
+            %     selected act into the info / log textarea (unchanged).
+            %  2. Collect the union of zones referenced by ALL selected
+            %     acts and overlay them on the preview axes.
+            %  3. Build a compact one-line params string (body part,
+            %     speed gate, zone op) and use it as the preview title
+            %     so the user can read these without clicking through
+            %     each act.
             sel = obj.ActsListBox.Value;
             if isempty(sel); obj.InfoTextArea.Value = {''}; return; end
-            idx = find(strcmp({obj.State.acts.name}, sel), 1);
-            if isempty(idx); return; end
-            obj.InfoTextArea.Value = sphynx.acts.actToDescription(obj.State.acts(idx));
+            if ischar(sel) || isstring(sel); sel = cellstr(sel); end
+
+            % (1) Info textarea -- description of first selected.
+            idx = find(strcmp({obj.State.acts.name}, sel{1}), 1);
+            if ~isempty(idx)
+                obj.InfoTextArea.Value = sphynx.acts.actToDescription(obj.State.acts(idx));
+            end
+
+            % (2) + (3) Zones to draw + title.
+            allZones = {};
+            descParts = {};
+            for k = 1:numel(sel)
+                i = find(strcmp({obj.State.acts.name}, sel{k}), 1);
+                if isempty(i); continue; end
+                a = obj.State.acts(i);
+                if isfield(a, 'zones') && ~isempty(a.zones)
+                    allZones = [allZones, a.zones(:)']; %#ok<AGROW>
+                end
+                descParts{end+1} = formatActParamsLine(a); %#ok<AGROW>
+            end
+            allZones = unique(allZones, 'stable');
+            titleStr = strjoin(descParts, '   |   ');
+            obj.refreshZonePreview(allZones, titleStr);
         end
 
         function pickLibraryPath(obj)
@@ -1381,6 +1433,37 @@ function rgb = semanticColor(kind)
         case 'info';     rgb = [0.78 0.95 0.95];
         otherwise;       rgb = [0.94 0.94 0.94];
     end
+end
+
+function s = formatActParamsLine(a)
+    % Single-line summary of an act's parameters for the preview
+    % title. Includes name, body part(s), speed gate and zone op.
+    % Optional fields are skipped silently when empty.
+    bits = {a.name};
+    if isfield(a, 'bodyPart') && ~isempty(a.bodyPart)
+        bits{end + 1} = sprintf('bp=%s', a.bodyPart);
+    end
+    if isfield(a, 'bodyParts') && ~isempty(a.bodyParts) ...
+            && iscell(a.bodyParts)
+        bits{end + 1} = sprintf('parts=%s', strjoin(a.bodyParts, '+'));
+    end
+    smin = 0; smax = Inf;
+    if isfield(a, 'speedMin') && ~isempty(a.speedMin); smin = a.speedMin; end
+    if isfield(a, 'speedMax') && ~isempty(a.speedMax); smax = a.speedMax; end
+    if smin > 0 || isfinite(smax)
+        if isfinite(smax)
+            bits{end + 1} = sprintf('v[%g..%g]cm/s', smin, smax);
+        else
+            bits{end + 1} = sprintf('v>=%g cm/s', smin);
+        end
+    end
+    if isfield(a, 'zoneOp') && ~isempty(a.zoneOp) && ~strcmp(a.zoneOp, 'OR')
+        bits{end + 1} = sprintf('op=%s', a.zoneOp);
+    end
+    if isfield(a, 'specialKind') && ~isempty(a.specialKind)
+        bits{end + 1} = sprintf('kind=%s', a.specialKind);
+    end
+    s = strjoin(bits, ' ');
 end
 
 function updateMakeVideoDlg(dlg, frac, msg)
