@@ -1554,9 +1554,11 @@ end
 
 function img = stampNumberCorner(img, txt, corner)
     % Stamp a short text label inside a flush-to-the-corner SQUARE
-    % overlay that is 10% of min(H, W) on each side (pixels). A
-    % semi-transparent black plate gives the white text contrast
-    % against the underlying video.
+    % overlay that is 10% of min(H, W) on each side (pixels). v19.2:
+    % SOLID YELLOW plate + BLACK text -- the v19.1 50/50-darkened
+    % background + white text was invisible against the bright
+    % Barnes-floor pixels in a real session. Yellow vs. black is
+    % maximum contrast and works on any underlying video colour.
     % Supports corners: 'top-right' (default), 'bottom-right',
     % 'top-left', 'bottom-left'.
     persistent cache
@@ -1581,9 +1583,12 @@ function img = stampNumberCorner(img, txt, corner)
     end
     x1 = x0 + side - 1; y1 = y0 + side - 1;
 
-    % Darken the square area so the text reads (50/50 blend with black).
+    % Solid yellow plate -- guaranteed contrast vs. any video pixel.
+    yellow = uint8([255 220 0]);
     region = img(y0:y1, x0:x1, :);
-    region = uint8(round(single(region) * 0.5));
+    region(:, :, 1) = yellow(1);
+    region(:, :, 2) = yellow(2);
+    region(:, :, 3) = yellow(3);
     img(y0:y1, x0:x1, :) = region;
 
     % Render text bitmap sized so it fills most of the square. Cache
@@ -1607,16 +1612,15 @@ function img = stampNumberCorner(img, txt, corner)
     ty0 = y0 + floor((side - bh) / 2);
     tx1 = tx0 + bw - 1; ty1 = ty0 + bh - 1;
 
-    % Stamp pixels brighter than threshold (text is rendered white on
-    % black, so the threshold isolates the glyph foreground).
+    % Bitmap is rendered white-on-black; mask out the glyph and
+    % paint it BLACK onto the yellow plate (high-contrast text).
     gray = sum(single(bm), 3);
     mask = gray > 90;
     if ~any(mask(:)); return; end
     region = img(ty0:ty1, tx0:tx1, :);
     for c = 1:3
         rc = region(:, :, c);
-        bc = bm(:, :, c);
-        rc(mask) = bc(mask);
+        rc(mask) = 0;
         region(:, :, c) = rc;
     end
     img(ty0:ty1, tx0:tx1, :) = region;

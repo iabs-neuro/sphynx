@@ -44,14 +44,16 @@ function testHoleNamingIsHoleNotObject(testCase)
     verifyFalse(testCase, hasAct(acts, 'body_at_object1'));
 end
 
-function testNoseActsGateOnRealZone(testCase)
-    % v3 switch: nose acts now use the strict _real zone (the hole
-    % polygon itself) instead of the inflated _realout halo.
+function testNoseActsGateOnRealoutZone(testCase)
+    % v3.1: nose acts gate on the inflated _realout halo. v3 used
+    % strict _real but on real superanimal DLC the hole polygon
+    % (~8x8 px) + ~10 px nose jitter made the strict-zone hit
+    % rate effectively zero. _realout is the practical detector.
     acts = sphynx.acts.actsLibraryBarnesDefaults();
-    verifyEqual(testCase, getAct(acts, 'nose_at_target').zones,    {'target_real'});
-    verifyEqual(testCase, getAct(acts, 'nose_at_platform').zones,  {'platform_real'});
-    verifyEqual(testCase, getAct(acts, 'nose_at_hole1').zones,     {'object1_real'});
-    verifyEqual(testCase, getAct(acts, 'nose_at_hole19').zones,    {'object19_real'});
+    verifyEqual(testCase, getAct(acts, 'nose_at_target').zones,    {'target_realout'});
+    verifyEqual(testCase, getAct(acts, 'nose_at_platform').zones,  {'platform_realout'});
+    verifyEqual(testCase, getAct(acts, 'nose_at_hole1').zones,     {'object1_realout'});
+    verifyEqual(testCase, getAct(acts, 'nose_at_hole19').zones,    {'object19_realout'});
 end
 
 function testBodyActsGateOnRealoutZone(testCase)
@@ -112,19 +114,19 @@ function testMouseInsidePlatformPresent(testCase)
 end
 
 function testNoseAtAnyHoleListsHolesOnly(testCase)
-    % v3: any_hole gates on the strict _real zones AND excludes
-    % BOTH platform AND target. So we get exactly N zones, one per
-    % hole, listed by object<N>_real (zone naming preserved).
+    % v3.1: any_hole gates on the inflated _realout zones (matching
+    % the rest of the nose_at_* family) and excludes BOTH platform
+    % AND target. Exactly N zones, one per hole.
     acts = sphynx.acts.actsLibraryBarnesDefaults();
     zns = getAct(acts, 'nose_at_any_hole').zones;
     verifyEqual(testCase, numel(zns), 19);
     verifyFalse(testCase, any(strcmp(zns, 'target_real')));
     verifyFalse(testCase, any(strcmp(zns, 'target_realout')));
-    verifyFalse(testCase, any(strcmp(zns, 'platform_real')));
-    verifyFalse(testCase, any(strcmp(zns, 'objectall_real')));
+    verifyFalse(testCase, any(strcmp(zns, 'platform_realout')));
+    verifyFalse(testCase, any(strcmp(zns, 'objectall_realout')));
     for n = 1:19
-        verifyTrue(testCase, any(strcmp(zns, sprintf('object%d_real', n))), ...
-            sprintf('missing object%d_real', n));
+        verifyTrue(testCase, any(strcmp(zns, sprintf('object%d_realout', n))), ...
+            sprintf('missing object%d_realout', n));
     end
 end
 

@@ -7,29 +7,36 @@ function acts = actsLibraryBarnesDefaults(varargin)
 %   acts = sphynx.acts.actsLibraryBarnesDefaults('NumObjects', 19)
 %
 % Three act families per zone (target + N escape holes + platform):
-%   nose_at_<zone>    nose / <zone>_real      -- nose-poke into the
-%                     hole boundary itself (the strict definition of
-%                     a visit).
+%   nose_at_<zone>    nose / <zone>_realout   -- nose in the
+%                     inflated halo around the hole. v3.1: was
+%                     <zone>_real but on real superanimal DLC the
+%                     hole polygon (~8x8 px) plus DLC jitter
+%                     (~10 px) made the strict-zone hit rate
+%                     effectively zero. _realout is the practical
+%                     nose-poke detector.
 %   body_at_<zone>    bodycenter / <zone>_realout -- body in the
 %                     inflated halo around the hole (broader
 %                     "near the hole" signal).
 %   mouse_inside_<zone>  bodycenter + tailbase + headcenter, all
-%                     three inside <zone>_real. Implemented as a
-%                     special act with specialKind 'allInZone' so
-%                     the framework evaluates the AND of the
-%                     per-body-part zone tests in one pass.
+%                     three inside <zone>_real. Stays on the
+%                     strict polygon -- it only fires when the
+%                     mouse is genuinely curled INSIDE the hole.
+%                     Implemented as a special act with
+%                     specialKind 'allInZone' so the framework
+%                     evaluates the AND of per-body-part zone
+%                     tests in one pass.
 %
 % Layout (NumObjects = 19 by default, matching Demo/BARNES_v2):
-%   1   nose_at_target          (nose / target_real)
-%   2-20  nose_at_hole1..19     (nose / objectN_real)
+%   1   nose_at_target          (nose / target_realout)
+%   2-20  nose_at_hole1..19     (nose / objectN_realout)
 %   21  body_at_target          (bodycenter / target_realout)
 %   22-40 body_at_hole1..19     (bodycenter / objectN_realout)
-%   41  nose_at_platform        (nose / platform_real)
+%   41  nose_at_platform        (nose / platform_realout)
 %   42  body_at_platform        (bodycenter / platform_realout)
 %   43  mouse_inside_target     (3 parts / target_real)
 %   44-62 mouse_inside_hole1..19 (3 parts / objectN_real)
 %   63  mouse_inside_platform   (3 parts / platform_real)
-%   64  nose_at_any_hole        (nose / OR(object1_real..objectN_real),
+%   64  nose_at_any_hole        (nose / OR(object1_realout..N_realout),
 %                                target NOT included; platform
 %                                NOT included)
 %
@@ -46,14 +53,14 @@ function acts = actsLibraryBarnesDefaults(varargin)
 
     acts = sphynx.acts.emptyActsArray();
 
-    % --- nose_at_<zone>: nose in the strict hole zone --------------------
+    % --- nose_at_<zone>: nose in the inflated halo around the hole ------
     acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'nose_at_target', 'Zones', {'target_real'}, ...
+        'Name', 'nose_at_target', 'Zones', {'target_realout'}, ...
         'ZoneOp', 'OR', 'BodyPart', 'nose');
     for n = 1:nObj
         acts(end+1) = sphynx.acts.buildSimpleAct( ...
             'Name', sprintf('nose_at_hole%d', n), ...
-            'Zones', {sprintf('object%d_real', n)}, ...
+            'Zones', {sprintf('object%d_realout', n)}, ...
             'ZoneOp', 'OR', 'BodyPart', 'nose'); %#ok<AGROW>
     end
 
@@ -70,7 +77,7 @@ function acts = actsLibraryBarnesDefaults(varargin)
 
     % --- platform (start) family ----------------------------------------
     acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'nose_at_platform', 'Zones', {'platform_real'}, ...
+        'Name', 'nose_at_platform', 'Zones', {'platform_realout'}, ...
         'ZoneOp', 'OR', 'BodyPart', 'nose');
     acts(end+1) = sphynx.acts.buildSimpleAct( ...
         'Name', 'body_at_platform', 'Zones', {'platform_realout'}, ...
@@ -87,7 +94,7 @@ function acts = actsLibraryBarnesDefaults(varargin)
     % --- nose_at_any_hole: OR over hole1..holeN, target excluded --------
     anyHoleZones = cell(1, nObj);
     for n = 1:nObj
-        anyHoleZones{n} = sprintf('object%d_real', n);
+        anyHoleZones{n} = sprintf('object%d_realout', n);
     end
     acts(end+1) = sphynx.acts.buildSimpleAct( ...
         'Name', 'nose_at_any_hole', 'Zones', anyHoleZones, ...
