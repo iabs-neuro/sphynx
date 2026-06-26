@@ -1,8 +1,14 @@
-// sphynx defaults reference.
-// Pipeline (sphynx.pipeline.defaultConfig) + every tab's user-
-// facing defaults. Enum fields carry "// a | b | c" inline.
+// sphynx defaults reference + runtime override.
+// Each tab section carries every default that tab controls --
+// pipeline knobs (cfg.preprocess.*, cfg.acts.*, ...) AND UI
+// initial values. Edit a value here and re-run analyzeSession or
+// runBatch and it'll be picked up automatically; auto-loaded from
+// the repo root by sphynx.io.readDefaultsJsonc.
+//
+// Enum fields carry "// a | b | c" inline. JSON-with-Comments;
+// stdlib parsers fall over `//`, the loader strips them first.
 {
-  // ===== pipeline (analyzeSession) =================================
+  // ===== global / pipeline plumbing =================================
   "paths": {
     "video":              "",
     "dlc":                "",
@@ -10,21 +16,47 @@
     "outDir":             "",
     "preprocessSettings": ""
   },
-
   "range": {
     "startFrame": 1,
     "endFrame":   0,
     "autoStart":  false
   },
+  "io": {
+    "saveWorkspace": true,
+    "sessionName":   ""
+  },
+  "viz": {
+    "enabled":   false,
+    "headless":  true,
+    "makeVideo": false
+  },
+  "verbose": "info",   // debug | info | warn | error
 
-  "preprocess": {
+  // ===== tabs (in app order) ========================================
+
+  // ---- 1. Create Preset --------------------------------------------
+  "createPreset": {
+    "arenaGeometry":     "Square",                // Square | Polygon | Circle | Ellipse | O-maze
+    "squareStrategy":    "corners-walls-center",  // corners-walls-center | strips | none
+    "circleStrategy":    "circle-with-center",    // circle | circle-with-center | circle-rings
+    "stripDirection":    "horizontal",            // horizontal | vertical
+    "objectsNumber":     0,
+    "objectZoneWidthCm": 2.5,
+    "wallWidthCm":       12,
+    "middleWidthCm":     20,
+    "centerDiameterCm":  20,
+    "numStrips":         3
+  },
+
+  // ---- 2. Preprocess Tracking --------------------------------------
+  "preprocessTab": {
+    // pipeline (cfg.preprocess.*)
     "individual":           "",
     "likelihoodThreshold":  0.95,
     "smoothWindowSmallSec": 0.10,
     "smoothWindowBigSec":   0.25,
     "maxVelocityCmS":       50,
     "interpolationMethod":  "pchip",   // pchip | linear | spline | makima
-
     "perPart": {
       "bigParts": ["mass centre", "mass center",
                    "bodycenter",  "body_center",  "center",
@@ -34,165 +66,119 @@
       "smoothingPolyOrder":   3,
       "notFoundThresholdPct": 90
     },
-
     "outlier": {
       "velocityJump": { "enabled": true,  "maxVelocityCmS": 50 },
       "hampel":       { "enabled": false, "windowSec": 0.25, "windowSize": 7, "nSigma": 3 },
       "kalman":       { "processNoise": 0.01, "measNoiseScale": 1.0 }
-    }
-  },
-
-  "acts": {
-    "libraryPath":                    "",
-    "restThresholdCmS":               1,
-    "locThresholdCmS":                5,
-    "minRunSeconds":                  0.25,
-    "freezingMode":                   "HeadAndCenter", // HeadAndCenter | NoseAndCenter | AllBodyParts
-    "rearMode":                       "TailbasePaws",  // TailbasePaws | AllBodyParts
-    "rearThresholdAllBodyPartsPxl":   170,
-    "rearThresholdTailbasePawsCm":    2.8,
-    "rearAutoThreshold":              true
-  },
-
-  "io": {
-    "saveWorkspace": true,
-    "sessionName":   ""
-  },
-
-  "viz": {
-    "enabled":   false,
-    "headless":  true,
-    "makeVideo": false
-  },
-
-  "verbose": "info",   // debug | info | warn | error
-
-  // ===== tabs =======================================================
-
-  // ---- CreatePreset ---------
-  "createPreset": {
-    "arenaGeometry":   "Square",                // Square | Polygon | Circle | Ellipse | O-maze
-    "squareStrategy":  "corners-walls-center",  // corners-walls-center | strips | none
-    "circleStrategy":  "circle-with-center",    // circle | circle-with-center | circle-rings
-    "stripDirection":  "horizontal",            // horizontal | vertical
-    "objectZoneWidthCm":   2.5,
-    "wallWidthCm":         12,
-    "middleWidthCm":       20,
-    "centerDiameterCm":    20,
-    "numStrips":           3,
-    "objectsNumber":       0
-  },
-
-  // ---- Preprocess Tracking ----
-  "preprocessTab": {
-    "savePlots":        true,
-    "showRaw":          true,
-    "showInterp":       true,
-    "showSmooth":       true,
-    "xUnits":           "sec",   // frame | sec | min
+    },
+    // UI (tab-only)
+    "savePlots":  true,
+    "showRaw":    true,
+    "showInterp": true,
+    "showSmooth": true,
+    "xUnits":     "sec",   // frame | sec | min
     "autoThreshold": {
-      "method":          "otsu", // otsu | knee | quantile | preset
-      "quantileParam":   0.05,
-      "presetParam":     0.95
+      "method":        "otsu",   // otsu | knee | quantile | preset
+      "quantileParam": 0.05,
+      "presetParam":   0.95
     }
   },
 
-  // ---- Define Acts (simple-act builder defaults) ----
+  // ---- 3. Define Acts ----------------------------------------------
   "defineActs": {
-    "simpleZoneOp":      "OR",        // OR (only one supported in current UI)
-    "simpleSpeedMin":    0,
-    "simpleSpeedMax":    null,        // null = Inf
-    "simpleMinDurSec":   0.25,
-    "simpleMaxGapSec":   0.25,
-    "complexOp":         "intersect", // intersect | union | exclude | sequence
-    "complexSeqDelaySec": 0,
+    // pipeline (cfg.acts.*)
+    "libraryPath":                  "",
+    "restThresholdCmS":             1,
+    "locThresholdCmS":              5,
+    "minRunSeconds":                0.25,
+    "freezingMode":                 "HeadAndCenter", // HeadAndCenter | NoseAndCenter | AllBodyParts
+    "rearMode":                     "TailbasePaws",  // TailbasePaws | AllBodyParts
+    "rearThresholdAllBodyPartsPxl": 170,
+    "rearThresholdTailbasePawsCm":  2.8,
+    "rearAutoThreshold":            true,
+    // UI (simple + complex act builder)
+    "simpleZoneOp":         "OR",
+    "simpleSpeedMin":       0,
+    "simpleSpeedMax":       null,        // null = Inf
+    "simpleMinDurSec":      0.25,
+    "simpleMaxGapSec":      0.25,
+    "complexOp":            "intersect", // intersect | union | exclude | sequence
+    "complexSeqDelaySec":   0,
     "makeVideoDurationSec": 5
   },
 
-  // ---- Analyze Session ----
+  // ---- 4. Analyze Session ------------------------------------------
   "analyzeTab": {
     "mainVideo": {
-      "enabled":              false,
-      "startSec":             0,
-      "durationSec":          30,
-      "showTrajectory":       true,
-      "showVelocity":         true,
-      "showActsList":         true,
-      "showZones":            true,
-      "presentationStyle":    false
+      "enabled":           false,
+      "startSec":          0,
+      "durationSec":       30,
+      "showTrajectory":    true,
+      "showVelocity":      true,
+      "showActsList":      true,
+      "showZones":         true,
+      "presentationStyle": false
     },
-    "actsVideo": {
-      "durationSec":          5
-    },
-    "plots": {
-      "saveSessionPlots":     true,
-      "savePerBodyPart":      false,
-      "heatmapBinCm":         4
-    }
+    "actsVideo":   { "durationSec": 5 },
+    "plots":       { "saveSessionPlots": true, "savePerBodyPart": false, "heatmapBinCm": 4 }
   },
 
-  // ---- Batch Analysis ----
+  // ---- 5. Batch Analysis -------------------------------------------
   "batchTab": {
     "mainVideo": {
-      "startSec":             0,
-      "durationSec":          30,
-      "showTrajectory":       true,
-      "showVelocity":         true,
-      "showActsList":         true,
-      "showZones":            true
+      "startSec":       0,
+      "durationSec":    30,
+      "showTrajectory": true,
+      "showVelocity":   true,
+      "showActsList":   true,
+      "showZones":      true
     },
-    "actsVideo": {
-      "durationSec":          5
-    },
-    "plots": {
-      "saveSessionPlots":     true,
-      "savePerBodyPart":      false,
-      "heatmapBinCm":         4
-    },
-    "saveMat":                true,
-    "aggregate":              true
+    "actsVideo":   { "durationSec": 5 },
+    "plots":       { "saveSessionPlots": true, "savePerBodyPart": false, "heatmapBinCm": 4 },
+    "saveMat":     true,
+    "aggregate":   true
   },
 
-  // ---- Make Output Table ----
+  // ---- 6. Make Output Table ----------------------------------------
   "makeOutputTable": {
-    "nanHandling": "keep",                  // keep | zero
+    "nanHandling": "keep",                 // keep | zero
     "sortBy":      "line,group,mouse",
-    "distUnit":    "cm",                    // cm | m
-    "distScope":   "all"                    // all | general
+    "distUnit":    "cm",                   // cm | m
+    "distScope":   "all"                   // all | general
   },
 
-  // ---- Plot Data ----
+  // ---- 7. Plot Data ------------------------------------------------
   "plotData": {
-    "errorBar":       "SEM",                // SEM | SD | 95CI | none
-    "showPoints":     true,
-    "colormap":       "lines",
-    "font":           "Arial",              // Arial | Helvetica | Calibri | Times | Courier
-    "fontSize":       11,
-    "titleFontSize":  13,
-    "axisFontSize":   11,
-    "autoStats":      true,
-    "showStars":      true,
-    "test":           "auto",               // auto | ttest | paired-ttest | anova1 | anova2 | rm-anova
-    "correction":     "auto",               // auto | tukey | bonferroni | holm | none
-    "factor1":        "<auto session>",
-    "factor2":        "<none>"
+    "errorBar":      "SEM",   // SEM | SD | 95CI | none
+    "showPoints":    true,
+    "colormap":      "lines",
+    "font":          "Arial", // Arial | Helvetica | Calibri | Times | Courier
+    "fontSize":      11,
+    "titleFontSize": 13,
+    "axisFontSize":  11,
+    "autoStats":     true,
+    "showStars":     true,
+    "test":          "auto",  // auto | ttest | paired-ttest | anova1 | anova2 | rm-anova
+    "correction":    "auto",  // auto | tukey | bonferroni | holm | none
+    "factor1":       "<auto session>",
+    "factor2":       "<none>"
   },
 
-  // ---- Preprocess Video (metadata-fix tab) ----
+  // ---- 8. Preprocess Video (metadata-fix) --------------------------
   "preprocessVideo": {
     "targetFPS": 30
   },
 
-  // ---- Synthetic Data ----
+  // ---- 9. Synthetic Data -------------------------------------------
   "syntheticData": {
-    "nFrames":      6000,
-    "nBodyParts":   10,
-    "frameWidth":   800,
-    "frameHeight":  600,
-    "frameRate":    30,
-    "pixelsPerCm":  5,
-    "motionModel":  "random_walk",  // random_walk | circular | OU
-    "outlierMode":  "mixed",        // none | spikes | long_gap | poor_likelihood | mixed
-    "seed":         42
+    "nFrames":     6000,
+    "nBodyParts":  10,
+    "frameWidth":  800,
+    "frameHeight": 600,
+    "frameRate":   30,
+    "pixelsPerCm": 5,
+    "motionModel": "random_walk",  // random_walk | circular | OU
+    "outlierMode": "mixed",        // none | spikes | long_gap | poor_likelihood | mixed
+    "seed":        42
   }
 }

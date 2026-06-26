@@ -84,4 +84,15 @@ function cfg = defaultConfig()
     cfg.viz.makeVideo  = false;
 
     cfg.verbose = 'info';
+
+    % Auto-pull repo-root sphynx_defaults.jsonc if present so the
+    % values the user edited there become THIS run's defaults.
+    % Applied here (vs. inside analyzeSession) so the caller can still
+    % override any field afterward -- jsonc seeds defaults, caller wins.
+    try
+        cfg = sphynx.pipeline.applyJsoncDefaults(cfg);
+    catch
+        % Silent: a missing / malformed jsonc must not break the
+        % pipeline. readDefaultsJsonc already warns on parse errors.
+    end
 end
