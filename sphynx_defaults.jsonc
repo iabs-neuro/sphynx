@@ -110,7 +110,7 @@
   // ---- 4. Analyze Session ------------------------------------------
   "analyzeTab": {
     "mainVideo": {
-      "enabled":           false,
+      "enabled":           true,
       "startSec":          0,
       "durationSec":       30,
       "showTrajectory":    true,

@@ -26,6 +26,8 @@ classdef AnalyzeSessionTabController < handle
         DLCButton
         OutDirButton
         ActsLibraryButton
+        PreprocessSettingsButton
+        PreprocessSettingsPathField
 
         % Run + results (speed thresholds + freezing/rear modes
         % live in defaultConfig.m; the etogram bucket order is
@@ -106,6 +108,10 @@ classdef AnalyzeSessionTabController < handle
             if ~isempty(obj.ActsLibraryPathField) ...
                     && ~isempty(obj.ActsLibraryPathField.Value)
                 cfg.acts.libraryPath = obj.ActsLibraryPathField.Value;
+            end
+            if ~isempty(obj.PreprocessSettingsPathField) ...
+                    && ~isempty(obj.PreprocessSettingsPathField.Value)
+                cfg.paths.preprocessSettings = obj.PreprocessSettingsPathField.Value;
             end
             cfg.io.saveWorkspace = ~isempty(cfg.paths.outDir);
             cfg.viz.headless = true;
@@ -437,27 +443,32 @@ classdef AnalyzeSessionTabController < handle
         end
 
         function buildLeftConfig(obj, parent)
-            left = uigridlayout(parent, [5, 1]);
+            left = uigridlayout(parent, [6, 1]);
             left.Layout.Column = 1;
-            % Row layout: loader strip / Options panel / settings
-            % save-load / run+render buttons / log.
-            left.RowHeight = {64, '1x', 30, 36, 90};
+            % R20 layout: loader paths / loader settings / options /
+            % save-load row / run+render buttons / log. Total options
+            % row gets a fixed height so the log row absorbs the
+            % freed space (acts videos box shrunk ~30%).
+            left.RowHeight = {64, 64, 410, 30, 36, '1x'};
             left.RowSpacing = 4;
             left.Padding = [0 0 0 0];
 
-            obj.buildLoaderStrip(left);
+            obj.buildLoaderPaths(left);
+            obj.buildLoaderSettings(left);
             obj.buildOptionsPanel(left);
             obj.buildSettingsRow(left);
             obj.buildRunRow(left);
             obj.LogTextArea = uitextarea(left, 'Editable', 'off', 'Value', {''});
-            obj.LogTextArea.Layout.Row = 5;
+            obj.LogTextArea.Layout.Row = 6;
         end
 
-        function buildLoaderStrip(obj, parent)
-            loader = uigridlayout(parent, [2, 6]);
+        function buildLoaderPaths(obj, parent)
+            % R20 row 1: project paths (Root + Preset + Video + DLC +
+            % Out dir). Mirrors the Batch tab loader.
+            loader = uigridlayout(parent, [2, 5]);
             loader.Layout.Row = 1;
             loader.RowHeight = {28, 26};
-            loader.ColumnWidth = repmat({'1x'}, 1, 6);
+            loader.ColumnWidth = repmat({'1x'}, 1, 5);
             loader.RowSpacing = 4;
             loader.ColumnSpacing = 4;
             loader.Padding = [0 0 0 0];
@@ -478,9 +489,6 @@ classdef AnalyzeSessionTabController < handle
             obj.OutDirButton = uibutton(loader, 'Text', 'Out dir', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('OutDir'));
-            obj.ActsLibraryButton = uibutton(loader, 'Text', 'Acts lib', ...
-                'BackgroundColor', semanticColor('action'), ...
-                'ButtonPushedFcn', @(~,~) obj.pickPath('ActsLibrary'));
 
             obj.RootPathField = uieditfield(loader, 'text', 'Value', '', ...
                 'Tooltip', 'Project root');
@@ -492,10 +500,36 @@ classdef AnalyzeSessionTabController < handle
                 'Tooltip', 'DLC csv');
             obj.OutDirPathField = uieditfield(loader, 'text', 'Value', '', ...
                 'Tooltip', 'Output dir for plots/videos/.mat');
-            obj.ActsLibraryPathField = uieditfield(loader, 'text', 'Value', '', ...
-                'Tooltip', 'Optional acts library .mat (built-ins used if empty)');
 
             obj.inheritRootFromParentApp();
+        end
+
+        function buildLoaderSettings(obj, parent)
+            % R20 row 2: settings files (Preprocess + Acts library).
+            % Same layout idiom as the Batch tab so the two tabs feel
+            % aligned.
+            row = uigridlayout(parent, [2, 2]);
+            row.Layout.Row = 2;
+            row.RowHeight = {28, 26};
+            row.ColumnWidth = {'1x', '1x'};
+            row.RowSpacing = 4;
+            row.ColumnSpacing = 4;
+            row.Padding = [0 0 0 0];
+
+            obj.PreprocessSettingsButton = uibutton(row, ...
+                'Text', 'Preproc settings', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'Tooltip', '<exp>_PreprocessSettings.mat from Preprocess Tracking. Empty = auto-discover from DLC parent dir.', ...
+                'ButtonPushedFcn', @(~,~) obj.pickPath('Preprocess'));
+            obj.ActsLibraryButton = uibutton(row, 'Text', 'Acts library', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'Tooltip', 'Acts library .mat from Define Acts (built-ins used if empty)', ...
+                'ButtonPushedFcn', @(~,~) obj.pickPath('ActsLibrary'));
+
+            obj.PreprocessSettingsPathField = uieditfield(row, 'text', 'Value', '', ...
+                'Tooltip', 'Preprocess settings .mat');
+            obj.ActsLibraryPathField = uieditfield(row, 'text', 'Value', '', ...
+                'Tooltip', 'Optional acts library .mat (built-ins used if empty)');
         end
 
         function buildOptionsPanel(obj, parent)
@@ -503,8 +537,11 @@ classdef AnalyzeSessionTabController < handle
             % Trajectory plots. These knobs are saved/loaded as a struct
             % so the same setup can be reused in Batch.
             opts = uigridlayout(parent, [3, 1]);
-            opts.Layout.Row = 2;
-            opts.RowHeight = {180, '1x', 56};
+            opts.Layout.Row = 3;
+            % R20: acts videos row trimmed ~30% (was '1x' = flex, now
+            % fixed 170 px) so the log row underneath absorbs the
+            % freed space.
+            opts.RowHeight = {180, 170, 56};
             opts.RowSpacing = 4;
             opts.Padding = [0 0 0 0];
 
@@ -519,7 +556,7 @@ classdef AnalyzeSessionTabController < handle
             mvGrid.Padding = [4 4 4 4];
 
             obj.MainVideoEnableCheckbox = uicheckbox(mvGrid, ...
-                'Text', 'Render', 'Value', false);
+                'Text', 'Render', 'Value', true);
             obj.MainVideoEnableCheckbox.Layout.Row = 1;
             obj.MainVideoEnableCheckbox.Layout.Column = [1 4];
 
@@ -605,7 +642,7 @@ classdef AnalyzeSessionTabController < handle
 
         function buildSettingsRow(obj, parent)
             row = uigridlayout(parent, [1, 2]);
-            row.Layout.Row = 3;
+            row.Layout.Row = 4;
             row.RowHeight = {28};
             row.ColumnWidth = {'1x', '1x'};
             row.ColumnSpacing = 4;
@@ -621,7 +658,7 @@ classdef AnalyzeSessionTabController < handle
 
         function buildRunRow(obj, parent)
             row = uigridlayout(parent, [1, 4]);
-            row.Layout.Row = 4;
+            row.Layout.Row = 5;
             row.RowHeight = {32};
             row.ColumnWidth = {'1x', '1x', '1x', '1x'};
             row.ColumnSpacing = 4;
@@ -798,6 +835,10 @@ classdef AnalyzeSessionTabController < handle
                     [f, p] = uigetfile({'*.mat', 'Acts library .mat'}, ...
                         'Pick acts library', startDir);
                     if ~isequal(f, 0); obj.ActsLibraryPathField.Value = fullfile(p, f); end
+                case 'Preprocess'
+                    [f, p] = uigetfile({'*.mat', 'Preprocess settings .mat'}, ...
+                        'Pick preprocess settings', startDir);
+                    if ~isequal(f, 0); obj.PreprocessSettingsPathField.Value = fullfile(p, f); end
             end
         end
 
