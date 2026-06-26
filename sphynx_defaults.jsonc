@@ -68,7 +68,7 @@
     },
     "outlier": {
       "velocityJump": { "enabled": true,  "maxVelocityCmS": 50 },
-      "hampel":       { "enabled": false, "windowSec": 0.25, "windowSize": 7, "nSigma": 3 },
+      "hampel":       { "enabled": true,  "windowSec": 0.25, "windowSize": 7, "nSigma": 3 },
       "kalman":       { "processNoise": 0.01, "measNoiseScale": 1.0 }
     },
     // UI (tab-only)

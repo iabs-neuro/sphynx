@@ -711,7 +711,7 @@ classdef PreprocessTabController < handle
             % Outlier filter defaults (global per experiment, not per-part)
             s.outlier.velocityJump.enabled = true;
             s.outlier.velocityJump.maxVelocityCmS = 50;
-            s.outlier.hampel.enabled = false;
+            s.outlier.hampel.enabled = true;
             s.outlier.hampel.windowSec = 0.25;   % new — preferred unit
             s.outlier.hampel.windowSize = 7;     % legacy fallback (samples)
             s.outlier.hampel.nSigma = 3;
@@ -743,90 +743,67 @@ classdef PreprocessTabController < handle
     methods (Access = private)
         % ===== UI ===========================================================
         function buildUI(obj)
-            % R17 layout. 3 proportional columns 25% / 50% / 25% so all
-            % blocks scale on window resize:
-            %   row 1 (36):    TopBar (Output dir + Save + Clear All)
-            %   row 2 (280):   [B1 Loading + B2 Outlier stacked, col 1=25%] |
-            %                  [Plots X(t) + Y(t), cols [2..3] internal 2x:1x
-            %                   = 50% trajectory + 25% histogram]
-            %   row 3 (32):    Viewport row (bodyparts/video/from-to/X/raw-
-            %                  interp-smoothed/log Y) -- full width
-            %   row 4 (300):   B3 Per-part settings -- full width
-            %   row 5 (140):   B4 Manual exclusion regions -- full width,
-            %                  pinned right under B3
-            %   row 6 ('1x'):  Log -- full width, takes leftover height
-            % B1 = 130, B2 = 140 (B2 slightly taller per user request).
-            % Plots height = B1 + B2 + spacing = 280 = row 2 height.
-            obj.OuterGrid = uigridlayout(obj.Tab, [6, 3]);
-            obj.OuterGrid.RowHeight    = {36, 280, 32, 300, 140, '1x'};
+            % R18 layout. No TopBar -- Output dir lives in B1, Save /
+            % save-plots / Clear-all live in the (now-Block-4) per-part
+            % button column. 3 outer columns 25%/50%/25%:
+            %
+            %   row 1 (1x):   [B1 Loading + B2 Outlier + Viewport
+            %                  (2 sub-rows)] | Plots [50% trajectory +
+            %                  25% histogram]
+            %   row 2 (300):  Block 4 Per-part settings (table 75% +
+            %                 button column 25%) -- full width
+            %   row 3 (180):  Block * Manual exclusion regions (buttons
+            %                 left + listbox right) -- full width
+            %   row 4 (1x):   Log -- full width, takes leftover height
+            %
+            % Numbering: 1 Loading, 2 Outlier filter, 3 Plots (named
+            % panel, sits in the right column of row 1), 4 Per-part
+            % settings, * Manual exclusion regions.
+            obj.OuterGrid = uigridlayout(obj.Tab, [4, 3]);
+            obj.OuterGrid.RowHeight    = {350, 300, 180, '1x'};
             obj.OuterGrid.ColumnWidth  = {'1x', '2x', '1x'};
             obj.OuterGrid.Padding      = [4 4 4 4];
             obj.OuterGrid.RowSpacing   = 4;
             obj.OuterGrid.ColumnSpacing = 6;
 
-            obj.buildTopBar();           % row 1, cols [1 3]
-            obj.buildBlocksLeftCol();    % row 2 col 1 (B1 + B2)
-            obj.buildPlots();            % row 2 cols [2 3]
-            obj.buildViewportRowFull();  % row 3, cols [1 3]
-            obj.buildPerPartPanel();     % row 4, cols [1 3]
-            obj.buildRegionsPanelFull(); % row 5, cols [1 3]   B4
-            obj.buildLogPanelFull();     % row 6, cols [1 3]
-        end
-
-        function buildTopBar(obj)
-            tb = uigridlayout(obj.OuterGrid, [1, 5]);
-            tb.Layout.Row = 1; tb.Layout.Column = [1 3];
-            tb.RowHeight = {30};
-            tb.ColumnWidth = {80, '1x', 60, 130, 90};
-            tb.Padding = [0 0 0 0];
-            tb.ColumnSpacing = 4;
-
-            btnOut = uibutton(tb, 'Text', 'Output dir', ...
-                'BackgroundColor', semanticColor('action'), ...
-                'ButtonPushedFcn', @(~,~) obj.pickOutputDir());
-            btnOut.Layout.Column = 1;
-            obj.OutputDirField = uieditfield(tb, 'text', 'Value', '');
-            obj.OutputDirField.Layout.Column = 2;
-            obj.SavePlotsCheckbox = uicheckbox(tb, 'Text', 'plots', ...
-                'Tooltip', 'save per-part PNG plots when saving', 'Value', true);
-            obj.SavePlotsCheckbox.Layout.Column = 3;
-            bSave = uibutton(tb, 'Text', 'Save preprocessed', ...
-                'BackgroundColor', [1.00 0.55 0.55], ...
-                'FontWeight', 'bold', ...
-                'ButtonPushedFcn', @(~,~) obj.savePreprocessed());
-            bSave.Layout.Column = 4;
-            bClearAll = uibutton(tb, 'Text', 'Clear All', ...
-                'BackgroundColor', [0.92 0.55 0.55], ...
-                'FontWeight', 'bold', ...
-                'Tooltip', 'Wipe DLC, settings, regions; keep paths', ...
-                'ButtonPushedFcn', @(~,~) obj.clearAll());
-            bClearAll.Layout.Column = 5;
+            obj.buildBlocksLeftCol();    % row 1 col 1 (B1 + B2 + Viewport)
+            obj.buildPlots();            % row 1 cols [2 3]
+            obj.buildPerPartPanel();     % row 2, cols [1 3]
+            obj.buildRegionsPanelFull(); % row 3, cols [1 3]   block "*"
+            obj.buildLogPanelFull();     % row 4, cols [1 3]
         end
 
         function buildBlocksLeftCol(obj)
-            % R17: B1 + B2 stack in col 1 (25% of the window). B2 a bit
-            % taller (140 vs B1 130) per user request.
-            obj.LeftPanel = uigridlayout(obj.OuterGrid, [2, 1]);
-            obj.LeftPanel.Layout.Row = 2; obj.LeftPanel.Layout.Column = 1;
-            obj.LeftPanel.RowHeight = {130, 140};
+            % R18: left column stacks B1 (Loading) + B2 (Outlier) +
+            % viewport row (2 sub-rows: bp switcher / from-to-flags).
+            % Viewport moved here from its own outer-grid row so the
+            % plots get the full row-1 height.
+            obj.LeftPanel = uigridlayout(obj.OuterGrid, [4, 1]);
+            obj.LeftPanel.Layout.Row = 1; obj.LeftPanel.Layout.Column = 1;
+            % B1=130, B2=140 (Hampel+Kalman rows fit), VPa=32, VPb=32.
+            obj.LeftPanel.RowHeight = {130, 140, 32, 32};
             obj.LeftPanel.RowSpacing = 4;
             obj.LeftPanel.Padding = [0 0 0 0];
 
             obj.buildLoadingPanel();   % parent = LeftPanel, Row 1
             obj.buildOutlierPanel();   % parent = LeftPanel, Row 2
+            obj.buildViewportRowSplit();  % parent = LeftPanel, Rows 3 & 4
         end
 
         function buildPlots(obj)
-            % R17: row 2 spans cols [2 3] (75% of window). Internal split
-            % 2x : 1x so X/Y plots take 50% of total and the histogram
-            % takes 25%, matching the outer 25/50/25 column rhythm.
-            plotsGrid = uigridlayout(obj.OuterGrid, [2, 2]);
-            plotsGrid.Layout.Row = 2; plotsGrid.Layout.Column = [2 3];
+            % R18: plots are wrapped in a titled panel ("3. Plots") so
+            % the user sees it as a numbered block. Inner split 2x:1x
+            % preserves the 50% trajectory + 25% histogram rhythm of
+            % the outer 25/50/25 grid.
+            plotsPanel = uipanel(obj.OuterGrid, 'Title', '3. Plots');
+            plotsPanel.Layout.Row = 1; plotsPanel.Layout.Column = [2 3];
+
+            plotsGrid = uigridlayout(plotsPanel, [2, 2]);
             plotsGrid.RowHeight = {'1x', '1x'};
             plotsGrid.ColumnWidth = {'2x', '1x'};
             plotsGrid.RowSpacing = 4;
             plotsGrid.ColumnSpacing = 6;
-            plotsGrid.Padding = [0 0 0 0];
+            plotsGrid.Padding = [4 4 4 4];
 
             obj.AxX = uiaxes(plotsGrid);
             obj.AxX.Layout.Row = 1; obj.AxX.Layout.Column = 1;
@@ -836,125 +813,114 @@ classdef PreprocessTabController < handle
             obj.AxY.Layout.Row = 2; obj.AxY.Layout.Column = 1;
             obj.AxY.Box = 'on';
 
-            % Histogram spans both rows on the right
             obj.AxLk = uiaxes(plotsGrid);
             obj.AxLk.Layout.Row = [1 2]; obj.AxLk.Layout.Column = 2;
             obj.AxLk.Box = 'on';
         end
 
-        function buildViewportRowFull(obj)
-            % R17: viewport bar stretches across all 3 columns just below
-            % the plots. The legacy buildViewportRow keeps the column
-            % wiring; this wrapper just hands it a parent that sits in
-            % OuterGrid row 3 cols [1 3].
-            wrap = uigridlayout(obj.OuterGrid, [1, 1]);
-            wrap.Layout.Row = 3; wrap.Layout.Column = [1 3];
-            wrap.RowHeight = {32};
-            wrap.Padding = [0 0 0 0];
-            obj.buildViewportRow(wrap);
-        end
-
         function buildRegionsPanelFull(obj)
-            % R17: B4 manual exclusion regions -- promoted to its own
-            % full-width OuterGrid row, sitting right under B3 (per-part).
-            obj.buildRegionsPanelInline(obj.OuterGrid, 5, [1 3], ...
-                '4. Manual exclusion regions');
+            % R18: title carries an asterisk and NO number ("Manual
+            % exclusion regions *") -- treated as an optional/extra
+            % step rather than a numbered block in the main flow.
+            obj.buildRegionsPanelInline(obj.OuterGrid, 3, [1 3], ...
+                'Manual exclusion regions *');
         end
 
         function buildLogPanelFull(obj)
-            % R17: log textarea takes the leftover bottom row across the
-            % full window width.
+            % R18: log textarea now sits in OuterGrid row 4 (was row 6
+            % in R17 layout that had a TopBar + viewport-row outer slot).
             obj.LogTextArea = uitextarea(obj.OuterGrid, ...
                 'Editable', 'off', 'Value', {''});
-            obj.LogTextArea.Layout.Row = 6;
+            obj.LogTextArea.Layout.Row = 4;
             obj.LogTextArea.Layout.Column = [1 3];
         end
 
         function buildLoadingPanel(obj)
             p = uipanel(obj.LeftPanel, 'Title', '1. Loading');
             p.Layout.Row = 1;
-            g = uigridlayout(p, [3, 4]);
-            g.RowHeight = {26, 26, 32};
+            % R18: row 0 holds "Output dir" button + path field in a
+            % single line (previously lived in the now-removed TopBar).
+            g = uigridlayout(p, [4, 4]);
+            g.RowHeight = {26, 26, 26, 32};
             g.ColumnWidth = {'1x', '1x', '1x', '1x'};
             g.ColumnSpacing = 4;
             g.RowSpacing = 4;
             g.Padding = [4 4 4 4];
 
+            btnOut = uibutton(g, 'Text', 'Output dir', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'ButtonPushedFcn', @(~,~) obj.pickOutputDir());
+            btnOut.Layout.Row = 1; btnOut.Layout.Column = 1;
+            obj.OutputDirField = uieditfield(g, 'text', 'Value', '');
+            obj.OutputDirField.Layout.Row = 1; obj.OutputDirField.Layout.Column = [2 4];
+
             % Top row buttons
             btnRoot   = uibutton(g, 'Text', 'Root',   'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('root', 'dir'));
-            btnRoot.Layout.Row = 1;   btnRoot.Layout.Column = 1;
+            btnRoot.Layout.Row = 2;   btnRoot.Layout.Column = 1;
 
             btnDLC    = uibutton(g, 'Text', 'DLC',    'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('dlc', 'file', '*.csv'));
-            btnDLC.Layout.Row = 1;    btnDLC.Layout.Column = 2;
+            btnDLC.Layout.Row = 2;    btnDLC.Layout.Column = 2;
 
             btnVideo  = uibutton(g, 'Text', 'Video',  'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('video', 'file', '*.*'));
-            btnVideo.Layout.Row = 1;  btnVideo.Layout.Column = 3;
+            btnVideo.Layout.Row = 2;  btnVideo.Layout.Column = 3;
 
             btnPreset = uibutton(g, 'Text', 'Preset', 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('preset', 'file', '*.mat'));
-            btnPreset.Layout.Row = 1; btnPreset.Layout.Column = 4;
+            btnPreset.Layout.Row = 2; btnPreset.Layout.Column = 4;
 
             % Middle row text fields
             obj.RootField   = uieditfield(g, 'text', 'Value', '', ...
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
-            obj.RootField.Layout.Row = 2;   obj.RootField.Layout.Column = 1;
+            obj.RootField.Layout.Row = 3;   obj.RootField.Layout.Column = 1;
 
             obj.DLCField    = uieditfield(g, 'text', 'Value', '', ...
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
-            obj.DLCField.Layout.Row = 2;    obj.DLCField.Layout.Column = 2;
+            obj.DLCField.Layout.Row = 3;    obj.DLCField.Layout.Column = 2;
 
             obj.VideoField  = uieditfield(g, 'text', 'Value', '', ...
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
-            obj.VideoField.Layout.Row = 2;  obj.VideoField.Layout.Column = 3;
+            obj.VideoField.Layout.Row = 3;  obj.VideoField.Layout.Column = 3;
 
             obj.PresetField = uieditfield(g, 'text', 'Value', '', ...
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
-            obj.PresetField.Layout.Row = 2; obj.PresetField.Layout.Column = 4;
+            obj.PresetField.Layout.Row = 3; obj.PresetField.Layout.Column = 4;
 
             % Bottom row: full-width Load button + Load synthetic button
             btnLoad = uibutton(g, 'Text', 'Load', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.loadAll());
-            btnLoad.Layout.Row = 3; btnLoad.Layout.Column = [1 3];
+            btnLoad.Layout.Row = 4; btnLoad.Layout.Column = [1 3];
 
             btnSynth = uibutton(g, 'Text', 'Load synthetic', ...
                 'BackgroundColor', semanticColor('info'), ...
                 'ButtonPushedFcn', @(~,~) obj.loadSynthetic());
-            btnSynth.Layout.Row = 3; btnSynth.Layout.Column = 4;
+            btnSynth.Layout.Row = 4; btnSynth.Layout.Column = 4;
 
             % Try to inherit project root from sibling Preset tab
             obj.inheritRootFromParentApp();
         end
 
         function buildPerPartPanel(obj)
-            % R17: full-width across all 3 outer columns so the 12-column
-            % table can stretch with the window.
-            obj.PerPartPanel = uipanel(obj.OuterGrid, 'Title', '3. Per-part settings');
-            obj.PerPartPanel.Layout.Row = 4;
+            % R18: panel split horizontally into table (75%) on the left
+            % and a button column (25%) on the right. INFO + Save +
+            % Clear + Default/Compute + Auto all live in the button
+            % column -- no INFO-only row above the table any more, so
+            % the table sits flush with the panel frame top.
+            obj.PerPartPanel = uipanel(obj.OuterGrid, 'Title', '4. Per-part settings');
+            obj.PerPartPanel.Layout.Row = 2;
             obj.PerPartPanel.Layout.Column = [1 3];
-            g = uigridlayout(obj.PerPartPanel, [4, 1]);
-            g.RowHeight = {24, '1x', 32, 32};
-            g.RowSpacing = 4;
-            g.Padding = [4 4 4 4];
 
-            % INFO row
-            infoRow = uigridlayout(g, [1, 2]);
-            infoRow.Layout.Row = 1;
-            infoRow.RowHeight = {22};
-            infoRow.ColumnWidth = {'1x', 60};
-            infoRow.Padding = [0 0 0 0];
-            infoRow.ColumnSpacing = 0;
-            uilabel(infoRow, 'Text', '');
-            bInfo = uibutton(infoRow, 'Text', 'INFO', ...
-                'BackgroundColor', semanticColor('info'), ...
-                'ButtonPushedFcn', @(~,~) obj.showHelpDialog('perpart'));
-            bInfo.Layout.Column = 2;
+            split = uigridlayout(obj.PerPartPanel, [1, 2]);
+            split.ColumnWidth = {'3x', '1x'};
+            split.RowHeight = {'1x'};
+            split.Padding = [4 4 4 4];
+            split.ColumnSpacing = 6;
 
-            % uitable with per-part settings
-            obj.PerPartTable = uitable(g, ...
+            % --- left: full-height table -------------------------------
+            obj.PerPartTable = uitable(split, ...
                 'ColumnName', {'use', 'name', 'thr', 'win,s', 'interp', 'smooth', 'NF%', '%NaN', '%lowL', '%out', '%manual', 'status'}, ...
                 'ColumnFormat', {'logical', 'char', 'numeric', 'numeric', ...
                     {'pchip', 'linear', 'spline', 'makima'}, ...
@@ -965,68 +931,74 @@ classdef PreprocessTabController < handle
                 'RowName', {}, ...
                 'CellEditCallback', @(~, evt) obj.onPerPartTableEdited(evt), ...
                 'CellSelectionCallback', @(~, evt) obj.onPerPartTableSelected(evt));
-            obj.PerPartTable.Layout.Row = 2; obj.PerPartTable.Layout.Column = 1;
+            obj.PerPartTable.Layout.Column = 1;
 
-            % Default/Compute row
-            btnRow = uigridlayout(g, [1, 4]);
-            btnRow.Layout.Row = 3; btnRow.Layout.Column = 1;
-            btnRow.RowHeight = {28};
-            btnRow.ColumnWidth = {'1x', '1x', '1x', '1x'};
-            btnRow.Padding = [0 0 0 0];
-            btnRow.ColumnSpacing = 4;
+            % --- right: button column ---------------------------------
+            % Default/Compute pairs (this | all) on two rows -> auto
+            % strip (dropdown + param + Auto this + Auto all) -> divider
+            % -> Save + save-plots-chk + Clear all (formerly TopBar) ->
+            % INFO at the bottom.
+            btnCol = uigridlayout(split, [8, 1]);
+            btnCol.Layout.Column = 2;
+            btnCol.RowHeight = {28, 28, 28, 6, 28, 22, 28, 26};
+            btnCol.RowSpacing = 4;
+            btnCol.Padding = [0 0 0 0];
 
-            b1 = uibutton(btnRow, 'Text', 'Default this', ...
-                'BackgroundColor', semanticColor('action'), ...
+            % Row 1: Default this | Default all
+            r1 = uigridlayout(btnCol, [1, 2]); r1.Layout.Row = 1;
+            r1.ColumnWidth = {'1x', '1x'}; r1.Padding = [0 0 0 0]; r1.ColumnSpacing = 4;
+            uibutton(r1, 'Text', 'Default this', 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.defaultSelected());
-            b1.Layout.Column = 1;
-            b2 = uibutton(btnRow, 'Text', 'Default all', ...
-                'BackgroundColor', semanticColor('action'), ...
+            uibutton(r1, 'Text', 'Default all',  'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.defaultAll());
-            b2.Layout.Column = 2;
-            b3 = uibutton(btnRow, 'Text', 'Compute this', ...
-                'BackgroundColor', semanticColor('action'), ...
+
+            % Row 2: Compute this | Compute all (primary)
+            r2 = uigridlayout(btnCol, [1, 2]); r2.Layout.Row = 2;
+            r2.ColumnWidth = {'1x', '1x'}; r2.Padding = [0 0 0 0]; r2.ColumnSpacing = 4;
+            uibutton(r2, 'Text', 'Compute this', 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.computeSelected());
-            b3.Layout.Column = 3;
-            % Compute all is the primary action — brighter rose, bold
-            b4 = uibutton(btnRow, 'Text', 'Compute all', ...
-                'BackgroundColor', [1.00 0.55 0.55], ...
-                'FontWeight', 'bold', ...
-                'ButtonPushedFcn', @(~,~) obj.computeAll());
-            b4.Layout.Column = 4;
+            uibutton(r2, 'Text', 'Compute all',  'BackgroundColor', [1.00 0.55 0.55], ...
+                'FontWeight', 'bold', 'ButtonPushedFcn', @(~,~) obj.computeAll());
 
-            % Auto-threshold row
-            autoRow = uigridlayout(g, [1, 5]);
-            autoRow.Layout.Row = 4; autoRow.Layout.Column = 1;
-            autoRow.RowHeight = {28};
-            autoRow.ColumnWidth = {44, 100, 80, '1x', '1x'};
-            autoRow.Padding = [0 0 0 0];
-            autoRow.ColumnSpacing = 4;
-
-            lblAuto = uilabel(autoRow, 'Text', 'Auto:', ...
-                'HorizontalAlignment', 'right');
-            lblAuto.Layout.Column = 1; %#ok<NASGU>
-
-            obj.AutoMethodDropDown = uidropdown(autoRow, ...
-                'Items', {'otsu', 'knee', 'quantile', 'preset'}, ...
-                'Value', 'otsu', ...
+            % Row 3: Auto method dropdown + param + Auto this + Auto all
+            r3 = uigridlayout(btnCol, [1, 4]); r3.Layout.Row = 3;
+            r3.ColumnWidth = {'1x', '1x', '1x', '1x'};
+            r3.Padding = [0 0 0 0]; r3.ColumnSpacing = 4;
+            obj.AutoMethodDropDown = uidropdown(r3, ...
+                'Items', {'otsu', 'knee', 'quantile', 'preset'}, 'Value', 'otsu', ...
                 'ValueChangedFcn', @(s, ~) obj.onAutoMethodChanged(s.Value));
-            obj.AutoMethodDropDown.Layout.Column = 2;
-
-            obj.AutoParamField = uieditfield(autoRow, 'text', ...
-                'Value', '', ...
-                'Tooltip', 'param: quantile=0.05 (fraction) / preset=0.95 (numeric threshold)');
-            obj.AutoParamField.Layout.Column = 3;
-
-            bA1 = uibutton(autoRow, 'Text', 'Auto this', ...
-                'BackgroundColor', semanticColor('info'), ...
+            obj.AutoParamField = uieditfield(r3, 'text', 'Value', '', ...
+                'Tooltip', 'quantile=0.05 / preset=0.95');
+            uibutton(r3, 'Text', 'Auto this', 'BackgroundColor', semanticColor('info'), ...
                 'ButtonPushedFcn', @(~,~) obj.autoThresholdPart(obj.State.currentBodyPart));
-            bA1.Layout.Column = 4;
-            % Auto all — primary action, brighter
-            bA2 = uibutton(autoRow, 'Text', 'Auto all', ...
-                'BackgroundColor', [0.55 0.85 1.00], ...
-                'FontWeight', 'bold', ...
-                'ButtonPushedFcn', @(~,~) obj.autoThresholdAll());
-            bA2.Layout.Column = 5;
+            uibutton(r3, 'Text', 'Auto all', 'BackgroundColor', [0.55 0.85 1.00], ...
+                'FontWeight', 'bold', 'ButtonPushedFcn', @(~,~) obj.autoThresholdAll());
+
+            % Row 4: spacer (divider)
+
+            % Row 5: Save preprocessed (formerly TopBar)
+            bSave = uibutton(btnCol, 'Text', 'Save preprocessed', ...
+                'BackgroundColor', [1.00 0.55 0.55], 'FontWeight', 'bold', ...
+                'ButtonPushedFcn', @(~,~) obj.savePreprocessed());
+            bSave.Layout.Row = 5;
+
+            % Row 6: save-plots checkbox
+            obj.SavePlotsCheckbox = uicheckbox(btnCol, 'Text', 'save plots', ...
+                'Tooltip', 'save per-part PNG plots when saving', 'Value', true);
+            obj.SavePlotsCheckbox.Layout.Row = 6;
+
+            % Row 7: Clear all
+            bClearAll = uibutton(btnCol, 'Text', 'Clear All', ...
+                'BackgroundColor', [0.92 0.55 0.55], 'FontWeight', 'bold', ...
+                'Tooltip', 'Wipe DLC, settings, regions; keep paths', ...
+                'ButtonPushedFcn', @(~,~) obj.clearAll());
+            bClearAll.Layout.Row = 7;
+
+            % Row 8: INFO
+            bInfo = uibutton(btnCol, 'Text', 'INFO', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ButtonPushedFcn', @(~,~) obj.showHelpDialog('perpart'));
+            bInfo.Layout.Row = 8;
         end
 
         function buildOutlierPanel(obj)
@@ -1036,10 +1008,12 @@ classdef PreprocessTabController < handle
             % row 1 next to velocity-jump.
             g = uigridlayout(obj.OutlierPanel, [3, 5]);
             g.RowHeight = {26, 26, 26};
-            % R17: scale columns with the panel. Col 1 keeps a fixed 110 px
-            % so checkboxes stay aligned across rows; labels fit content;
-            % numeric fields expand 1x each so they scale on window resize.
-            g.ColumnWidth = {110, 'fit', '1x', '1x', 'fit'};
+            % R18: all-fixed widths. Labels stayed text-width on
+            % resize while '1x' fields shrank to 0 on narrow windows;
+            % we now reserve usable minima for every column. The
+            % parent (LeftPanel = 25% of window) decides what slack
+            % is left over -- nothing crushes below these widths.
+            g.ColumnWidth = {110, 60, 60, 60, 50};
             g.RowSpacing = 4;
             g.ColumnSpacing = 4;
             g.Padding = [4 4 4 4];
@@ -1109,8 +1083,90 @@ classdef PreprocessTabController < handle
             end
         end
 
-        function buildViewportRow(obj, parent)
-            % Round-5: merged switcher into the viewport row.
+        function buildViewportRowSplit(obj)
+            % R18: viewport split into TWO sub-rows of LeftPanel:
+            %   row 3 (32): [<] [bodyparts] [>] [Video]   (flex)
+            %   row 4 (32): from [n] to [n] X [unit]  raw interp smoothed  log Y
+            % Second-units fields are sized square (28x28) so the row
+            % stays tight horizontally. log Y closes the right edge.
+
+            % --- sub-row 1: bodyparts switcher + Video toggle ---------
+            r1 = uigridlayout(obj.LeftPanel, [1, 5]);
+            r1.Layout.Row = 3;
+            r1.RowHeight = {28};
+            r1.ColumnWidth = {28, '1x', 28, 60, '1x'};
+            r1.Padding = [0 0 0 0];
+            r1.ColumnSpacing = 4;
+            obj.PrevButton = uibutton(r1, 'Text', '<', ...
+                'BackgroundColor', semanticColor('geometry'), ...
+                'ButtonPushedFcn', @(~,~) obj.prevBodyPart());
+            obj.PrevButton.Layout.Column = 1;
+            obj.BodyPartDropDown = uidropdown(r1, 'Items', {'(no DLC loaded)'}, ...
+                'Value', '(no DLC loaded)', ...
+                'ValueChangedFcn', @(s,~) obj.onDropDownChanged(s.Value));
+            obj.BodyPartDropDown.Layout.Column = 2;
+            obj.NextButton = uibutton(r1, 'Text', '>', ...
+                'BackgroundColor', semanticColor('geometry'), ...
+                'ButtonPushedFcn', @(~,~) obj.nextBodyPart());
+            obj.NextButton.Layout.Column = 3;
+            obj.ShowVideoButton = uibutton(r1, 'state', 'Text', 'Video', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ValueChangedFcn', @(s, ~) obj.toggleVideoPanel(s.Value));
+            obj.ShowVideoButton.Layout.Column = 4;
+
+            % --- sub-row 2: from / to / X units / raw,interp,smoothed / log Y ---
+            r2 = uigridlayout(obj.LeftPanel, [1, 11]);
+            r2.Layout.Row = 4;
+            r2.RowHeight = {28};
+            % from:lbl=36, from=28 (square), to:lbl=24, to=28 (square),
+            % X:lbl=18, X-units=54, raw=48, interp=60, smoothed=70,
+            % log Y=48, flex=1x
+            r2.ColumnWidth = {36, 28, 24, 28, 18, 54, 48, 60, 70, 48, '1x'};
+            r2.Padding = [0 0 0 0];
+            r2.ColumnSpacing = 4;
+            lblFrom = uilabel(r2, 'Text', 'from:', 'HorizontalAlignment', 'right');
+            lblFrom.Layout.Column = 1;
+            obj.FromFrameField = uieditfield(r2, 'numeric', ...
+                'Value', 1, 'Limits', [1 Inf], 'RoundFractionalValues', 'on', ...
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.FromFrameField.Layout.Column = 2;
+            lblTo = uilabel(r2, 'Text', 'to:', 'HorizontalAlignment', 'right');
+            lblTo.Layout.Column = 3;
+            obj.ToFrameField = uieditfield(r2, 'numeric', ...
+                'Value', 0, 'Limits', [0 Inf], 'RoundFractionalValues', 'on', ...
+                'Tooltip', '0 = last frame', ...
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.ToFrameField.Layout.Column = 4;
+            lblX = uilabel(r2, 'Text', 'X:', 'HorizontalAlignment', 'right');
+            lblX.Layout.Column = 5;
+            obj.XUnitsDropDown = uidropdown(r2, ...
+                'Items', {'frame', 'sec', 'min'}, 'Value', 'sec', ...
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.XUnitsDropDown.Layout.Column = 6;
+            obj.ShowRawChk = uicheckbox(r2, 'Text', 'raw', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.ShowRawChk.Layout.Column = 7;
+            obj.ShowInterpChk = uicheckbox(r2, 'Text', 'interp', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.ShowInterpChk.Layout.Column = 8;
+            obj.ShowSmoothChk = uicheckbox(r2, 'Text', 'smoothed', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.ShowSmoothChk.Layout.Column = 9;
+            obj.LogScaleButton = uibutton(r2, 'state', 'Text', 'log Y', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'Tooltip', 'Log-scale Y axis on the likelihood histogram', ...
+                'ValueChangedFcn', @(~,~) obj.refreshPreview());
+            obj.LogScaleButton.Layout.Column = 10;
+            obj.FrameLabel = uilabel(r2, 'Text', '', 'Visible', 'off');
+            obj.FrameLabel.Layout.Column = 11;
+        end
+
+        function buildViewportRow(obj, parent) %#ok<INUSD>
+            % R18: legacy full-width single-row builder. Kept for any
+            % external caller that still parents the whole bar in one
+            % place. Not called from buildUI in R18 -- see
+            % buildViewportRowSplit. Will be removed once nothing
+            % else references it.
             % R16 layout (15 explicit columns; every widget pins its own
             % Layout.Column so log Y can't collide with smoothed any more):
             %   1  2          3  4      5     6     7    8     9   10
@@ -1190,61 +1246,73 @@ classdef PreprocessTabController < handle
         end
 
         function buildRegionsPanelInline(obj, parent, row, colSpan, title)
-            % R17: parent / row / colSpan / title parameterised so the
-            % panel can sit directly in OuterGrid without an outer
-            % wrapper. Defaults preserved for legacy callers.
+            % R18: two horizontal halves -- button rows on the left,
+            % regions listbox on the right (was a full-width band
+            % under the buttons before). INFO sits in the button half
+            % so this block matches the per-part-panel layout idiom.
             if nargin < 3 || isempty(row); row = 3; end
             if nargin < 4 || isempty(colSpan); colSpan = []; end
-            if nargin < 5 || isempty(title); title = 'Manual exclusion regions'; end
+            if nargin < 5 || isempty(title); title = 'Manual exclusion regions *'; end
             obj.RegionsPanel = uipanel(parent, 'Title', title);
             obj.RegionsPanel.Layout.Row = row;
             if ~isempty(colSpan); obj.RegionsPanel.Layout.Column = colSpan; end
-            rg = uigridlayout(obj.RegionsPanel, [3, 7]);
-            rg.RowHeight = {28, 28, '1x'};
-            rg.ColumnWidth = {110, 130, 100, 80, 70, 70, '1x'};
-            rg.Padding = [4 4 4 4];
-            rg.RowSpacing = 4;
-            rg.ColumnSpacing = 4;
+
+            split = uigridlayout(obj.RegionsPanel, [1, 2]);
+            split.ColumnWidth = {'3x', '1x'};
+            split.RowHeight = {'1x'};
+            split.Padding = [4 4 4 4];
+            split.ColumnSpacing = 6;
+
+            % --- left: stacked control rows + INFO --------------------
+            ctrl = uigridlayout(split, [3, 7]);
+            ctrl.Layout.Column = 1;
+            ctrl.RowHeight = {28, 28, 28};
+            ctrl.ColumnWidth = {110, 130, 100, 80, 70, 70, 60};
+            ctrl.Padding = [0 0 0 0];
+            ctrl.RowSpacing = 4;
+            ctrl.ColumnSpacing = 4;
 
             % Row 1: manual shape controls
-            uibutton(rg, 'Text', 'Add region', ...
+            uibutton(ctrl, 'Text', 'Add region', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.addManualRegion());
-            obj.RegionsAppliesDropDown = uidropdown(rg, ...
+            obj.RegionsAppliesDropDown = uidropdown(ctrl, ...
                 'Items', {'all'}, 'Value', 'all');
-            obj.RegionsScopeDropDown = uidropdown(rg, ...
+            obj.RegionsScopeDropDown = uidropdown(ctrl, ...
                 'Items', {'experiment', 'session'}, 'Value', 'experiment');
-            obj.RegionsShapeDropdown = uidropdown(rg, ...
+            obj.RegionsShapeDropdown = uidropdown(ctrl, ...
                 'Items', {'polygon', 'circle'}, 'Value', 'polygon', ...
                 'Tooltip', 'Shape to draw for new exclusion region');
-            uibutton(rg, 'Text', 'Delete', ...
+            uibutton(ctrl, 'Text', 'Delete', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.deleteSelectedRegion());
-            uibutton(rg, 'Text', 'Clear', ...
+            uibutton(ctrl, 'Text', 'Clear', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.clearAllRegions());
-            uilabel(rg, 'Text', '');
+            bInfo = uibutton(ctrl, 'Text', 'INFO', ...
+                'BackgroundColor', semanticColor('info'), ...
+                'ButtonPushedFcn', @(~,~) obj.showHelpDialog('regions'));
+            bInfo.Layout.Row = 1; bInfo.Layout.Column = 7;
 
             % Row 2: auto exclusion ring controls
-            obj.RegionsAutoRingChk = uicheckbox(rg, ...
+            obj.RegionsAutoRingChk = uicheckbox(ctrl, ...
                 'Text', 'Auto-add ring outside arena', ...
                 'Tooltip', 'Compute an exclusion ring of N cm outside the arena boundary');
             obj.RegionsAutoRingChk.Layout.Row = 2; obj.RegionsAutoRingChk.Layout.Column = 1;
-            obj.RegionsAutoRingWidthField = uieditfield(rg, 'numeric', ...
+            obj.RegionsAutoRingWidthField = uieditfield(ctrl, 'numeric', ...
                 'Value', 5, 'Limits', [0.1 100], ...
                 'Tooltip', 'Ring width in cm');
             obj.RegionsAutoRingWidthField.Layout.Row = 2; obj.RegionsAutoRingWidthField.Layout.Column = 2;
-            lblCm = uilabel(rg, 'Text', 'cm');
+            lblCm = uilabel(ctrl, 'Text', 'cm');
             lblCm.Layout.Row = 2; lblCm.Layout.Column = 3;
-            obj.RegionsAddRingBtn = uibutton(rg, 'Text', 'Add ring', ...
+            obj.RegionsAddRingBtn = uibutton(ctrl, 'Text', 'Add ring', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.addAutoExclusionRing());
             obj.RegionsAddRingBtn.Layout.Row = 2; obj.RegionsAddRingBtn.Layout.Column = 4;
 
-            % Row 3: list box spanning all columns
-            obj.RegionsListBox = uilistbox(rg, 'Items', {});
-            obj.RegionsListBox.Layout.Row = 3;
-            obj.RegionsListBox.Layout.Column = [1 7];
+            % --- right: regions listbox -------------------------------
+            obj.RegionsListBox = uilistbox(split, 'Items', {});
+            obj.RegionsListBox.Layout.Column = 2;
         end
 
         function buildRight_DEPRECATED(obj)   %#ok<DEFNU>
@@ -1980,6 +2048,26 @@ classdef PreprocessTabController < handle
                         '  column. Hand-rolled 2D constant-velocity smoother;\n' ...
                         '  measurement noise scales as 1/likelihood^2 so low-confidence\n' ...
                         '  frames are heavily discounted.\n' ...
+                        '\n' ...
+                        'Pipeline order:\n' ...
+                        '  likelihood -> bounds -> velocity-jump -> Hampel -> regions\n' ...
+                        '  -> interpolate -> smooth (sgolay/.../kalman)']);
+                case 'regions'
+                    msg = sprintf([ ...
+                        'Manual exclusion regions (optional extra step):\n' ...
+                        '\n' ...
+                        'Draw polygons / circles over the video frame to NaN-out\n' ...
+                        'frames whose body-part coords fall inside. Runs BEFORE\n' ...
+                        'interpolation, so the gap-filler treats those frames\n' ...
+                        'as missing.\n' ...
+                        '\n' ...
+                        'Scope:\n' ...
+                        '  experiment - applies to every session of the experiment\n' ...
+                        '  session    - lives only in this session''s _Preprocessed.mat\n' ...
+                        '\n' ...
+                        'Auto-add ring: builds an exclusion ring of N cm OUTSIDE the\n' ...
+                        'arena polygon, so DLC ghosts that drift off the floor get\n' ...
+                        'NaN''d without manual drawing.\n' ...
                         '\n' ...
                         'Pipeline order:\n' ...
                         '  likelihood -> bounds -> velocity-jump -> Hampel -> regions\n' ...

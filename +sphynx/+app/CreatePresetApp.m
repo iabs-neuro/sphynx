@@ -1526,15 +1526,15 @@ classdef CreatePresetApp < handle
             % Order: Create Preset / Preprocess Tracking / Define Acts /
             % Analyze Session / Batch Analysis / Preprocess Video /
             % Synthetic Data (last).
-            app.TabCreate          = uitab(app.TabGroup, 'Title', 'Create Preset');
-            app.TabPreprocess      = uitab(app.TabGroup, 'Title', 'Preprocess Tracking');
-            app.TabDefineActs      = uitab(app.TabGroup, 'Title', 'Define Acts');
-            app.TabAnalyze         = uitab(app.TabGroup, 'Title', 'Analyze Session');
-            app.TabBatch           = uitab(app.TabGroup, 'Title', 'Batch Analysis');
-            app.TabMakeOutputTable = uitab(app.TabGroup, 'Title', 'Make Output Table');
-            app.TabPlotData        = uitab(app.TabGroup, 'Title', 'Plot Data');
-            app.TabPreprocessVideo = uitab(app.TabGroup, 'Title', 'Preprocess Video *');
-            app.TabSynthetic       = uitab(app.TabGroup, 'Title', 'Synthetic Data *');
+            app.TabCreate          = uitab(app.TabGroup, 'Title', '1. Create Preset');
+            app.TabPreprocess      = uitab(app.TabGroup, 'Title', '2. Preprocess Tracking');
+            app.TabDefineActs      = uitab(app.TabGroup, 'Title', '3. Define Acts');
+            app.TabAnalyze         = uitab(app.TabGroup, 'Title', '4. Analyze Session');
+            app.TabBatch           = uitab(app.TabGroup, 'Title', '5. Batch Analysis');
+            app.TabMakeOutputTable = uitab(app.TabGroup, 'Title', '6. Make Output Table');
+            app.TabPlotData        = uitab(app.TabGroup, 'Title', '7. Plot Data');
+            app.TabPreprocessVideo = uitab(app.TabGroup, 'Title', '8. Preprocess Video *');
+            app.TabSynthetic       = uitab(app.TabGroup, 'Title', '9. Synthetic Data *');
 
             buildCreateTab(app);
             app.PreprocessController      = sphynx.app.PreprocessTabController(app.TabPreprocess, app);
