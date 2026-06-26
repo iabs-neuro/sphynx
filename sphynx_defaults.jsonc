@@ -1,7 +1,8 @@
 // sphynx defaults reference.
-// Mirrors sphynx.pipeline.defaultConfig() + Preprocess Tracking
-// per-part / outlier defaults + CreatePreset strategy enums.
+// Pipeline (sphynx.pipeline.defaultConfig) + every tab's user-
+// facing defaults. Enum fields carry "// a | b | c" inline.
 {
+  // ===== pipeline (analyzeSession) =================================
   "paths": {
     "video":              "",
     "dlc":                "",
@@ -66,14 +67,132 @@
 
   "verbose": "info",   // debug | info | warn | error
 
-  "presetStrategies": {
+  // ===== tabs =======================================================
+
+  // ---- CreatePreset ---------
+  "createPreset": {
     "arenaGeometry":   "Square",                // Square | Polygon | Circle | Ellipse | O-maze
     "squareStrategy":  "corners-walls-center",  // corners-walls-center | strips | none
     "circleStrategy":  "circle-with-center",    // circle | circle-with-center | circle-rings
-    "stripDirection":  "horizontal"             // horizontal | vertical
+    "stripDirection":  "horizontal",            // horizontal | vertical
+    "objectZoneWidthCm":   2.5,
+    "wallWidthCm":         12,
+    "middleWidthCm":       20,
+    "centerDiameterCm":    20,
+    "numStrips":           3,
+    "objectsNumber":       0
   },
 
-  "autoThreshold": {
-    "method": "otsu"   // otsu | knee | quantile | preset
+  // ---- Preprocess Tracking ----
+  "preprocessTab": {
+    "savePlots":        true,
+    "showRaw":          true,
+    "showInterp":       true,
+    "showSmooth":       true,
+    "xUnits":           "sec",   // frame | sec | min
+    "autoThreshold": {
+      "method":          "otsu", // otsu | knee | quantile | preset
+      "quantileParam":   0.05,
+      "presetParam":     0.95
+    }
+  },
+
+  // ---- Define Acts (simple-act builder defaults) ----
+  "defineActs": {
+    "simpleZoneOp":      "OR",        // OR (only one supported in current UI)
+    "simpleSpeedMin":    0,
+    "simpleSpeedMax":    null,        // null = Inf
+    "simpleMinDurSec":   0.25,
+    "simpleMaxGapSec":   0.25,
+    "complexOp":         "intersect", // intersect | union | exclude | sequence
+    "complexSeqDelaySec": 0,
+    "makeVideoDurationSec": 5
+  },
+
+  // ---- Analyze Session ----
+  "analyzeTab": {
+    "mainVideo": {
+      "enabled":              false,
+      "startSec":             0,
+      "durationSec":          30,
+      "showTrajectory":       true,
+      "showVelocity":         true,
+      "showActsList":         true,
+      "showZones":            true,
+      "presentationStyle":    false
+    },
+    "actsVideo": {
+      "durationSec":          5
+    },
+    "plots": {
+      "saveSessionPlots":     true,
+      "savePerBodyPart":      false,
+      "heatmapBinCm":         4
+    }
+  },
+
+  // ---- Batch Analysis ----
+  "batchTab": {
+    "mainVideo": {
+      "startSec":             0,
+      "durationSec":          30,
+      "showTrajectory":       true,
+      "showVelocity":         true,
+      "showActsList":         true,
+      "showZones":            true
+    },
+    "actsVideo": {
+      "durationSec":          5
+    },
+    "plots": {
+      "saveSessionPlots":     true,
+      "savePerBodyPart":      false,
+      "heatmapBinCm":         4
+    },
+    "saveMat":                true,
+    "aggregate":              true
+  },
+
+  // ---- Make Output Table ----
+  "makeOutputTable": {
+    "nanHandling": "keep",                  // keep | zero
+    "sortBy":      "line,group,mouse",
+    "distUnit":    "cm",                    // cm | m
+    "distScope":   "all"                    // all | general
+  },
+
+  // ---- Plot Data ----
+  "plotData": {
+    "errorBar":       "SEM",                // SEM | SD | 95CI | none
+    "showPoints":     true,
+    "colormap":       "lines",
+    "font":           "Arial",              // Arial | Helvetica | Calibri | Times | Courier
+    "fontSize":       11,
+    "titleFontSize":  13,
+    "axisFontSize":   11,
+    "autoStats":      true,
+    "showStars":      true,
+    "test":           "auto",               // auto | ttest | paired-ttest | anova1 | anova2 | rm-anova
+    "correction":     "auto",               // auto | tukey | bonferroni | holm | none
+    "factor1":        "<auto session>",
+    "factor2":        "<none>"
+  },
+
+  // ---- Preprocess Video (metadata-fix tab) ----
+  "preprocessVideo": {
+    "targetFPS": 30
+  },
+
+  // ---- Synthetic Data ----
+  "syntheticData": {
+    "nFrames":      6000,
+    "nBodyParts":   10,
+    "frameWidth":   800,
+    "frameHeight":  600,
+    "frameRate":    30,
+    "pixelsPerCm":  5,
+    "motionModel":  "random_walk",  // random_walk | circular | OU
+    "outlierMode":  "mixed",        // none | spikes | long_gap | poor_likelihood | mixed
+    "seed":         42
   }
 }
