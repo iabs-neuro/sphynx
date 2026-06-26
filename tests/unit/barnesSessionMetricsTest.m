@@ -19,7 +19,7 @@ end
 
 function testCountsSumActNumberOverHoles(testCase)
     result = mkResult( ...
-        {'nose_at_object1', 'nose_at_object3', 'nose_at_object5', 'body_at_object2'}, ...
+        {'nose_at_hole1', 'nose_at_hole3', 'nose_at_hole5', 'body_at_hole2'}, ...
         [3, 2, 1, 4], ...                        % ActNumber per act
         {[1 5], [10 12], [20 21], [3 7]});       % FirstStart / FirstEnd
     m = sphynx.pipeline.barnesSessionMetrics(result);
@@ -33,7 +33,7 @@ function testFirstCheckedHoleAngleN1Is18Deg(testCase)
     % With NumObjects=19 the angle step = 360/20 = 18 deg. object1 is
     % one slot away from target -> 18 deg of error.
     result = mkResult( ...
-        {'nose_at_object1'}, [1], {[0.5, 1.0]});
+        {'nose_at_hole1'}, [1], {[0.5, 1.0]});
     m = sphynx.pipeline.barnesSessionMetrics(result, 'NumObjects', 19);
     verifyEqual(testCase, m.FirstCheckedHoleNumber, 1);
     verifyEqual(testCase, m.FirstCheckedHoleErrorDeg, 18, 'AbsTol', 0.01);
@@ -43,7 +43,7 @@ function testFirstCheckedHoleAngleN19SymmetricBack(testCase)
     % object19: forward = 19*18 = 342, backward = 18. The metric picks
     % the shorter side -> 18 deg, same as object1.
     result = mkResult( ...
-        {'nose_at_object19'}, [1], {[2.0, 2.5]});
+        {'nose_at_hole19'}, [1], {[2.0, 2.5]});
     m = sphynx.pipeline.barnesSessionMetrics(result, 'NumObjects', 19);
     verifyEqual(testCase, m.FirstCheckedHoleNumber, 19);
     verifyEqual(testCase, m.FirstCheckedHoleErrorDeg, 18, 'AbsTol', 0.01);
@@ -52,7 +52,7 @@ end
 function testFirstCheckedHoleAngleN10Is180Deg(testCase)
     % Opposite hole around the ring -> 180 deg.
     result = mkResult( ...
-        {'nose_at_object10'}, [1], {[1.0, 1.5]});
+        {'nose_at_hole10'}, [1], {[1.0, 1.5]});
     m = sphynx.pipeline.barnesSessionMetrics(result, 'NumObjects', 19);
     verifyEqual(testCase, m.FirstCheckedHoleErrorDeg, 180, 'AbsTol', 0.01);
 end
@@ -60,7 +60,7 @@ end
 function testFirstCheckedHolePicksEarliestStart(testCase)
     % object5 fired earlier than object1 in time -> object5 wins.
     result = mkResult( ...
-        {'nose_at_object1', 'nose_at_object5'}, [1, 1], ...
+        {'nose_at_hole1', 'nose_at_hole5'}, [1, 1], ...
         {[5.0, 5.5], [1.0, 1.5]});
     m = sphynx.pipeline.barnesSessionMetrics(result, 'NumObjects', 19);
     verifyEqual(testCase, m.FirstCheckedHoleNumber, 5);
@@ -70,7 +70,7 @@ end
 function testMeanAngleIsArithmeticAverage(testCase)
     % Holes 1, 5, 10 visited -> angles 18, 90, 180. Mean = 96.
     result = mkResult( ...
-        {'nose_at_object1', 'nose_at_object5', 'nose_at_object10'}, ...
+        {'nose_at_hole1', 'nose_at_hole5', 'nose_at_hole10'}, ...
         [1, 1, 1], ...
         {[1.0 1.5], [2.0 2.5], [3.0 3.5]});
     m = sphynx.pipeline.barnesSessionMetrics(result, 'NumObjects', 19);
@@ -94,8 +94,8 @@ function testTargetVisitOrderCountsEarlierEpisodes(testCase)
     m_tg = false(1, n); m_tg(40:42) = true;
     Acts = struct('ActName', {}, 'ActArrayRefine', {}, 'ActNumber', {}, ...
                   'FirstStartSec', {}, 'FirstEndSec', {});
-    Acts(end + 1) = mkAct('nose_at_object3', m_o3, 2, (1 - 1)/fps, (1 - 1)/fps);
-    Acts(end + 1) = mkAct('nose_at_object7', m_o7, 1, (20 - 1)/fps, (20 - 1)/fps);
+    Acts(end + 1) = mkAct('nose_at_hole3', m_o3, 2, (1 - 1)/fps, (1 - 1)/fps);
+    Acts(end + 1) = mkAct('nose_at_hole7', m_o7, 1, (20 - 1)/fps, (20 - 1)/fps);
     Acts(end + 1) = mkAct('nose_at_target',  m_tg, 1, (40 - 1)/fps, (42 - 1)/fps);
     result.Acts = Acts;
     result.Options = struct('FrameRate', fps);
@@ -122,7 +122,7 @@ function testTargetVisitOrderNaNWhenNoTarget(testCase)
     m_o5 = false(1, n); m_o5(10) = true;
     Acts = struct('ActName', {}, 'ActArrayRefine', {}, 'ActNumber', {}, ...
                   'FirstStartSec', {}, 'FirstEndSec', {});
-    Acts(end + 1) = mkAct('nose_at_object5', m_o5, 1, (10 - 1)/fps, (10 - 1)/fps);
+    Acts(end + 1) = mkAct('nose_at_hole5', m_o5, 1, (10 - 1)/fps, (10 - 1)/fps);
     result.Acts = Acts;
     result.Options = struct('FrameRate', fps);
     m = sphynx.pipeline.barnesSessionMetrics(result, 'NumObjects', 19);

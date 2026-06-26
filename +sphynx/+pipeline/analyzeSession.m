@@ -469,7 +469,7 @@ function result = analyzeSession(config)
     % Triggered when:
     %   (a) Options.ExperimentType == 'Barnes', AND
     %   (b) the loaded acts library actually contains at least one
-    %       nose_at_object* act -- otherwise every Barnes metric would
+    %       nose_at_hole* act -- otherwise every Barnes metric would
     %       trivially be zero and just spam the log. Make-video and
     %       similar callers that pass a 1-act temp library hit this
     %       guard and skip cleanly.
@@ -689,14 +689,14 @@ end
 
 function tf = hasBarnesNoseActs(Acts)
     % True when the analyzeSession Acts array carries any
-    % nose_at_object<N> entry -- the minimum signal Barnes session
+    % nose_at_hole<N> entry -- the minimum signal Barnes session
     % metrics need to be meaningful. Built-in speed/posture acts and
     % standalone "rest" Make-video runs don't trip this guard.
     tf = false;
     if isempty(Acts); return; end
     for k = 1:numel(Acts)
         nm = lower(char(Acts(k).ActName));
-        if startsWith(nm, 'nose_at_object')
+        if startsWith(nm, 'nose_at_hole')
             tf = true; return;
         end
     end

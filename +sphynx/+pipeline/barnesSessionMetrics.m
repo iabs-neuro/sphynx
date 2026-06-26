@@ -10,9 +10,9 @@ function metrics = barnesSessionMetrics(result, varargin)
 %   the canonical Barnes default-act names (see
 %   sphynx.acts.actsLibraryBarnesDefaults):
 %     nose_at_target
-%     nose_at_object1 .. nose_at_objectN
+%     nose_at_object1 .. nose_at_holeN
 %     body_at_target
-%     body_at_object1 .. body_at_objectN
+%     body_at_object1 .. body_at_holeN
 %     nose_at_platform / body_at_platform / nose_at_any_hole
 %
 %   Hole geometry assumption: the N escape holes plus the target form a
@@ -22,9 +22,9 @@ function metrics = barnesSessionMetrics(result, varargin)
 %   from the target along the ring. Angle step = 360 / (NumObjects+1).
 %
 %   Returned struct:
-%     TotalNoseHoleVisits      sum of ActNumber across nose_at_objectN
-%     TotalBodyHoleVisits      sum of ActNumber across body_at_objectN
-%     FirstCheckedHoleNumber   N for the earliest nose_at_objectN
+%     TotalNoseHoleVisits      sum of ActNumber across nose_at_holeN
+%     TotalBodyHoleVisits      sum of ActNumber across body_at_holeN
+%     FirstCheckedHoleNumber   N for the earliest nose_at_holeN
 %                              episode start. NaN if no per-hole act
 %                              fired.
 %     FirstCheckedHoleErrorDeg angular distance |first checked| ->
@@ -32,11 +32,11 @@ function metrics = barnesSessionMetrics(result, varargin)
 %                              the target first", 180 the opposite
 %                              hole). NaN if no hole was checked.
 %     MeanCheckedHoleErrorDeg  mean of angular distances across the
-%                              set of nose_at_objectN acts that fired
+%                              set of nose_at_holeN acts that fired
 %                              at least once. NaN if none did.
 %     TargetHoleVisitOrder     ordinal position of the first
 %                              nose_at_target episode in the time-
-%                              ordered sequence of (nose_at_objectN
+%                              ordered sequence of (nose_at_holeN
 %                              episodes + nose_at_target's own first
 %                              episode). 1 means target was the very
 %                              first hole sniffed. NaN if target was
@@ -75,22 +75,22 @@ function metrics = barnesSessionMetrics(result, varargin)
     metrics.TotalNoseHoleVisits = 0;
     metrics.TotalBodyHoleVisits = 0;
     for n = 1:nObj
-        kN = findActIdx(actNames, sprintf('nose_at_object%d', n));
+        kN = findActIdx(actNames, sprintf('nose_at_hole%d', n));
         if ~isempty(kN) && isfield(Acts(kN), 'ActNumber') && ~isempty(Acts(kN).ActNumber)
             metrics.TotalNoseHoleVisits = metrics.TotalNoseHoleVisits + Acts(kN).ActNumber;
         end
-        kB = findActIdx(actNames, sprintf('body_at_object%d', n));
+        kB = findActIdx(actNames, sprintf('body_at_hole%d', n));
         if ~isempty(kB) && isfield(Acts(kB), 'ActNumber') && ~isempty(Acts(kB).ActNumber)
             metrics.TotalBodyHoleVisits = metrics.TotalBodyHoleVisits + Acts(kB).ActNumber;
         end
     end
 
     % --- FirstCheckedHole / NumCheckedHoles / MeanCheckedHoleErrorDeg ---
-    % "Checked" = nose_at_objectN fired at least once.
+    % "Checked" = nose_at_holeN fired at least once.
     checkedHoles = [];                 % vector of N values
     checkedFirstStartSec = [];         % vector of FirstStartSec values
     for n = 1:nObj
-        kN = findActIdx(actNames, sprintf('nose_at_object%d', n));
+        kN = findActIdx(actNames, sprintf('nose_at_hole%d', n));
         if isempty(kN); continue; end
         cnt = getField(Acts(kN), 'ActNumber', 0);
         if cnt < 1; continue; end
@@ -120,7 +120,7 @@ function metrics = barnesSessionMetrics(result, varargin)
 
     % --- TargetHoleVisitOrder ------------------------------------------
     % Ordinal position of the first nose_at_target episode in the union
-    % of (nose_at_objectN episodes) + (nose_at_target's first episode),
+    % of (nose_at_holeN episodes) + (nose_at_target's first episode),
     % sorted by episode start frame.
     targetIdx = findActIdx(actNames, 'nose_at_target');
     if isempty(targetIdx) || getField(Acts(targetIdx), 'ActNumber', 0) < 1
@@ -130,12 +130,12 @@ function metrics = barnesSessionMetrics(result, varargin)
         if isnan(targetT) || isnan(frameRate) || frameRate <= 0
             metrics.TargetHoleVisitOrder = NaN;
         else
-            % Count nose_at_objectN episodes that started STRICTLY before
+            % Count nose_at_holeN episodes that started STRICTLY before
             % the first nose_at_target episode. Each episode counted
             % individually (a hole revisited twice = 2 entries).
             earlier = 0;
             for n = 1:nObj
-                kN = findActIdx(actNames, sprintf('nose_at_object%d', n));
+                kN = findActIdx(actNames, sprintf('nose_at_hole%d', n));
                 if isempty(kN); continue; end
                 if ~isfield(Acts(kN), 'ActArrayRefine') ...
                         || isempty(Acts(kN).ActArrayRefine)

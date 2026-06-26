@@ -153,9 +153,32 @@ function b = applySpecial(act, ctx, nFrames)
             b = applyFreezing(act, ctx, nFrames);
         case 'rears'
             b = applyRears(act, ctx, nFrames);
+        case 'allinzone'
+            b = applyAllInZone(act, ctx, nFrames);
         otherwise
             b = false(1, nFrames);
     end
+end
+
+function b = applyAllInZone(act, ctx, nFrames)
+    % Frame counts only when EVERY body part listed in act.bodyParts
+    % is inside the (single) zone listed in act.zones. Used by the
+    % Barnes-paradigm mouse_inside_* acts: e.g. body-center +
+    % tailbase + headcenter all in target_real -> mouse is curled up
+    % inside the escape hole.
+    b = false(1, nFrames);
+    if isempty(act.zones) || isempty(act.bodyParts); return; end
+    zIdx = findZone(ctx.zones, act.zones{1});
+    if isempty(zIdx); return; end
+    zoneMask = ctx.zones(zIdx).maskfilled;
+    if ~islogical(zoneMask); zoneMask = zoneMask > 0; end
+    inMatrix = true(numel(act.bodyParts), nFrames);
+    for k = 1:numel(act.bodyParts)
+        partIdx = findPart(ctx.bodyParts, act.bodyParts{k});
+        if isempty(partIdx); inMatrix(k, :) = false; continue; end
+        inMatrix(k, :) = pointsInMask(ctx.X(partIdx, :), ctx.Y(partIdx, :), zoneMask);
+    end
+    b = all(inMatrix, 1);
 end
 
 function b = applyFreezing(act, ctx, nFrames)

@@ -1,40 +1,43 @@
 function acts = actsLibraryBarnesDefaults(varargin)
 % ACTSLIBRARYBARNESDEFAULTS  Paradigm-specific default acts for the
-% Barnes maze. Returns a struct array compatible with
+% Barnes maze (v3). Returns a struct array compatible with
 % sphynx.acts.applyAct / sphynx.acts.evalActsLibrary.
 %
 %   acts = sphynx.acts.actsLibraryBarnesDefaults()
 %   acts = sphynx.acts.actsLibraryBarnesDefaults('NumObjects', 19)
 %
-%   Two body-part variants per zone, matching how the Barnes maze is
-%   actually scored in the lab:
-%     - nose_at_<zone>  uses the 'nose' body part and the inflated
-%       _realout halo around the hole / target / platform / object.
-%       The standard nose-poke definition.
-%     - body_at_<zone>  uses 'bodycenter' and the stricter _real
-%       (geometric) zone -- "the animal physically sat on the spot".
+% Three act families per zone (target + N escape holes + platform):
+%   nose_at_<zone>    nose / <zone>_real      -- nose-poke into the
+%                     hole boundary itself (the strict definition of
+%                     a visit).
+%   body_at_<zone>    bodycenter / <zone>_realout -- body in the
+%                     inflated halo around the hole (broader
+%                     "near the hole" signal).
+%   mouse_inside_<zone>  bodycenter + tailbase + headcenter, all
+%                     three inside <zone>_real. Implemented as a
+%                     special act with specialKind 'allInZone' so
+%                     the framework evaluates the AND of the
+%                     per-body-part zone tests in one pass.
 %
-%   Layout (NumObjects = 19 by default, matching Demo/BARNES_v2):
-%       1   nose_at_target              (nose / target_realout)
-%       2-20  nose_at_object1..19       (nose / objectN_realout)
-%       21  body_at_target              (bodycenter / target_real)
-%       22-40 body_at_object1..19       (bodycenter / objectN_real)
-%       41  nose_at_platform            (nose / platform_realout)
-%       42  body_at_platform            (bodycenter / platform_real)
-%       43  nose_at_any_hole            (nose / target + object1..19,
-%                                        EXCLUDING platform -- platform
-%                                        is the start, not a hole)
+% Layout (NumObjects = 19 by default, matching Demo/BARNES_v2):
+%   1   nose_at_target          (nose / target_real)
+%   2-20  nose_at_hole1..19     (nose / objectN_real)
+%   21  body_at_target          (bodycenter / target_realout)
+%   22-40 body_at_hole1..19     (bodycenter / objectN_realout)
+%   41  nose_at_platform        (nose / platform_real)
+%   42  body_at_platform        (bodycenter / platform_realout)
+%   43  mouse_inside_target     (3 parts / target_real)
+%   44-62 mouse_inside_hole1..19 (3 parts / objectN_real)
+%   63  mouse_inside_platform   (3 parts / platform_real)
+%   64  nose_at_any_hole        (nose / OR(object1_real..objectN_real),
+%                                target NOT included; platform
+%                                NOT included)
 %
-%   No center / wall / outside / mistake compound acts -- Barnes
-%   metrics derive everything from per-hole visits + the target/
-%   platform/any-hole aggregates. The mistake count is reported by
-%   sphynx.pipeline.barnesSessionMetrics, not as a separate act.
-%
-%   Does NOT include the speed/posture defaults (rest/walk/locomotion/
-%   freezing/rear); use sphynx.acts.actsLibraryDefaults for those. A
-%   typical Barnes session library is the concatenation of the two:
-%       acts = [sphynx.acts.actsLibraryDefaults(), ...
-%               sphynx.acts.actsLibraryBarnesDefaults()];
+% Does NOT include the speed/posture defaults (rest/walk/locomotion
+% /freezing/rear); use sphynx.acts.actsLibraryDefaults for those.
+% Typical Barnes session library:
+%   acts = [sphynx.acts.actsLibraryDefaults(), ...
+%           sphynx.acts.actsLibraryBarnesDefaults()];
 
     p = inputParser;
     p.addParameter('NumObjects', 19, @(v) isnumeric(v) && isscalar(v) && v >= 0);
@@ -43,52 +46,59 @@ function acts = actsLibraryBarnesDefaults(varargin)
 
     acts = sphynx.acts.emptyActsArray();
 
-    % --- nose at target ---------------------------------------------------
+    % --- nose_at_<zone>: nose in the strict hole zone --------------------
     acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'nose_at_target', 'Zones', {'target_realout'}, ...
+        'Name', 'nose_at_target', 'Zones', {'target_real'}, ...
         'ZoneOp', 'OR', 'BodyPart', 'nose');
-
-    % --- nose at each hole ------------------------------------------------
     for n = 1:nObj
         acts(end+1) = sphynx.acts.buildSimpleAct( ...
-            'Name', sprintf('nose_at_object%d', n), ...
-            'Zones', {sprintf('object%d_realout', n)}, ...
+            'Name', sprintf('nose_at_hole%d', n), ...
+            'Zones', {sprintf('object%d_real', n)}, ...
             'ZoneOp', 'OR', 'BodyPart', 'nose'); %#ok<AGROW>
     end
 
-    % --- body at target ---------------------------------------------------
+    % --- body_at_<zone>: bodycenter in the inflated halo -----------------
     acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'body_at_target', 'Zones', {'target_real'}, ...
+        'Name', 'body_at_target', 'Zones', {'target_realout'}, ...
         'ZoneOp', 'OR', 'BodyPart', 'bodycenter');
-
-    % --- body at each hole ------------------------------------------------
     for n = 1:nObj
         acts(end+1) = sphynx.acts.buildSimpleAct( ...
-            'Name', sprintf('body_at_object%d', n), ...
-            'Zones', {sprintf('object%d_real', n)}, ...
+            'Name', sprintf('body_at_hole%d', n), ...
+            'Zones', {sprintf('object%d_realout', n)}, ...
             'ZoneOp', 'OR', 'BodyPart', 'bodycenter'); %#ok<AGROW>
     end
 
-    % --- platform (start) -------------------------------------------------
+    % --- platform (start) family ----------------------------------------
     acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'nose_at_platform', 'Zones', {'platform_realout'}, ...
+        'Name', 'nose_at_platform', 'Zones', {'platform_real'}, ...
         'ZoneOp', 'OR', 'BodyPart', 'nose');
     acts(end+1) = sphynx.acts.buildSimpleAct( ...
-        'Name', 'body_at_platform', 'Zones', {'platform_real'}, ...
+        'Name', 'body_at_platform', 'Zones', {'platform_realout'}, ...
         'ZoneOp', 'OR', 'BodyPart', 'bodycenter');
 
-    % --- nose at any hole (aggregate) -------------------------------------
-    % Explicit OR over target + per-hole zones rather than the preset's
-    % objectall_realout. objectall_* is built from every object in
-    % ArenaAndObjects, which on Barnes presets includes the start
-    % platform too. The platform is not an escape hole and must not
-    % count toward "checked any hole" -- so we list the target + each
-    % objectN zone individually.
-    anyHoleZones = {'target_realout'};
+    % --- mouse_inside_<zone>: all 3 parts in the strict zone ------------
+    acts(end+1) = makeAllInZoneAct('mouse_inside_target',  'target_real');
     for n = 1:nObj
-        anyHoleZones{end+1} = sprintf('object%d_realout', n); %#ok<AGROW>
+        acts(end+1) = makeAllInZoneAct(sprintf('mouse_inside_hole%d', n), ...
+            sprintf('object%d_real', n)); %#ok<AGROW>
+    end
+    acts(end+1) = makeAllInZoneAct('mouse_inside_platform', 'platform_real');
+
+    % --- nose_at_any_hole: OR over hole1..holeN, target excluded --------
+    anyHoleZones = cell(1, nObj);
+    for n = 1:nObj
+        anyHoleZones{n} = sprintf('object%d_real', n);
     end
     acts(end+1) = sphynx.acts.buildSimpleAct( ...
         'Name', 'nose_at_any_hole', 'Zones', anyHoleZones, ...
         'ZoneOp', 'OR', 'BodyPart', 'nose');
+end
+
+function a = makeAllInZoneAct(name, zoneName)
+    a = sphynx.acts.emptyAct();
+    a.name        = name;
+    a.type        = 'special';
+    a.specialKind = 'allInZone';
+    a.bodyParts   = {'bodycenter', 'tailbase', 'headcenter'};
+    a.zones       = {zoneName};
 end
