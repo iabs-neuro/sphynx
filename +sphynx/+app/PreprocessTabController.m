@@ -783,7 +783,7 @@ classdef PreprocessTabController < handle
             % B1=130 (5-col Loading), B2=110 (tight Outlier),
             % VP1 (bp switcher) = 32, VP2 (from/to/X/log Y) = 32,
             % VP3 (3 checkboxes raw/interp/smoothed) = 32.
-            obj.LeftPanel.RowHeight = {130, 110, 32, 32, 32};
+            obj.LeftPanel.RowHeight = {130, 121, 32, 32, 32};
             obj.LeftPanel.RowSpacing = 4;
             obj.LeftPanel.Padding = [0 0 0 0];
 
@@ -924,11 +924,17 @@ classdef PreprocessTabController < handle
                     {'sgolay', 'movmean', 'movmedian', 'gaussian', 'kalman'}, ...
                     'numeric', 'char', 'char', 'char', 'char', 'char'}, ...
                 'ColumnEditable', [true false true true true true true false false false false false], ...
-                'ColumnWidth', {38, 'auto', 44, 50, 60, 70, 40, 50, 50, 50, 55, 'auto'}, ...
+                'ColumnWidth', repmat({60}, 1, 12), ...
                 'RowName', {}, ...
                 'CellEditCallback', @(~, evt) obj.onPerPartTableEdited(evt), ...
                 'CellSelectionCallback', @(~, evt) obj.onPerPartTableSelected(evt));
             obj.PerPartTable.Layout.Column = 1;
+
+            % R19.1: 12 equal-width columns that scale with the panel
+            % (uitable ColumnWidth doesn't support '1x', so we
+            % re-compute on every resize). No horizontal scroll bar
+            % once the columns fill the table width exactly.
+            obj.PerPartPanel.SizeChangedFcn = @(~,~) obj.recomputePerPartColumnWidths();
 
             % --- right: button column ---------------------------------
             % Default/Compute pairs (this | all) on two rows -> auto
@@ -1997,6 +2003,29 @@ classdef PreprocessTabController < handle
                 patch(ax, [xa xb xb xa], [yLim(1) yLim(1) yLim(2) yLim(2)], ...
                     [0.6 0.6 0.6], 'FaceAlpha', 0.20, 'EdgeColor', 'none');
             end
+        end
+
+        function recomputePerPartColumnWidths(obj)
+            % R19.1: distribute the table's current pixel width across
+            % all 12 columns equally (uitable's ColumnWidth lacks the
+            % '1x' relative-weight support that uigridlayout has). The
+            % SizeChangedFcn on PerPartPanel fires on every layout
+            % change, so this stays in sync as the user resizes the
+            % main window.
+            if isempty(obj.PerPartTable) || ~isvalid(obj.PerPartTable); return; end
+            try
+                pos = obj.PerPartTable.Position;
+            catch
+                return;
+            end
+            if isempty(pos) || numel(pos) < 3 || pos(3) < 60; return; end
+            nCols = numel(obj.PerPartTable.ColumnName);
+            if nCols < 1; return; end
+            % Leave a few px so the auto vertical scrollbar doesn't
+            % trigger a horizontal one.
+            margin = 6;
+            equalW = max(36, floor((pos(3) - margin) / nCols));
+            obj.PerPartTable.ColumnWidth = repmat({equalW}, 1, nCols);
         end
 
         function showHelpDialog(obj, topic)
