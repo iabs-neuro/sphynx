@@ -760,7 +760,7 @@ classdef PreprocessTabController < handle
             % panel, sits in the right column of row 1), 4 Per-part
             % settings, * Manual exclusion regions.
             obj.OuterGrid = uigridlayout(obj.Tab, [4, 3]);
-            obj.OuterGrid.RowHeight    = {350, 300, 180, '1x'};
+            obj.OuterGrid.RowHeight    = {420, 300, 90, '1x'};
             obj.OuterGrid.ColumnWidth  = {'1x', '2x', '1x'};
             obj.OuterGrid.Padding      = [4 4 4 4];
             obj.OuterGrid.RowSpacing   = 4;
@@ -778,10 +778,12 @@ classdef PreprocessTabController < handle
             % viewport row (2 sub-rows: bp switcher / from-to-flags).
             % Viewport moved here from its own outer-grid row so the
             % plots get the full row-1 height.
-            obj.LeftPanel = uigridlayout(obj.OuterGrid, [4, 1]);
+            obj.LeftPanel = uigridlayout(obj.OuterGrid, [5, 1]);
             obj.LeftPanel.Layout.Row = 1; obj.LeftPanel.Layout.Column = 1;
-            % B1=130, B2=140 (Hampel+Kalman rows fit), VPa=32, VPb=32.
-            obj.LeftPanel.RowHeight = {130, 140, 32, 32};
+            % B1=130 (5-col Loading), B2=110 (tight Outlier),
+            % VP1 (bp switcher) = 32, VP2 (from/to/X/log Y) = 32,
+            % VP3 (3 checkboxes raw/interp/smoothed) = 32.
+            obj.LeftPanel.RowHeight = {130, 110, 32, 32, 32};
             obj.LeftPanel.RowSpacing = 4;
             obj.LeftPanel.Padding = [0 0 0 0];
 
@@ -838,66 +840,61 @@ classdef PreprocessTabController < handle
         function buildLoadingPanel(obj)
             p = uipanel(obj.LeftPanel, 'Title', '1. Loading');
             p.Layout.Row = 1;
-            % R18: row 0 holds "Output dir" button + path field in a
-            % single line (previously lived in the now-removed TopBar).
-            g = uigridlayout(p, [4, 4]);
-            g.RowHeight = {26, 26, 26, 32};
-            g.ColumnWidth = {'1x', '1x', '1x', '1x'};
+            % R19: 5 button columns (Output dir + Root + DLC + Video +
+            % Preset) in one row, fields in row 2 underneath. Same
+            % '1x' x N scaling so every cell shrinks/grows together
+            % with the panel.
+            g = uigridlayout(p, [3, 5]);
+            g.RowHeight = {26, 26, 32};
+            g.ColumnWidth = {'1x', '1x', '1x', '1x', '1x'};
             g.ColumnSpacing = 4;
             g.RowSpacing = 4;
             g.Padding = [4 4 4 4];
 
+            % Row 1: 5 picker buttons
             btnOut = uibutton(g, 'Text', 'Output dir', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickOutputDir());
             btnOut.Layout.Row = 1; btnOut.Layout.Column = 1;
-            obj.OutputDirField = uieditfield(g, 'text', 'Value', '');
-            obj.OutputDirField.Layout.Row = 1; obj.OutputDirField.Layout.Column = [2 4];
-
-            % Top row buttons
             btnRoot   = uibutton(g, 'Text', 'Root',   'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('root', 'dir'));
-            btnRoot.Layout.Row = 2;   btnRoot.Layout.Column = 1;
-
+            btnRoot.Layout.Row = 1;   btnRoot.Layout.Column = 2;
             btnDLC    = uibutton(g, 'Text', 'DLC',    'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('dlc', 'file', '*.csv'));
-            btnDLC.Layout.Row = 2;    btnDLC.Layout.Column = 2;
-
+            btnDLC.Layout.Row = 1;    btnDLC.Layout.Column = 3;
             btnVideo  = uibutton(g, 'Text', 'Video',  'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('video', 'file', '*.*'));
-            btnVideo.Layout.Row = 2;  btnVideo.Layout.Column = 3;
-
+            btnVideo.Layout.Row = 1;  btnVideo.Layout.Column = 4;
             btnPreset = uibutton(g, 'Text', 'Preset', 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.pickPath('preset', 'file', '*.mat'));
-            btnPreset.Layout.Row = 2; btnPreset.Layout.Column = 4;
+            btnPreset.Layout.Row = 1; btnPreset.Layout.Column = 5;
 
-            % Middle row text fields
+            % Row 2: 5 path edit fields
+            obj.OutputDirField = uieditfield(g, 'text', 'Value', '');
+            obj.OutputDirField.Layout.Row = 2; obj.OutputDirField.Layout.Column = 1;
             obj.RootField   = uieditfield(g, 'text', 'Value', '', ...
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
-            obj.RootField.Layout.Row = 3;   obj.RootField.Layout.Column = 1;
-
+            obj.RootField.Layout.Row = 2;   obj.RootField.Layout.Column = 2;
             obj.DLCField    = uieditfield(g, 'text', 'Value', '', ...
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
-            obj.DLCField.Layout.Row = 3;    obj.DLCField.Layout.Column = 2;
-
+            obj.DLCField.Layout.Row = 2;    obj.DLCField.Layout.Column = 3;
             obj.VideoField  = uieditfield(g, 'text', 'Value', '', ...
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
-            obj.VideoField.Layout.Row = 3;  obj.VideoField.Layout.Column = 3;
-
+            obj.VideoField.Layout.Row = 2;  obj.VideoField.Layout.Column = 4;
             obj.PresetField = uieditfield(g, 'text', 'Value', '', ...
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
-            obj.PresetField.Layout.Row = 3; obj.PresetField.Layout.Column = 4;
+            obj.PresetField.Layout.Row = 2; obj.PresetField.Layout.Column = 5;
 
-            % Bottom row: full-width Load button + Load synthetic button
+            % Row 3: Load (cols 1..4) + Load synthetic (col 5)
             btnLoad = uibutton(g, 'Text', 'Load', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.loadAll());
-            btnLoad.Layout.Row = 4; btnLoad.Layout.Column = [1 3];
+            btnLoad.Layout.Row = 3; btnLoad.Layout.Column = [1 4];
 
             btnSynth = uibutton(g, 'Text', 'Load synthetic', ...
                 'BackgroundColor', semanticColor('info'), ...
                 'ButtonPushedFcn', @(~,~) obj.loadSynthetic());
-            btnSynth.Layout.Row = 4; btnSynth.Layout.Column = 4;
+            btnSynth.Layout.Row = 3; btnSynth.Layout.Column = 5;
 
             % Try to inherit project root from sibling Preset tab
             obj.inheritRootFromParentApp();
@@ -927,7 +924,7 @@ classdef PreprocessTabController < handle
                     {'sgolay', 'movmean', 'movmedian', 'gaussian', 'kalman'}, ...
                     'numeric', 'char', 'char', 'char', 'char', 'char'}, ...
                 'ColumnEditable', [true false true true true true true false false false false false], ...
-                'ColumnWidth', {38, 90, 44, 50, 60, 70, 40, 50, 50, 50, 55, 60}, ...
+                'ColumnWidth', {38, '1x', 44, 50, 60, 70, 40, 50, 50, 50, 55, '1x'}, ...
                 'RowName', {}, ...
                 'CellEditCallback', @(~, evt) obj.onPerPartTableEdited(evt), ...
                 'CellSelectionCallback', @(~, evt) obj.onPerPartTableSelected(evt));
@@ -1008,12 +1005,10 @@ classdef PreprocessTabController < handle
             % row 1 next to velocity-jump.
             g = uigridlayout(obj.OutlierPanel, [3, 5]);
             g.RowHeight = {26, 26, 26};
-            % R18: all-fixed widths. Labels stayed text-width on
-            % resize while '1x' fields shrank to 0 on narrow windows;
-            % we now reserve usable minima for every column. The
-            % parent (LeftPanel = 25% of window) decides what slack
-            % is left over -- nothing crushes below these widths.
-            g.ColumnWidth = {110, 60, 60, 60, 50};
+            % R19: same '1x' x N rhythm as Block 1 so every cell
+            % scales with the panel. Labels live next to checkboxes
+            % (col 1) and inherit that column's width.
+            g.ColumnWidth = {'1x', '1x', '1x', '1x', '1x'};
             g.RowSpacing = 4;
             g.ColumnSpacing = 4;
             g.Padding = [4 4 4 4];
@@ -1114,14 +1109,13 @@ classdef PreprocessTabController < handle
                 'ValueChangedFcn', @(s, ~) obj.toggleVideoPanel(s.Value));
             obj.ShowVideoButton.Layout.Column = 4;
 
-            % --- sub-row 2: from / to / X units / raw,interp,smoothed / log Y ---
-            r2 = uigridlayout(obj.LeftPanel, [1, 11]);
+            % --- sub-row 2: from / to / X units / log Y -------------
+            r2 = uigridlayout(obj.LeftPanel, [1, 8]);
             r2.Layout.Row = 4;
             r2.RowHeight = {28};
-            % from:lbl=36, from=28 (square), to:lbl=24, to=28 (square),
-            % X:lbl=18, X-units=54, raw=48, interp=60, smoothed=70,
-            % log Y=48, flex=1x
-            r2.ColumnWidth = {36, 28, 24, 28, 18, 54, 48, 60, 70, 48, '1x'};
+            % from:lbl, from-val (square), to:lbl, to-val (square),
+            % X:lbl, X-units, log Y, flex.
+            r2.ColumnWidth = {36, 28, 24, 28, 18, 54, 48, '1x'};
             r2.Padding = [0 0 0 0];
             r2.ColumnSpacing = 4;
             lblFrom = uilabel(r2, 'Text', 'from:', 'HorizontalAlignment', 'right');
@@ -1143,22 +1137,27 @@ classdef PreprocessTabController < handle
                 'Items', {'frame', 'sec', 'min'}, 'Value', 'sec', ...
                 'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
             obj.XUnitsDropDown.Layout.Column = 6;
-            obj.ShowRawChk = uicheckbox(r2, 'Text', 'raw', 'Value', true, ...
-                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
-            obj.ShowRawChk.Layout.Column = 7;
-            obj.ShowInterpChk = uicheckbox(r2, 'Text', 'interp', 'Value', true, ...
-                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
-            obj.ShowInterpChk.Layout.Column = 8;
-            obj.ShowSmoothChk = uicheckbox(r2, 'Text', 'smoothed', 'Value', true, ...
-                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
-            obj.ShowSmoothChk.Layout.Column = 9;
             obj.LogScaleButton = uibutton(r2, 'state', 'Text', 'log Y', ...
                 'BackgroundColor', semanticColor('info'), ...
                 'Tooltip', 'Log-scale Y axis on the likelihood histogram', ...
                 'ValueChangedFcn', @(~,~) obj.refreshPreview());
-            obj.LogScaleButton.Layout.Column = 10;
+            obj.LogScaleButton.Layout.Column = 7;
             obj.FrameLabel = uilabel(r2, 'Text', '', 'Visible', 'off');
-            obj.FrameLabel.Layout.Column = 11;
+            obj.FrameLabel.Layout.Column = 8;
+
+            % --- sub-row 3: raw / interp / smoothed checkboxes -------
+            r3 = uigridlayout(obj.LeftPanel, [1, 3]);
+            r3.Layout.Row = 5;
+            r3.RowHeight = {28};
+            r3.ColumnWidth = {'1x', '1x', '1x'};
+            r3.Padding = [0 0 0 0];
+            r3.ColumnSpacing = 4;
+            obj.ShowRawChk = uicheckbox(r3, 'Text', 'raw', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.ShowInterpChk = uicheckbox(r3, 'Text', 'interp', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
+            obj.ShowSmoothChk = uicheckbox(r3, 'Text', 'smoothed', 'Value', true, ...
+                'ValueChangedFcn', @(~,~) obj.scheduleRefresh());
         end
 
         function buildViewportRow(obj, parent) %#ok<INUSD>
@@ -1264,9 +1263,11 @@ classdef PreprocessTabController < handle
             split.ColumnSpacing = 6;
 
             % --- left: stacked control rows + INFO --------------------
-            ctrl = uigridlayout(split, [3, 7]);
+            % R19: only 2 control rows (no listbox here -- listbox is
+            % the right half). Panel can shrink to ~90 px height.
+            ctrl = uigridlayout(split, [2, 7]);
             ctrl.Layout.Column = 1;
-            ctrl.RowHeight = {28, 28, 28};
+            ctrl.RowHeight = {28, 28};
             ctrl.ColumnWidth = {110, 130, 100, 80, 70, 70, 60};
             ctrl.Padding = [0 0 0 0];
             ctrl.RowSpacing = 4;
