@@ -891,27 +891,48 @@ function closeIfValid(h)
 end
 
 function id = sessionIdFromDlcName(name)
-    % DLC csv filenames typically look like
-    % '<sessionId>DLC_<network>_...<shuffle>_<iter>.csv'
-    % so the session id is everything before the first 'DLC' tag.
+    % Recover the session id from a DLC csv filename. R24 widens the
+    % marker set so we handle BOTH:
+    %   * Legacy DeepLabCut: '<id>DLC_<network>_...<iter>.csv'
+    %     e.g. 'NOF_H01_3DDLC_resnet152_MiceUniversal152Oct23shuffle1
+    %           _1000000.csv' -> 'NOF_H01_3D'
+    %   * SuperAnimal-topviewmouse:
+    %     '<id>_superanimal_topviewmouse_snapshot-...csv'
+    %     e.g. 'Barnes_m183_5d_0t_26102024_120726_superanimal_..._snapshot-
+    %           hrnet_w32-004.csv' -> 'Barnes_m183_5d_0t_26102024_120726'
+    % Session ids in the wild may include:
+    %   * lowercase / mixed-case prefix ('barnes' / 'Barnes' / 'BARNES')
+    %   * multi-digit mouse id (m23 / m183 / m5718)
+    %   * multi-digit day / trial counters (0d_0t / 12d_3t)
+    % All of those are captured automatically by "strip from the first
+    % model-suffix marker"; we do not encode the id structure itself.
     [~, stem, ~] = fileparts(name);
-    idx = strfind(stem, 'DLC');
-    if ~isempty(idx)
-        id = stem(1:idx(1)-1);
-    else
-        id = stem;
+    markers = {'_superanimal', 'DLC_resnet', 'DLC_mobilenet', ...
+        'DLC_efficientnet', 'DLC_', '_DeepCut_'};
+    cutAt = numel(stem) + 1;
+    for k = 1:numel(markers)
+        idx = strfind(stem, markers{k});
+        if ~isempty(idx); cutAt = min(cutAt, idx(1)); end
     end
+    id = stem(1:cutAt - 1);
+    id = regexprep(id, '_el$', '');  % drop multi-animal extension tag
     id = char(strtrim(string(id)));
 end
 
 function p = findFirstMatch(folder, id, suffixes)
+    % Locate '<id><suffix>' for each requested suffix. R24: also
+    % accept a per-session subfolder layout where the preset (or any
+    % matched artefact) sits at '<folder>/<id>/<id><suffix>' --
+    % CreatePreset writes both copies and Mr P's BARNES_v2 export
+    % keeps both side by side.
     p = '';
     if isempty(folder) || ~isfolder(folder); return; end
     for k = 1:numel(suffixes)
         cand = fullfile(folder, [id suffixes{k}]);
         if isfile(cand); p = cand; return; end
+        cand2 = fullfile(folder, id, [id suffixes{k}]);
+        if isfile(cand2); p = cand2; return; end
     end
-    % Fallback: any file starting with id
     hits = dir(fullfile(folder, [id '*']));
     hits = hits(~[hits.isdir]);
     if ~isempty(hits)

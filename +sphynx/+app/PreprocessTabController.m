@@ -374,6 +374,169 @@ classdef PreprocessTabController < handle
             obj.refocus();
         end
 
+        function checkAnotherDlc(obj)
+            % CHECKANOTHERDLC  (R24) Load a different DLC csv and
+            % re-run Compute all under the per-part settings ALREADY
+            % dialled in for the prior DLC. Settings are re-keyed by
+            % body-part name so a session with re-ordered or partly
+            % missing parts still works (unmatched parts fall back to
+            % defaults).
+            if isempty(obj.State.dlc) || isempty(obj.State.perPart)
+                obj.applog('warn', 'Check another: load a first DLC csv first to establish settings');
+                return;
+            end
+            startDir = '';
+            try
+                if ~isempty(obj.State.paths.dlc) && isfile(obj.State.paths.dlc)
+                    startDir = fileparts(obj.State.paths.dlc);
+                end
+            catch
+            end
+            if isempty(startDir); startDir = pwd; end
+            [f, p] = uigetfile({'*.csv', 'DLC csv'}, 'Pick another DLC csv', startDir);
+            if isequal(f, 0); return; end
+            newPath = fullfile(p, f);
+            try
+                newDlc = sphynx.io.readDLC(newPath);
+            catch ME
+                obj.applog('error', 'readDLC failed: %s', ME.message);
+                return;
+            end
+            oldPerPart = obj.State.perPart;
+            obj.State.paths.dlc = newPath;
+            obj.State.dlc = newDlc;
+            if ~isempty(obj.DLCField); obj.DLCField.Value = newPath; end
+            obj.applog('info', 'Check another: %s -> %d frames, %d parts', ...
+                f, newDlc.nFrames, numel(newDlc.bodyPartsNames));
+            obj.realignPerPartByName(oldPerPart);
+            obj.populateBodyPartDropDown();
+            obj.refreshPerPartTable();
+            obj.refreshAppliesDropDown();
+            obj.State.currentBodyPart = 1;
+            obj.State.currentFrame = 1;
+            obj.refreshPreview();
+            obj.computeAll();
+        end
+
+        function loadPreprocessedSettings(obj)
+            % LOADPREPROCESSEDSETTINGS  (R24) Pick a saved
+            % <exp>_PreprocessSettings.mat and overlay its per-part +
+            % outlier settings onto the currently loaded DLC. Re-keyed
+            % by part name so it works regardless of part order or
+            % count differences.
+            if isempty(obj.State.dlc)
+                obj.applog('warn', 'Load preprocessed: load a DLC csv first');
+                return;
+            end
+            startDir = '';
+            try
+                if ~isempty(obj.State.paths.root) && isfolder(obj.State.paths.root)
+                    startDir = obj.State.paths.root;
+                end
+            catch
+            end
+            if isempty(startDir); startDir = pwd; end
+            [f, p] = uigetfile({'*.mat', 'Preprocess settings .mat'}, ...
+                'Pick preprocess settings', startDir);
+            if isequal(f, 0); return; end
+            stPath = fullfile(p, f);
+            try
+                S = sphynx.io.readTracksSettings(stPath);
+            catch ME
+                obj.applog('error', 'Load preprocessed failed: %s', ME.message);
+                return;
+            end
+            applied = 0;
+            if isfield(S, 'bodyparts') && ~isempty(S.bodyparts)
+                applied = obj.realignPerPartByName(S.bodyparts);
+            end
+            if isfield(S, 'outlier') && ~isempty(S.outlier)
+                obj.State.outlier = S.outlier;
+                obj.pushOutlierToUI();
+            end
+            obj.refreshPerPartTable();
+            obj.refreshAppliesDropDown();
+            obj.applog('info', 'Load preprocessed: applied %d/%d parts from %s', ...
+                applied, numel(obj.State.dlc.bodyPartsNames), f);
+            obj.computeAll();
+        end
+
+        function n = realignPerPartByName(obj, srcPerPart)
+            % Replace obj.State.perPart with a fresh per-part array
+            % matching the CURRENT DLC's body part order; for every
+            % part also present (by name, case-insensitive) in
+            % `srcPerPart`, carry over the saved settings. Parts not
+            % in the source get defaultPerPart fallbacks. Returns the
+            % number of parts that were actually carried over.
+            n = 0;
+            if isempty(obj.State.dlc); return; end
+            names = obj.State.dlc.bodyPartsNames;
+            cfg = obj.State.config;
+            arr = repmat(sphynx.preprocess.perPartDefault('', cfg), 1, numel(names));
+            srcNames = {};
+            if ~isempty(srcPerPart) && isfield(srcPerPart, 'name')
+                srcNames = lower({srcPerPart.name});
+            end
+            for k = 1:numel(names)
+                d = sphynx.preprocess.perPartDefault(names{k}, cfg);
+                d.name = names{k};
+                if ~isempty(srcNames)
+                    j = find(strcmp(srcNames, lower(names{k})), 1);
+                    if ~isempty(j)
+                        src = srcPerPart(j);
+                        fn = fieldnames(src);
+                        for ff = 1:numel(fn)
+                            if strcmp(fn{ff}, 'name'); continue; end
+                            d.(fn{ff}) = src.(fn{ff});
+                        end
+                        n = n + 1;
+                    end
+                end
+                arr(k) = d;
+            end
+            obj.State.perPart = arr;
+            % Reset processed cache to match the new part count. Field
+            % order mirrors populateDefaultPerPart / storeProcessed.
+            obj.State.processed = struct('X_clean', {}, 'Y_clean', {}, ...
+                'X_interp', {}, 'Y_interp', {}, ...
+                'X_smooth', {}, 'Y_smooth', {}, ...
+                'percentNaN', {}, 'percentLowLikelihood', {}, ...
+                'percentBadCombined', {}, 'percentOutliers', {}, ...
+                'percentManual', {}, 'status', {});
+        end
+
+        function pushOutlierToUI(obj)
+            % Mirror obj.State.outlier into the outlier-panel controls
+            % so users see the loaded values after Load preprocessed.
+            o = obj.State.outlier;
+            try
+                if isfield(o, 'velocityJump') && ~isempty(obj.VJMaxField)
+                    obj.VJMaxField.Value = o.velocityJump.maxVelocityCmS;
+                end
+                if isfield(o, 'hampel')
+                    if ~isempty(obj.HampelEnabledChk) && isfield(o.hampel, 'enabled')
+                        obj.HampelEnabledChk.Value = logical(o.hampel.enabled);
+                    end
+                    if ~isempty(obj.HampelWindowField) && isfield(o.hampel, 'windowSec')
+                        obj.HampelWindowField.Value = o.hampel.windowSec;
+                    end
+                    if ~isempty(obj.HampelSigmaField) && isfield(o.hampel, 'nSigma')
+                        obj.HampelSigmaField.Value = o.hampel.nSigma;
+                    end
+                end
+                if isfield(o, 'kalman')
+                    if ~isempty(obj.KalmanQField) && isfield(o.kalman, 'processNoise')
+                        obj.KalmanQField.Value = o.kalman.processNoise;
+                    end
+                    if ~isempty(obj.KalmanRField) && isfield(o.kalman, 'measNoiseScale')
+                        obj.KalmanRField.Value = o.kalman.measNoiseScale;
+                    end
+                end
+            catch ME
+                obj.applog('warn', 'pushOutlierToUI partial: %s', ME.message);
+            end
+        end
+
         function pathsOut = savePreprocessed(obj)
             % SAVEPREPROCESSED  Persist settings + per-session traces (+ plots).
             pathsOut = struct();
@@ -885,11 +1048,21 @@ classdef PreprocessTabController < handle
                 'ValueChangedFcn', @(~,~) obj.collectPathsFromFields());
             obj.PresetField.Layout.Row = 2; obj.PresetField.Layout.Column = 5;
 
-            % Row 3: Load (cols 1..4) + Load synthetic (col 5)
+            % Row 3: Load (cols 1..3) + Check another (col 4) + Load
+            % synthetic (col 5). R24: "Check another" loads a different
+            % DLC csv but keeps the per-part settings already dialled
+            % in for the prior session, then re-runs Compute all.
             btnLoad = uibutton(g, 'Text', 'Load', ...
                 'BackgroundColor', semanticColor('action'), ...
                 'ButtonPushedFcn', @(~,~) obj.loadAll());
-            btnLoad.Layout.Row = 3; btnLoad.Layout.Column = [1 4];
+            btnLoad.Layout.Row = 3; btnLoad.Layout.Column = [1 3];
+
+            btnCheck = uibutton(g, 'Text', 'Check another', ...
+                'BackgroundColor', semanticColor('action'), ...
+                'Tooltip', ['Pick another DLC csv and reuse the current ' ...
+                            'per-part settings on it (by body-part name).'], ...
+                'ButtonPushedFcn', @(~,~) obj.checkAnotherDlc());
+            btnCheck.Layout.Row = 3; btnCheck.Layout.Column = 4;
 
             btnSynth = uibutton(g, 'Text', 'Load synthetic', ...
                 'BackgroundColor', semanticColor('info'), ...
@@ -979,11 +1152,23 @@ classdef PreprocessTabController < handle
 
             % Row 4: spacer (divider)
 
-            % Row 5: Save preprocessed (formerly TopBar)
-            bSave = uibutton(btnCol, 'Text', 'Save preprocessed', ...
+            % Row 5: Save preprocessed | Load preprocessed (R24). Load
+            % reads a saved <exp>_PreprocessSettings.mat and overlays
+            % its per-part + outlier settings onto the currently
+            % loaded DLC, then re-runs Compute all.
+            r5 = uigridlayout(btnCol, [1, 2]); r5.Layout.Row = 5;
+            r5.ColumnWidth = {'1x', '1x'};
+            r5.Padding = [0 0 0 0]; r5.ColumnSpacing = 4;
+            bSave = uibutton(r5, 'Text', 'Save preprocessed', ...
                 'BackgroundColor', [1.00 0.55 0.55], 'FontWeight', 'bold', ...
                 'ButtonPushedFcn', @(~,~) obj.savePreprocessed());
-            bSave.Layout.Row = 5;
+            bSave.Layout.Column = 1;
+            bLoadPre = uibutton(r5, 'Text', 'Load preprocessed', ...
+                'BackgroundColor', semanticColor('action'), 'FontWeight', 'bold', ...
+                'Tooltip', ['Load <exp>_PreprocessSettings.mat saved by ' ...
+                            'Save preprocessed and apply to the current DLC.'], ...
+                'ButtonPushedFcn', @(~,~) obj.loadPreprocessedSettings());
+            bLoadPre.Layout.Column = 2;
 
             % Row 6: save-plots checkbox
             obj.SavePlotsCheckbox = uicheckbox(btnCol, 'Text', 'save plots', ...
