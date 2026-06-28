@@ -76,6 +76,7 @@ classdef BatchAnalysisTabController < handle
         % Results
         TidyTable
         WideTable
+        BarnesTable
 
         % Log
         LogTextArea
@@ -94,7 +95,8 @@ classdef BatchAnalysisTabController < handle
                 'sessions', struct('id', {}, 'dlc', {}, ...
                                    'video', {}, 'preset', {}, ...
                                    'status', {}), ...
-                'tidy', table(), 'wide', table());
+                'tidy', table(), 'wide', table(), ...
+                'barnes', table());
             obj.buildUI();
             obj.inheritRootFromParentApp();
         end
@@ -199,6 +201,7 @@ classdef BatchAnalysisTabController < handle
             cleaner = onCleanup(@() closeIfValid(dlg)); %#ok<NASGU>
 
             tidyRows = {};
+            barnesRows = {};   % R26: one row per session that has BarnesMetrics
             for k = 1:n
                 if dlg.CancelRequested; break; end
                 s = sessions(k);
@@ -225,6 +228,9 @@ classdef BatchAnalysisTabController < handle
 
                 if aggregate
                     tidyRows = [tidyRows; obj.actsToTidyRows(res, s)]; %#ok<AGROW>
+                    if isfield(res, 'BarnesMetrics') && ~isempty(res.BarnesMetrics)
+                        barnesRows = [barnesRows; obj.barnesMetricsToRow(res, s)]; %#ok<AGROW>
+                    end
                 end
 
                 % Renders + plots
@@ -257,6 +263,16 @@ classdef BatchAnalysisTabController < handle
                                       'mean_v_cm_s', 'distance_cm', ...
                                       'first_start_s', 'first_end_s'});
                 obj.State.wide = obj.tidyToWide(obj.State.tidy);
+                if ~isempty(barnesRows)
+                    obj.State.barnes = cell2table(barnesRows, ...
+                        'VariableNames', {'session', ...
+                            'TargetHoleVisitOrder', 'PrimaryErrors', ...
+                            'TotalNoseHoleVisits', 'TotalBodyHoleVisits', ...
+                            'NumCheckedHoles', 'FirstCheckedHoleNumber', ...
+                            'FirstCheckedHoleErrorDeg', 'MeanCheckedHoleErrorDeg'});
+                else
+                    obj.State.barnes = table();
+                end
                 obj.refreshTables();
             end
             obj.applog('info', 'Batch done.');
@@ -272,6 +288,16 @@ classdef BatchAnalysisTabController < handle
             widePath = fullfile(outDir, 'batch_wide.csv');
             writetable(obj.State.tidy, tidyPath);
             writetable(obj.State.wide, widePath);
+            % R26: write batch_barnes.csv only when at least one
+            % session in this batch carried BarnesMetrics. Mirrors how
+            % the BarnesTable in the right pane stays empty otherwise.
+            if isfield(obj.State, 'barnes') && ~isempty(obj.State.barnes) ...
+                    && height(obj.State.barnes) > 0
+                barnesPath = fullfile(outDir, 'batch_barnes.csv');
+                writetable(obj.State.barnes, barnesPath);
+                obj.applog('info', 'Saved %s, %s, %s', tidyPath, widePath, barnesPath);
+                return;
+            end
             obj.applog('info', 'Saved %s and %s', tidyPath, widePath);
         end
 
@@ -593,9 +619,14 @@ classdef BatchAnalysisTabController < handle
         end
 
         function buildRight(obj, parent)
-            right = uigridlayout(parent, [2, 1]);
+            % R26: three stacked tables -- tidy / wide / barnes. The
+            % Barnes table appears at the bottom; rows are sessions and
+            % columns are the 8 fields from barnesSessionMetrics. Stays
+            % empty (and is not saved) when no session has BarnesMetrics
+            % attached.
+            right = uigridlayout(parent, [3, 1]);
             right.Layout.Column = 2;
-            right.RowHeight = {'1x', '1x'};
+            right.RowHeight = {'1x', '1x', '1x'};
             right.RowSpacing = 4;
             right.Padding = [0 0 0 0];
             obj.TidyTable = uitable(right, 'ColumnName', ...
@@ -603,6 +634,11 @@ classdef BatchAnalysisTabController < handle
                  'mean_dur_s', 'mean_v_cm_s', 'distance_cm', ...
                  'first_start_s', 'first_end_s'});
             obj.WideTable = uitable(right);
+            obj.BarnesTable = uitable(right, 'ColumnName', ...
+                {'session', 'TargetHoleVisitOrder', 'PrimaryErrors', ...
+                 'TotalNoseHoleVisits', 'TotalBodyHoleVisits', ...
+                 'NumCheckedHoles', 'FirstCheckedHoleNumber', ...
+                 'FirstCheckedHoleErrorDeg', 'MeanCheckedHoleErrorDeg'});
         end
 
         % ---------- Folder / file pickers --------------------------
@@ -823,6 +859,28 @@ classdef BatchAnalysisTabController < handle
                 obj.WideTable.ColumnName = obj.State.wide.Properties.VariableNames;
                 obj.WideTable.Data = table2cell(obj.State.wide);
             end
+            if isfield(obj.State, 'barnes') && ~isempty(obj.State.barnes) ...
+                    && height(obj.State.barnes) > 0
+                obj.BarnesTable.ColumnName = obj.State.barnes.Properties.VariableNames;
+                obj.BarnesTable.Data = table2cell(obj.State.barnes);
+            else
+                obj.BarnesTable.Data = {};
+            end
+        end
+
+        function row = barnesMetricsToRow(~, res, s)
+            % R26: serialise one BarnesMetrics struct to a row vector
+            % matching the 9-column session table (id + 8 metrics).
+            bm = res.BarnesMetrics;
+            row = {s.id, ...
+                getfield2(bm, 'TargetHoleVisitOrder', NaN), ...
+                getfield2(bm, 'PrimaryErrors', NaN), ...
+                getfield2(bm, 'TotalNoseHoleVisits', 0), ...
+                getfield2(bm, 'TotalBodyHoleVisits', 0), ...
+                getfield2(bm, 'NumCheckedHoles', 0), ...
+                getfield2(bm, 'FirstCheckedHoleNumber', NaN), ...
+                getfield2(bm, 'FirstCheckedHoleErrorDeg', NaN), ...
+                getfield2(bm, 'MeanCheckedHoleErrorDeg', NaN)};
         end
 
         % ---------- Misc ------------------------------------------

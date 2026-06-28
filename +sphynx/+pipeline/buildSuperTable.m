@@ -76,6 +76,13 @@ function ST = buildSuperTable(batchResults, varargin)
     wide = addPerSessionScalar(wide, batchResults, metadata, mice, sessions, ...
         'Velocity', 'velocity', 'cm_per_s');
 
+    % R26: Barnes-specific session metrics, one column per (metric,
+    % session) pair. Only fires if at least one batchResults record
+    % carries Barnes_<FieldName> flattened fields (the caller --
+    % MakeOutputTableTabController.buildTable -- does the flattening
+    % from each session's BarnesMetrics struct).
+    wide = addBarnesColumns(wide, batchResults, metadata, mice, sessions);
+
     % Attach mouse / group / line columns at the front
     miceMeta = uniqueMiceMetadata(metadata);
     wide = outerjoin(miceMeta, wide, 'Keys', 'mouse', 'MergeKeys', true);
@@ -337,6 +344,22 @@ function wide = pivotWide(tidy, mice, sessions, actNames, perAct)
                 wide.(colName) = col;
             end
         end
+    end
+end
+
+function wide = addBarnesColumns(wide, batchResults, metadata, mice, sessions)
+    % R26: detect Barnes_<FieldName> flat fields on batchResults and
+    % emit one per-session column for each. No-op when no record
+    % carries any Barnes_* field (non-Barnes batches stay untouched).
+    if isempty(batchResults); return; end
+    fns = fieldnames(batchResults);
+    barnesFields = fns(startsWith(fns, 'Barnes_'));
+    if isempty(barnesFields); return; end
+    for k = 1:numel(barnesFields)
+        srcField = barnesFields{k};
+        prefix = lower(extractAfter(srcField, 'Barnes_'));
+        wide = addPerSessionScalar(wide, batchResults, metadata, ...
+            mice, sessions, srcField, prefix, 'barnes');
     end
 end
 

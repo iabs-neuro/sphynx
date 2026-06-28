@@ -117,6 +117,10 @@ classdef MakeOutputTableTabController < handle
         function applyDefaults(obj)
             % Build the metric matrix from sphynx.acts.actParams. Acts
             % not in actParams get an empty row (user can tick).
+            % R26: also fall back to a per-family pattern for Barnes-
+            % default acts (nose_at_* / body_at_* / mouse_inside_*) so
+            % the 60-odd hole variants get sensible default ticks
+            % without hard-coding every objectN entry in actParams.
             n = numel(obj.State.actNames);
             m = numel(obj.MetricColumns);
             M = false(n, m);
@@ -130,17 +134,46 @@ classdef MakeOutputTableTabController < handle
                 row = false(1, m);
                 if isfield(defaults, nm)
                     metrics = defaults.(nm);
-                    if isstring(metrics); metrics = cellstr(metrics); end
-                    if ischar(metrics); metrics = {metrics}; end
-                    for mk = 1:numel(metrics)
-                        col = find(strcmpi(obj.MetricColumns, metrics{mk}), 1);
-                        if ~isempty(col); row(col) = true; end
-                    end
+                else
+                    metrics = obj.barnesActDefaults(nm);
+                end
+                if isstring(metrics); metrics = cellstr(metrics); end
+                if ischar(metrics); metrics = {metrics}; end
+                for mk = 1:numel(metrics)
+                    col = find(strcmpi(obj.MetricColumns, metrics{mk}), 1);
+                    if ~isempty(col); row(col) = true; end
                 end
                 M(k, :) = row;
             end
             obj.State.metricMatrix = M;
             obj.refreshActMetricTable();
+        end
+
+        function metrics = barnesActDefaults(~, actName)
+            % R26: Barnes default-act family detection. Returns the
+            % metric list to tick when actName matches a Barnes pattern;
+            % empty cell otherwise (acts not from the Barnes library get
+            % no default ticks, matching prior behaviour).
+            metrics = {};
+            % nose_at_<target|holeN|platform|any_hole>
+            if ~isempty(regexp(actName, ...
+                    '^nose_at_(target|hole\d+|platform|any_hole)$', 'once'))
+                metrics = {'ActNumber', 'ActDuration', ...
+                    'ActPercent', 'FirstStartSec'};
+                return;
+            end
+            % body_at_<target|holeN|platform>
+            if ~isempty(regexp(actName, ...
+                    '^body_at_(target|hole\d+|platform)$', 'once'))
+                metrics = {'ActNumber', 'ActDuration', 'ActPercent'};
+                return;
+            end
+            % mouse_inside_<target|holeN|platform>
+            if ~isempty(regexp(actName, ...
+                    '^mouse_inside_(target|hole\d+|platform)$', 'once'))
+                metrics = {'ActNumber', 'ActDuration'};
+                return;
+            end
         end
 
         function loadDefaults(obj)
@@ -190,6 +223,27 @@ classdef MakeOutputTableTabController < handle
             obj.State.metricMatrix = false(numel(obj.State.actNames), ...
                 numel(obj.MetricColumns));
             obj.refreshActMetricTable();
+        end
+
+        function names = collectBarnesFieldNames(~, files)
+            % R26: union of fieldnames(BarnesMetrics) across every
+            % _WorkSpace.mat in the scan. Returns {} when nothing has
+            % BarnesMetrics. Used by buildTable to keep the struct
+            % array shape uniform across sessions.
+            names = {};
+            for k = 1:numel(files)
+                p = fullfile(files(k).folder, files(k).name);
+                try
+                    s = load(p, 'BarnesMetrics');
+                catch
+                    continue;
+                end
+                if ~isfield(s, 'BarnesMetrics') || ~isstruct(s.BarnesMetrics)
+                    continue;
+                end
+                names = union(names, fieldnames(s.BarnesMetrics));
+            end
+            names = names(:)';
         end
 
         function s = metricMatrixToStruct(obj)
@@ -256,16 +310,27 @@ classdef MakeOutputTableTabController < handle
             end
             obj.applog('info', 'Reading %d session files...', numel(files));
 
-            batch = struct('SessionName', {}, 'Acts', {}, ...
+            % R26: pre-discover Barnes field names across the whole
+            % batch so every rec carries the same struct shape (struct
+            % arrays in MATLAB demand uniform fields). When no session
+            % has BarnesMetrics, barnesFieldNames stays empty and
+            % nothing is added.
+            barnesFieldNames = obj.collectBarnesFieldNames(files);
+
+            % batch struct array needs uniform fieldnames or
+            % `batch(end+1) = rec` throws -- pre-include every
+            % Barnes_<FieldName> we discovered so each rec has the
+            % same shape.
+            batchTemplate = struct('SessionName', {}, 'Acts', {}, ...
                 'Distance', {}, 'Velocity', {});
+            for bfn = 1:numel(barnesFieldNames)
+                batchTemplate(1).(['Barnes_' barnesFieldNames{bfn}]) = NaN;
+            end
+            batch = batchTemplate([]);
             for k = 1:numel(files)
                 p = fullfile(files(k).folder, files(k).name);
                 try
                     s = load(p);
-                    % Session stem: prefer the parent folder name (clean
-                    % <exp>_<mouse>_<session> form). Fall back to the
-                    % .mat basename minus the _WorkSpace and DLC suffixes
-                    % if the file sits at batch-dir top level.
                     [~, parentName] = fileparts(files(k).folder);
                     [~, batchName]  = fileparts(d);
                     if ~isempty(parentName) && ~strcmp(parentName, batchName)
@@ -286,6 +351,20 @@ classdef MakeOutputTableTabController < handle
                         if ~isempty(bcIdx)
                             rec.Distance = getOr(s.BodyPartsTraces(bcIdx), 'AverageDistance', NaN);
                             rec.Velocity = getOr(s.BodyPartsTraces(bcIdx), 'AverageSpeed', NaN);
+                        end
+                    end
+                    % R26: flatten BarnesMetrics fields into the rec
+                    % so buildSuperTable's addBarnesColumns picks them
+                    % up. Sessions without BarnesMetrics still emit
+                    % every field (set to NaN) to keep the struct
+                    % array shape uniform.
+                    bm = getOr(s, 'BarnesMetrics', struct());
+                    for bfn = 1:numel(barnesFieldNames)
+                        fn = barnesFieldNames{bfn};
+                        if isstruct(bm) && isfield(bm, fn)
+                            rec.(['Barnes_' fn]) = bm.(fn);
+                        else
+                            rec.(['Barnes_' fn]) = NaN;
                         end
                     end
                     batch(end+1) = rec; %#ok<AGROW>
