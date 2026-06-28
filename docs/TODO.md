@@ -55,6 +55,8 @@ Do not touch without explicit user ask.
 
 ## 3. Define Acts
 
+- [ ] **P2 / C3** **Per-class-of-objects act constructor.** Today the Define Acts UI lets you pick zones individually (target, object1..N, platform). For paradigms with N>5 object holes this is tedious and error-prone. Want: a "class" abstraction in the act constructor so the user picks the whole class once (e.g. "all hole_realout" or "all hole_real") and the act expands per-zone automatically at evaluation time. Touches `+sphynx/+acts/emptyAct.m` (new `zoneClass` field), `+sphynx/+acts/applyAct.m::applySimple` (resolve class to current preset's zone roster), `+sphynx/+app/DefineActsTabController.m` (UI: class picker + per-class overrides). Aligns with how Barnes defaults already use 19 OR-ed zones per `nose_at_any_hole` -- generalise that pattern. (added 2026-06-28)
+
 - [ ] **P2 / C3** **Complex-acts redesign.** Current Complex tab is cramped and rigid. Wanted:
   - Wider Name field (col 2 is `1x` while col 1 is 120px label).
   - More compact layout (combine label+widget rows where possible).
@@ -80,6 +82,21 @@ Do not touch without explicit user ask.
 - [ ] **P2 / C2** Etogram rows grouped by category headers (built-in / custom / zone) with cluster spacing.
 - [ ] **P3 / C2** Customisable speed-vs-time plot: act-bands as background patches (rest/walk/locomotion).
 - [ ] **P3 / C3** Egocentric trajectory + heading-angle trace for direction-aware acts.
+
+## R28 audit findings (2026-06-28) -- HIGH-RISK items to land first
+
+- [ ] **P1 / C1** **BatchAnalysisTab preproc-settings picker is dead.** UI captures `obj.PreprocessSettingsField.Value` but `runBatch` (`+sphynx/+app/BatchAnalysisTabController.m:180-217`) never copies it into `cfg.paths.preprocessSettings`. Auto-discovery silently substitutes. Fix: 1 line analog of `AnalyzeSessionTabController.m:116-119`.
+- [ ] **P1 / C2** **Barnes 19-hole default leaks through.** `+sphynx/+pipeline/barnesSessionMetrics.m:62` and `+sphynx/+acts/actsLibraryBarnesDefaults.m:50` both default `NumObjects=19`. Calls at `analyzeSession.m:461` and `DefineActsTabController.m:94-100` never pass the preset's actual hole count. With a 5-hole preset: angular metrics computed against a phantom 20-slot ring (18 deg step instead of 60), and "Load Barnes default" seeds 14 phantom acts (hole6..hole19 x 3 categories) that evaluate to all-zero. Thread `numel(<object* zones in preset>)` into both call sites.
+- [ ] **P1 / C1** **applyAct.m unguarded `ctx.frameRate`** at `+sphynx/+acts/applyAct.m:63-64`. When fps is NaN, `round(durSec * NaN) = NaN -> lengths < NaN` is always false, silently nullifying the per-act min-duration filter (R23). Guard in `makeActContext.m:23` + fallback to a known cfg.acts.minRunSeconds with `log warn`.
+- [ ] **P1 / C1** **Typo in DefineActs body-parts dropdown.** `+sphynx/+app/DefineActsTabController.m:200` `'righforelimb'` (missing `t`). Selecting it silently fails to resolve.
+- [ ] **P2 / C1** **`bcIdx` silent-fallback-to-1 in 4 sites.** `saveSessionPlots.m:38`, `renderActsVideo.m:136`, `AnalyzeSessionTabController.m:945`, `MakeOutputTableTabController.m:332-334`. On SuperAnimal sessions where `bodycenter` is `mouse_center`, `idx=1` silently picks `nose` -> wrong trajectory trail / velocity readout / Average totals. Route all 4 through `sphynx.bodyparts.resolvePart` with a `warn` on miss.
+- [ ] **P2 / C1** **`makeActContext.m:27` `pxlPerCm=1` silent fallback** (and 4 more sites: `saveSessionPlots.m:40`, `AnalyzeSessionTabController.m:273,987`, `BatchAnalysisTabController.m:773`). When `result.Options.pxl2sm` missing, distances are pixels labelled as cm. Pick one: hard-error on missing OR `warn` + propagate explicit NaN.
+- [ ] **P2 / C2** **DefineActs Make-video bypasses Preproc Settings.** `+sphynx/+app/DefineActsTabController.m:971-977` and `:1180-1186` build cfg without `cfg.paths.preprocessSettings`. Preview diverges from Analyze Session results. Add picker or auto-inherit from the parent app.
+- [ ] **P2 / C1** **`detectSessionStartFrame.m:40` WindowFrames=30 is fps-implicit.** Breaks on 25 / 60 fps videos. Convert to seconds (`WindowSec * frameRate`).
+- [ ] **P2 / C1** **Kalman noise params dead when smoothingMethod != kalman.** `applyPerPartSettings.m:145-156` makes them mutually exclusive with the smoothdata branch. Silently ignored. Either honour them universally or `warn` when they're set but unused.
+- [ ] **P3 / C1** **Synonym map gaps.** `+sphynx/+bodyparts/identifyParts.m:30-53` lacks `left_eye`, `right_eye`, `mid_back*`, `tail2..tail5`, `tail_end`. Not load-bearing today but useful for future acts.
+- [ ] **P3 / C1** **Document `identifyParts.m` first-match rule.** When both `neck` and `head_midpoint` are present, the earlier in kept-list order wins for `HeadCenter`. Surprising; document or make explicit-preference.
+- [ ] **P3 / C2** **4-way duplication of defaults.** `minDurationSec=0.25` (applyAct.m:54, emptyAct.m:33, buildSimpleAct.m:11, buildComplexAct.m:10) + Kalman defaults (kalmanFilter2D.m:35-36, applyPerPartSettings.m:185-186, PreprocessTabController.m:881-882) + `maxGapSec=0.25` (no cfg counterpart at all). Centralise in `defaultConfig` + `sphynx_defaults.jsonc`.
 
 ## 5. Batch Analysis
 
