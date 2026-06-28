@@ -108,4 +108,9 @@ function a = makeAllInZoneAct(name, zoneName)
     a.specialKind = 'allInZone';
     a.bodyParts   = {'bodycenter', 'tailbase', 'headcenter'};
     a.zones       = {zoneName};
+    % R23: mouse_inside means the mouse is genuinely curled inside
+    % the hole -- short blips (1-2 frames where all three parts
+    % happen to land in the strict polygon during a flyby) are
+    % noise. Require a 2-second sustained run.
+    a.minDurationSec = 2.0;
 end

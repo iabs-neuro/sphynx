@@ -264,61 +264,52 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
             end
         end
 
-        % Structured info block on the LEFT side, big font:
-        %   Speed: 12.3 cm/s
-        %   Speed_act: locomotion
-        %   Zone: walls, corners
-        %   Acts:
-        %     freezing
-        %     object1
-        %     ...
-        x0 = 12;          % left margin
-        y0 = 28;          % first baseline
-        dy = panelDy;     % line height (Speed/Speed_act/Zone)
+        % R23: info block flush with top-left corner. White text +
+        % black outline (4-pass shadow stamp; MATLAB text has no
+        % glyph stroke), NO opaque background. Spacing forced wider
+        % than glyph height so lines never overlap. Acts list now
+        % shows EVERY active act (spatial-vs-speed dedup removed --
+        % user expects Barnes nose_at_target / body_at_target to
+        % appear under "Acts:" too).
+        x0 = 4;             % flush left
+        y0 = round(speedFont * 0.9);   % first baseline ~one glyph in
+        dyBig   = max(panelDy, round(speedFont * 1.35));
+        dySub   = max(panelDy, round(subFont   * 1.35));
+        dyActs  = max(actsDy,  round(actsFont  * 1.35));
         if feat.velocity && ~isempty(centerVel) && f <= numel(centerVel) ...
                 && isfinite(centerVel(f))
-            text(ax, x0, y0, sprintf('Speed: %.1f cm/s', centerVel(f)), ...
-                'Color', 'w', 'FontSize', speedFont, 'FontWeight', 'bold', ...
-                'BackgroundColor', [0 0 0 0.55]);
-            y0 = y0 + dy;
+            drawOutlinedText(ax, x0, y0, sprintf('Speed: %.1f cm/s', centerVel(f)), ...
+                speedFont, 'w');
+            y0 = y0 + dyBig;
             spAct = '';
             if f <= numel(speedActMap); spAct = speedActMap{f}; end
-            if isempty(spAct); spAct = '—'; end
-            text(ax, x0, y0, sprintf('Speed_act: %s', spAct), ...
-                'Color', 'w', 'FontSize', subFont, 'FontWeight', 'bold', ...
-                'Interpreter', 'none', ...
-                'BackgroundColor', [0 0 0 0.55]);
-            y0 = y0 + dy;
+            if isempty(spAct); spAct = '-'; end
+            drawOutlinedText(ax, x0, y0, sprintf('Speed_act: %s', spAct), ...
+                subFont, 'w');
+            y0 = y0 + dySub;
         end
         spatialList = {};
         if f <= numel(spatialActsMap); spatialList = spatialActsMap{f}; end
         if feat.zones
-            zname = '—';
+            zname = '-';
             if ~isempty(spatialList); zname = strjoin(spatialList, ', '); end
-            text(ax, x0, y0, sprintf('Zone: %s', zname), ...
-                'Color', 'w', 'FontSize', subFont, 'FontWeight', 'bold', ...
-                'Interpreter', 'none', ...
-                'BackgroundColor', [0 0 0 0.55]);
-            y0 = y0 + dy;
+            drawOutlinedText(ax, x0, y0, sprintf('Zone: %s', zname), ...
+                subFont, 'w');
+            y0 = y0 + dySub;
         end
         if feat.actsList
-            text(ax, x0, y0, 'Acts:', ...
-                'Color', 'w', 'FontSize', subFont, ...
-                'FontWeight', 'bold', ...
-                'BackgroundColor', [0 0 0 0.55]);
-            y0 = y0 + actsDy;
-            % Skip acts that already appear under Speed_act / Zone.
-            shownInfo = [{speedActMap{f}}, spatialList];
-            shownInfo = shownInfo(~cellfun(@isempty, shownInfo));
+            drawOutlinedText(ax, x0, y0, 'Acts:', subFont, 'w');
+            y0 = y0 + dyActs;
+            % R23: show ALL active acts, including spatial. Previously
+            % we deduped vs Speed_act / Zone lines, which made the
+            % list silent on every Barnes session that had only
+            % nose_at_* / body_at_* + a speed act firing.
             active = find(actMat(:, f));
             for j = 1:numel(active)
                 k = active(j);
-                if any(strcmp(actNames{k}, shownInfo)); continue; end
-                text(ax, x0 + max(18, round(actsFont * 0.5)), y0, actNames{k}, ...
-                    'Color', actColors(k, :), 'FontSize', actsFont, ...
-                    'FontWeight', 'bold', 'Interpreter', 'none', ...
-                    'BackgroundColor', [0 0 0 0.55]);
-                y0 = y0 + actsDy - 4;
+                drawOutlinedText(ax, x0 + max(8, round(actsFont * 0.4)), ...
+                    y0, actNames{k}, actsFont, actColors(k, :));
+                y0 = y0 + dyActs;
             end
         end
 
@@ -333,6 +324,25 @@ end
 
 function closeIfValid(h)
     if ~isempty(h) && isvalid(h); close(h); end
+end
+
+function drawOutlinedText(ax, x, y, str, fontSize, color)
+    % R23: render `str` as white-on-no-background text with a 1-px
+    % black outline. MATLAB's text() has no glyph stroke, so we
+    % stamp the same string at the 8 cardinal offsets in black and
+    % the actual color on top. ~9 text objects per label which is
+    % fine for the small number we render per frame.
+    if nargin < 6; color = 'w'; end
+    for dx = -1:1
+        for dy = -1:1
+            if dx == 0 && dy == 0; continue; end
+            text(ax, x + dx, y + dy, str, ...
+                'Color', 'k', 'FontSize', fontSize, ...
+                'FontWeight', 'bold', 'Interpreter', 'none');
+        end
+    end
+    text(ax, x, y, str, 'Color', color, 'FontSize', fontSize, ...
+        'FontWeight', 'bold', 'Interpreter', 'none');
 end
 
 function v = optNum(feat, enabled, name, default)

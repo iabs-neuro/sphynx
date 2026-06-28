@@ -23,7 +23,9 @@ function img = stampNumberCorner(img, txt, corner)
 
     [H, W, C] = size(img);
     if C == 1; img = repmat(img, [1 1 3]); end
-    side = max(12, round(0.05 * H));   % 5% of video height
+    % R23: 10% of video height (was 5%). Floor at 24 px so the digit
+    % glyph stays legible on very small crops (296p Barnes clip).
+    side = max(24, round(0.10 * H));
     side = min(side, min(H, W));
 
     switch corner
@@ -45,13 +47,23 @@ function img = stampNumberCorner(img, txt, corner)
     region(:, :, 3) = yellow(3);
     img(y0:y1, x0:x1, :) = region;
 
-    fontSize = max(8, round(0.55 * side));
+    % R23: try the off-screen figure path first (gives crisp anti-
+    % aliased text), fall back to the embedded 5x7 bitmap font when
+    % print() returns empty. The fallback guarantees the counter
+    % shows even if MATLAB graphics stack hiccups in some context.
+    fontSize = max(10, round(0.55 * side));
     key = sprintf('%s|%d', char(txt), fontSize);
+    bm = uint8([]);
     if isKey(cache, key)
         bm = cache(key);
     else
         bm = renderTextBitmap(char(txt), fontSize);
         cache(key) = bm;
+    end
+    if isempty(bm)
+        % Hard fallback: draw with the embedded 5x7 font. Scale so
+        % the glyph stack fits comfortably (~70% of the plate side).
+        bm = renderTextBitmapFallback(char(txt), max(2, floor(side * 0.7 / 7)));
     end
     if isempty(bm); return; end
 
@@ -98,4 +110,53 @@ function bm = renderTextBitmap(txt, fontSize)
     catch
         bm = uint8([]);
     end
+end
+
+function bm = renderTextBitmapFallback(txt, scale)
+    % Render `txt` via an embedded 5x7 bitmap font. Each char is a
+    % logical 7x5 (rows x cols). White-on-black uint8 output so the
+    % caller's `gray > 90` mask path works unchanged. `scale` is the
+    % per-pixel multiplier (>=1).
+    if nargin < 2 || isempty(scale) || scale < 1; scale = 1; end
+    G = glyphTable();
+    chars = char(txt);
+    cells = cell(1, numel(chars));
+    for i = 1:numel(chars)
+        c = upper(chars(i));
+        if isKey(G, c); cells{i} = G(c);
+        else; cells{i} = G('?'); end
+    end
+    if isempty(cells); bm = uint8([]); return; end
+    sep = false(7, 1);  % 1-col separator
+    pieces = cell(1, 2*numel(cells)-1);
+    pieces(1:2:end) = cells;
+    [pieces{2:2:end}] = deal(sep);
+    glyph = horzcat(pieces{:});
+    glyph = repelem(glyph, scale, scale);
+    bm = repmat(uint8(glyph) * uint8(255), [1 1 3]);
+end
+
+function G = glyphTable()
+    persistent T
+    if ~isempty(T); G = T; return; end
+    T = containers.Map();
+    % Encoded as 7-row x 5-col logical (1 = ink).
+    T('0') = logical([0 1 1 1 0; 1 0 0 1 1; 1 0 1 0 1; 1 0 1 0 1; 1 0 1 0 1; 1 1 0 0 1; 0 1 1 1 0]);
+    T('1') = logical([0 0 1 0 0; 0 1 1 0 0; 1 0 1 0 0; 0 0 1 0 0; 0 0 1 0 0; 0 0 1 0 0; 1 1 1 1 1]);
+    T('2') = logical([0 1 1 1 0; 1 0 0 0 1; 0 0 0 0 1; 0 0 0 1 0; 0 0 1 0 0; 0 1 0 0 0; 1 1 1 1 1]);
+    T('3') = logical([1 1 1 1 1; 0 0 0 1 0; 0 0 1 0 0; 0 0 0 1 0; 0 0 0 0 1; 1 0 0 0 1; 0 1 1 1 0]);
+    T('4') = logical([0 0 0 1 0; 0 0 1 1 0; 0 1 0 1 0; 1 0 0 1 0; 1 1 1 1 1; 0 0 0 1 0; 0 0 0 1 0]);
+    T('5') = logical([1 1 1 1 1; 1 0 0 0 0; 1 1 1 1 0; 0 0 0 0 1; 0 0 0 0 1; 1 0 0 0 1; 0 1 1 1 0]);
+    T('6') = logical([0 0 1 1 0; 0 1 0 0 0; 1 0 0 0 0; 1 1 1 1 0; 1 0 0 0 1; 1 0 0 0 1; 0 1 1 1 0]);
+    T('7') = logical([1 1 1 1 1; 0 0 0 0 1; 0 0 0 1 0; 0 0 1 0 0; 0 1 0 0 0; 0 1 0 0 0; 0 1 0 0 0]);
+    T('8') = logical([0 1 1 1 0; 1 0 0 0 1; 1 0 0 0 1; 0 1 1 1 0; 1 0 0 0 1; 1 0 0 0 1; 0 1 1 1 0]);
+    T('9') = logical([0 1 1 1 0; 1 0 0 0 1; 1 0 0 0 1; 0 1 1 1 1; 0 0 0 0 1; 0 0 0 1 0; 0 1 1 0 0]);
+    T('.') = logical([0 0 0 0 0; 0 0 0 0 0; 0 0 0 0 0; 0 0 0 0 0; 0 0 0 0 0; 0 1 1 0 0; 0 1 1 0 0]);
+    T('/') = logical([0 0 0 0 1; 0 0 0 1 0; 0 0 0 1 0; 0 0 1 0 0; 0 1 0 0 0; 0 1 0 0 0; 1 0 0 0 0]);
+    T('C') = logical([0 1 1 1 0; 1 0 0 0 1; 1 0 0 0 0; 1 0 0 0 0; 1 0 0 0 0; 1 0 0 0 1; 0 1 1 1 0]);
+    T('M') = logical([1 0 0 0 1; 1 1 0 1 1; 1 0 1 0 1; 1 0 0 0 1; 1 0 0 0 1; 1 0 0 0 1; 1 0 0 0 1]);
+    T('S') = logical([0 1 1 1 1; 1 0 0 0 0; 1 0 0 0 0; 0 1 1 1 0; 0 0 0 0 1; 0 0 0 0 1; 1 1 1 1 0]);
+    T(' ') = false(7, 5);
+    T('?') = logical([0 1 1 1 0; 1 0 0 0 1; 0 0 0 0 1; 0 0 0 1 0; 0 0 1 0 0; 0 0 0 0 0; 0 0 1 0 0]);
+    G = T;
 end

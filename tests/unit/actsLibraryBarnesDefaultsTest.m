@@ -94,6 +94,9 @@ function testMouseInsideIsAllInZoneSpecial(testCase)
     verifyEqual(testCase, a.zones, {'target_real'});
     verifyEqual(testCase, sort(a.bodyParts), ...
         sort({'bodycenter', 'tailbase', 'headcenter'}));
+    % R23: mouse_inside requires a 2-second sustained run to be
+    % counted; single-frame "all 3 parts inside" flybys are noise.
+    verifyEqual(testCase, a.minDurationSec, 2.0);
 end
 
 function testMouseInsideHoleNCoversAllN(testCase)
