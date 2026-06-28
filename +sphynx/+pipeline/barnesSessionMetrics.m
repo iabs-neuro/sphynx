@@ -22,7 +22,18 @@ function metrics = barnesSessionMetrics(result, varargin)
 %   from the target along the ring. Angle step = 360 / (NumObjects+1).
 %
 %   Returned struct:
-%     TotalNoseHoleVisits      sum of ActNumber across nose_at_holeN
+%     TotalNoseHoleVisits      sum of ActNumber across nose_at_holeN.
+%                              Equivalent to "total errors" in the
+%                              Barnes literature (Pitts, Sunyer): every
+%                              nose-poke into a NON-target hole counted,
+%                              including pokes AFTER the target was
+%                              first visited (perseverance).
+%     PrimaryErrors            number of nose_at_holeN episodes that
+%                              STARTED before the first nose_at_target
+%                              episode. The classic memory metric --
+%                              "how many wrong holes did the mouse
+%                              check before finding the goal" -- and
+%                              equals TargetHoleVisitOrder - 1.
 %     TotalBodyHoleVisits      sum of ActNumber across body_at_holeN
 %     FirstCheckedHoleNumber   N for the earliest nose_at_holeN
 %                              episode start. NaN if no per-hole act
@@ -146,6 +157,7 @@ function metrics = barnesSessionMetrics(result, varargin)
                 earlier = earlier + sum(tStarts < targetT);
             end
             metrics.TargetHoleVisitOrder = earlier + 1;
+            metrics.PrimaryErrors        = earlier;
         end
     end
 end
@@ -155,6 +167,7 @@ end
 function metrics = makeEmptyMetrics()
     metrics = struct( ...
         'TotalNoseHoleVisits',      0, ...
+        'PrimaryErrors',            NaN, ...
         'TotalBodyHoleVisits',      0, ...
         'NumCheckedHoles',          0, ...
         'FirstCheckedHoleNumber',   NaN, ...

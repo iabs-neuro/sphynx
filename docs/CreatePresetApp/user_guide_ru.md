@@ -1,7 +1,43 @@
-# CreatePresetApp — руководство пользователя (рус.)
+# CreatePresetApp -- руководство пользователя (рус.)
 
 Пошаговая инструкция по созданию пространственной разметки одной
 сессии видео.
+
+## Что нового с R20
+
+- Вкладки теперь пронумерованы в заголовке:
+  1. Create Preset, 2. Preprocess Tracking, 3. Define Acts,
+  4. Analyze Session, 5. Batch Analysis, 6. Make Output Table,
+  7. Plot Data, 8. Preprocess Video, 9. Synthetic Data.
+- Вкладка 2: две новые кнопки -- "Check another" (применить текущие
+  per-part настройки к другому DLC csv) и "Load preprocessed"
+  (подгрузить сохранённый `<exp>_PreprocessSettings.mat` на текущий
+  DLC).
+- Вкладка 3: кнопка дефолтной Barnes-библиотеки теперь грузит 64
+  акта (nose_at_<hole> 1+19, body_at_<hole> 1+19, пара platform,
+  mouse_inside_<hole> 1+19+1, nose_at_any_hole). Семейство
+  mouse_inside_* требует устойчивых 2 с (per-act minDurationSec=2.0).
+  Превью зоны теперь обновляется при выборе акта.
+- Вкладка 4: переработанная двухстрочная панель загрузки (Root /
+  Preset / Video / DLC / Out dir на 1-й строке; Preproc settings /
+  Acts library на 2-й). Слева от панели траектории добавлен listbox
+  фильтра актов для этограммы. Чекбокс "Render main video" по
+  умолчанию включён. Инфоблок на отрендеренном видео -- белый текст с
+  чёрной обводкой 1 px, прижат к верхнему левому углу (без подложки);
+  счётчик кадров -- жёлтый квадрат (10% высоты кадра) сверху справа.
+- Вкладка 5: парование сессий принимает И legacy DeepLabCut csv
+  (`...DLC_resnet50_...csv`), И superanimal-topviewmouse csv
+  (`..._superanimal_topviewmouse_..csv`). Многозначные ID мыши /
+  дня / трайла работают (m23, m183, m5718, 12d_3t, ...).
+- Вкладка 4 теперь печатает Barnes-метрики в шапке статистики сессии
+  (TotalNoseHoleVisits, PrimaryErrors, TotalBodyHoleVisits,
+  NumCheckedHoles, FirstCheckedHoleNumber, FirstCheckedHoleErrorDeg,
+  MeanCheckedHoleErrorDeg, TargetHoleVisitOrder). Полные определения:
+  `docs/Barnes/metrics.md`.
+- В корне репо появился `sphynx_defaults.jsonc` -- единый файл
+  настроек, разбитый по вкладкам, авто-подгружается
+  `sphynx.pipeline.defaultConfig`. Меняй там дефолты без правок в
+  коде.
 
 ## Что нужно
 
@@ -16,10 +52,11 @@ startup
 sphynx.app.CreatePresetApp()
 ```
 
-Окно открывается развёрнутым на весь экран. Три вкладки: **Create
-Preset** (про неё ниже), **Preprocess Tracking** (per-bodypart
-препроцессинг DLC — отдельный раздел в конце этого гайда) и **Analyze
-Session** (заглушка для будущего batch-run UI).
+Окно открывается развёрнутым на весь экран. Сейчас 9 пронумерованных
+вкладок (см. блок "Что нового" выше). Этот гайд покрывает **1. Create
+Preset** (ниже) и **2. Preprocess Tracking** (отдельный раздел в
+конце). Остальные вкладки (3 Define Acts -- 9 Synthetic Data)
+описаны в `full_workflow_ru.md`.
 
 ## 2. Блок 1 — Load
 
@@ -232,3 +269,34 @@ single-frame jumps; если запустить детектор после smoo
   переключись на `Auto[quantile]` с param `0.10`.
 - Manual regions полезны, если DLC систематически путает часть тела
   с какой-то фиксированной деталью кадра (например, кабель в углу).
+
+## Новое во Вкладке 2 (R24): переиспользование настроек
+
+Две кнопки в строке загрузки рядом с DLC-браузером:
+
+- **Check another** -- сохраняет текущие per-part настройки в памяти
+  и просит выбрать другой DLC csv. Таблица заполняется новым трейсом,
+  но пороги / окна / outlier-флаги остаются. Удобно быстро проверить
+  несколько сессий до сохранения.
+- **Load preprocessed** -- подгружает ранее сохранённый
+  `<exp>_PreprocessSettings.mat` и применяет его per-part значения к
+  текущему DLC. Удобно перенести подобранный конфиг с пилотной сессии
+  на каждую новую сессию того же эксперимента.
+
+---
+
+## Указатель по остальным вкладкам
+
+Define Acts, Analyze Session, Batch Analysis, Make Output Table,
+Plot Data, Preprocess Video и Synthetic Data -- см. `full_workflow_ru.md`.
+Barnes-специфичные метрики, которые теперь видны в шапке статистики
+Вкладки 4, описаны в `docs/Barnes/metrics.md`.
+
+## Глобальные дефолты: `sphynx_defaults.jsonc`
+
+Файл `sphynx_defaults.jsonc` в корне репо -- единый файл настроек,
+разложенных по вкладкам, авто-подгружается
+`sphynx.pipeline.defaultConfig`. Меняй там дефолты (пороги, окна
+сглаживания, дефолтные галочки в графиках, число лунок Barnes и
+т.д.) без правок MATLAB-кода. Секции внутри файла организованы по
+вкладкам: настройка для Вкладки 2 лежит в блоке Вкладки 2.

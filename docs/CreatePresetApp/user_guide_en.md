@@ -1,7 +1,41 @@
-# CreatePresetApp — user guide (English)
+# CreatePresetApp -- user guide (English)
 
 Step-by-step walkthrough for building a spatial preset for one
 behavioral video session.
+
+## What's new since R20
+
+- Tabs are now numbered in the title bar:
+  1. Create Preset, 2. Preprocess Tracking, 3. Define Acts,
+  4. Analyze Session, 5. Batch Analysis, 6. Make Output Table,
+  7. Plot Data, 8. Preprocess Video, 9. Synthetic Data.
+- Tab 2: two new buttons -- "Check another" (reuse current per-part
+  settings on another DLC csv) and "Load preprocessed" (pull a saved
+  `<exp>_PreprocessSettings.mat` onto the currently loaded DLC).
+- Tab 3: the Barnes default-library button now loads 64 acts
+  (nose_at_<hole> 1+19, body_at_<hole> 1+19, platform pair,
+  mouse_inside_<hole> 1+19+1, nose_at_any_hole). The mouse_inside_*
+  family requires a 2 s sustained run (per-act minDurationSec=2.0).
+  Zone preview now refreshes on act selection.
+- Tab 4: redesigned 2-row loader strip (Root / Preset / Video / DLC /
+  Out dir on row 1; Preproc settings / Acts library on row 2). An
+  acts-filter listbox is added on the left of the trajectory panel.
+  "Render main video" checkbox now defaults ON. The info block on the
+  rendered video is white text with a 1 px black outline at the
+  top-left (no background plate); the frame counter is a yellow square
+  (10% of frame height) top-right.
+- Tab 5: session pairing accepts BOTH legacy DeepLabCut csvs
+  (`...DLC_resnet50_...csv`) AND superanimal-topviewmouse csvs
+  (`..._superanimal_topviewmouse_..csv`). Multi-digit mouse / day /
+  trial IDs work (m23, m183, m5718, 12d_3t, ...).
+- Tab 4 now reports Barnes-specific metrics in the session-stats
+  header (TotalNoseHoleVisits, PrimaryErrors, TotalBodyHoleVisits,
+  NumCheckedHoles, FirstCheckedHoleNumber, FirstCheckedHoleErrorDeg,
+  MeanCheckedHoleErrorDeg, TargetHoleVisitOrder). Full definitions:
+  see `docs/Barnes/metrics.md`.
+- New repo-root file `sphynx_defaults.jsonc` -- single tab-organised
+  defaults file auto-loaded by `sphynx.pipeline.defaultConfig`. Edit
+  there to change defaults without touching code.
 
 ## Before you start
 
@@ -18,10 +52,12 @@ startup
 sphynx.app.CreatePresetApp()
 ```
 
-The window opens maximized with three tabs: **Create Preset** (used
-below), **Preprocess Tracking** (per-bodypart DLC preprocessing — see
-the dedicated section at the end of this guide), and **Analyze
-Session** (a placeholder for the future batch-run UI).
+The window opens maximized with 9 numbered tabs (see "What's new"
+list above). This guide focuses on **1. Create Preset** (used below)
+and **2. Preprocess Tracking** (per-bodypart DLC preprocessing -- see
+the dedicated section at the end of this guide). For the remaining
+tabs (3 Define Acts through 9 Synthetic Data) see
+`full_workflow_en.md`.
 
 ## 2. Block 1 — Load
 
@@ -238,3 +274,36 @@ jumps would no longer trip the threshold.
   more conservative, switch to `Auto[quantile]` with param `0.10`.
 - Manual regions are useful when DLC consistently confuses one part
   with a fixed visual feature (e.g., a cable hanging in one corner).
+
+## New in Tab 2 (R24): reuse settings
+
+Two buttons live in the loader row next to the DLC browser:
+
+- **Check another** -- keeps the current per-part settings in memory
+  and prompts you for another DLC csv. The table refills with the new
+  trace but the thresholds / windows / outlier flags stay as you set
+  them. Use this to spot-check several sessions before saving.
+- **Load preprocessed** -- pulls a previously saved
+  `<exp>_PreprocessSettings.mat` and applies its per-part values to
+  the currently loaded DLC. Use this to bring a tuned config from a
+  pilot session onto every new session of the same experiment.
+
+---
+
+## Tab-level pointer
+
+For Define Acts, Analyze Session, Batch Analysis, Make Output Table,
+Plot Data, Preprocess Video and Synthetic Data see
+`full_workflow_en.md` -- their UI and outputs are described there. The
+Barnes-specific session metrics that now appear in the Tab 4 stats
+header are listed in `docs/Barnes/metrics.md`.
+
+## Project-wide defaults: `sphynx_defaults.jsonc`
+
+The file `sphynx_defaults.jsonc` at the repo root is a single
+tab-organised settings file auto-loaded by
+`sphynx.pipeline.defaultConfig`. Edit it to change defaults (default
+thresholds, default smoothing windows, default plot toggles, Barnes
+hole count, etc.) without touching MATLAB code. Sections inside the
+file are organised by tab so a setting that affects Tab 2 lives in
+the Tab 2 block.

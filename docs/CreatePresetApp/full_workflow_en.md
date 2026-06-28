@@ -1,16 +1,38 @@
-# sphynx — Full GUI workflow (EN)
+# sphynx -- Full GUI workflow (EN)
 
-The single window of `sphynx.app.CreatePresetApp` exposes 9 tabs that
-together cover the whole behavioral analysis pipeline:
+The single window of `sphynx.app.CreatePresetApp` exposes 9 numbered
+tabs that together cover the whole behavioral analysis pipeline:
 
 ```
-Create Preset → Preprocess Tracking → Define Acts → Analyze Session
-              → Batch Analysis → Make Output Table → Plot Data
-Auxiliary: Preprocess Video, Synthetic Data
+1. Create Preset -> 2. Preprocess Tracking -> 3. Define Acts
+  -> 4. Analyze Session -> 5. Batch Analysis -> 6. Make Output Table
+  -> 7. Plot Data
+Auxiliary: 8. Preprocess Video, 9. Synthetic Data
 ```
 
 This document explains the **logic** of each tab and the **how-to** for
 the typical end-to-end workflow.
+
+## What's new since R20
+
+- Numbered tabs (1..9) in the title bar.
+- Tab 2: "Check another" + "Load preprocessed" buttons.
+- Tab 3: Barnes default library is now 64 acts (nose_at_<hole>,
+  body_at_<hole>, platform pair, mouse_inside_<hole>,
+  nose_at_any_hole); zone preview refreshes on selection;
+  mouse_inside_* requires 2 s sustained.
+- Tab 4: 2-row loader, etogram acts-filter listbox, default
+  "Render main video" ON, restyled video overlays (white text +
+  black outline, yellow square counter).
+- Tab 5: pairing handles legacy DLC csvs AND
+  superanimal-topviewmouse csvs; multi-digit mouse / day / trial IDs.
+- Tab 4 stats header now lists Barnes metrics
+  (TotalNoseHoleVisits, PrimaryErrors, TotalBodyHoleVisits,
+  NumCheckedHoles, FirstCheckedHoleNumber, FirstCheckedHoleErrorDeg,
+  MeanCheckedHoleErrorDeg, TargetHoleVisitOrder) -- full defs in
+  `docs/Barnes/metrics.md`.
+- `sphynx_defaults.jsonc` (repo root) -- single tab-organised
+  defaults file auto-loaded by `sphynx.pipeline.defaultConfig`.
 
 ---
 
@@ -25,8 +47,9 @@ The window opens maximized.
 
 ---
 
-## 1. Create Preset *(frozen — see `README.md` and `user_guide_en.md`
-for the full reference)*
+## 1. Create Preset *(see `user_guide_en.md` for the step-by-step
+reference; freeze lifted 2026-06-03 -- edits within the Barnes spec
+are allowed)*
 
 For every video session you want to analyze you build a *preset* — a
 .mat file with: pixel-to-cm calibration, the arena outline, object
@@ -55,10 +78,19 @@ preset's frame for spots where DLC systematically misfires (e.g. a
 cable shadow always recognized as an ear).
 
 **Outputs:**
-- per-experiment `<root>/<expName>_PreprocessSettings.mat` — settings
+- per-experiment `<root>/<expName>_PreprocessSettings.mat` -- settings
   reusable across sessions of the same experiment.
-- per-session `<sessionDir>/<sessionName>_Preprocessed.mat` — the
+- per-session `<sessionDir>/<sessionName>_Preprocessed.mat` -- the
   actual cleaned + smoothed traces; consumed by analyzeSession.
+
+**R24 buttons (loader row):**
+- **Check another** -- keep the current per-part settings and load
+  another DLC csv. Lets you spot-check several sessions with the
+  same thresholds before saving.
+- **Load preprocessed** -- pull a saved
+  `<exp>_PreprocessSettings.mat` and apply it to the currently loaded
+  DLC. Use to push a tuned configuration onto every session of the
+  same experiment.
 
 ---
 
@@ -89,6 +121,19 @@ The library is loaded with sane defaults (rest / walk / locomotion /
 freezing / rears) on tab open. Save/Load button persists the library
 to a `.mat` so you can reuse it across experiments of the same type.
 
+**Barnes default library (button "Load Barnes defaults"):** 64 acts
+in total --
+  - 1 + 19 `nose_at_<hole>` (target + every non-target hole),
+  - 1 + 19 `body_at_<hole>`,
+  - the platform pair (`on_platform`, `off_platform`),
+  - 1 + 19 + 1 `mouse_inside_<hole>` (target, each non-target, plus
+    `mouse_inside_any_hole`); this family requires a 2 s sustained
+    run, enforced per-act via `minDurationSec=2.0`,
+  - `nose_at_any_hole`.
+
+Selecting an act in the library list now refreshes the zone preview
+so you can see which hole / zone is gated.
+
 **Output:** `<expName>_acts_library.mat`.
 
 ---
@@ -96,12 +141,28 @@ to a `.mat` so you can reuse it across experiments of the same type.
 ## 4. Analyze Session
 
 Run the full pipeline on **one** session, inspect the result. UI:
-- Browse DLC csv, preset .mat, output dir, optional acts library.
+- Batch-style **2-row loader** strip:
+  - Row 1: Root / Preset / Video / DLC / Out dir.
+  - Row 2: Preproc settings / Acts library.
 - Override the rest / locomotion / freezing thresholds inline.
-- Run → result table populates with `Act / % / duration / count /
+- Run -> result table populates with `Act / % / duration / count /
   mean dur, s` for every act (built-ins + library).
-- Plots: trajectory of the body center, acts timeline (one row per
-  act), bodycenter speed histogram.
+- Plots: trajectory of the body center (with an **acts-filter
+  listbox on the left of the trajectory panel** to subset what is
+  drawn), acts timeline (one row per act), bodycenter speed
+  histogram.
+- "Render main video" checkbox now **defaults ON**. The rendered
+  overlay shows the info block flush top-left in white text with a
+  1 px black outline (no plate behind it). The frame counter is a
+  yellow square of height 10% of the frame, top-right.
+
+The session-stats header now also reports Barnes metrics:
+`TotalNoseHoleVisits`, `PrimaryErrors`, `TotalBodyHoleVisits`,
+`NumCheckedHoles`, `FirstCheckedHoleNumber`,
+`FirstCheckedHoleErrorDeg`, `MeanCheckedHoleErrorDeg`,
+`TargetHoleVisitOrder` (see
+`+sphynx/+pipeline/barnesSessionMetrics.m`). Full definitions are in
+`docs/Barnes/metrics.md`.
 
 Use this tab to validate that your library + thresholds produce
 sensible results before running a batch. Results are saved as
@@ -118,8 +179,17 @@ Run analyzeSession across a set of (DLC, Preset) pairs. UI:
   session).
 - One optional **Acts library** for the whole batch.
 - Toggles: save plots / save per-session .mat / build aggregate tables.
-- Run → progress bar; tidy + wide tables shown on the right.
-- **Save tables to CSV** → tidy + wide csvs in the output dir.
+- Run -> progress bar; tidy + wide tables shown on the right.
+- **Save tables to CSV** -> tidy + wide csvs in the output dir.
+
+**Session pairing (R24):** the auto-pairer that matches DLC csvs to
+presets now handles BOTH csv naming families:
+- legacy DeepLabCut, e.g. `WNOF_J01_1DDLC_resnet50_...csv`,
+- superanimal-topviewmouse, e.g.
+  `NOF_H01_1D_superanimal_topviewmouse_..csv`.
+
+Multi-digit mouse / day / trial IDs are supported (`m23`, `m183`,
+`m5718`, `12d_3t`, ...).
 
 The aggregate **wide** table here is a quick preview. For a more
 controlled, Prism-friendly export with metadata, use Make Output Table.
@@ -214,6 +284,20 @@ Project root: <root>/
    check trajectory + acts %.
 5. **Batch Analysis** for all sessions with the same acts library →
    `out/<session>_WorkSpace.mat` for each.
-6. **Make Output Table** with metadata.csv → `out/super_table.csv`.
-7. **Plot Data** from `super_table.csv` — preliminary bar / box /
+6. **Make Output Table** with metadata.csv -> `out/super_table.csv`.
+7. **Plot Data** from `super_table.csv` -- preliminary bar / box /
    scatter per group. Final plots in Prism.
+
+---
+
+## Project-wide defaults: `sphynx_defaults.jsonc`
+
+A single tab-organised settings file at the repo root,
+`sphynx_defaults.jsonc`, is auto-loaded by
+`sphynx.pipeline.defaultConfig`. Edit it to change defaults across
+the whole app (e.g. default likelihood thresholds, default smoothing
+windows, default plot toggles, Barnes hole count, default save
+options). The sections inside the file are organised by tab so a
+setting that affects Tab 4 lives in the Tab 4 block. Changing
+defaults here keeps the MATLAB code untouched, which is much safer
+than editing constructors.
