@@ -88,6 +88,7 @@ function barWithStats(ax, L, factor1, factor2, statsRes, style)
 
     ax.XTick = 1:n1;
     ax.XTickLabel = levels1;
+    ax.TickLabelInterpreter = 'none';
     ax.XLim = [0.5 n1 + 0.5];
     ax.FontName = style.fontName;
     ax.FontSize = style.axisFontSize;

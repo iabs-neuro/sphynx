@@ -1536,11 +1536,11 @@ function img = renderOneFrame(img, f, eventId, ctx)
         img = stampCircle(img, xb, yb, rad, col);
     end
     if ~isempty(eventId)
-        img = stampNumberCorner(img, sprintf('%d', eventId), 'top-right');
+        img = sphynx.util.stampNumberCorner(img, sprintf('%d', eventId), 'top-right');
     end
     if ctx.showVelocity && f <= numel(ctx.velocityTrace) ...
             && isfinite(ctx.velocityTrace(f))
-        img = stampNumberCorner(img, ...
+        img = sphynx.util.stampNumberCorner(img, ...
             sprintf('%.1f cm/s', ctx.velocityTrace(f)), 'bottom-right');
     end
 end
@@ -1552,108 +1552,9 @@ function closeWriter(w)
     end
 end
 
-function img = stampNumberCorner(img, txt, corner)
-    % Stamp a short text label inside a flush-to-the-corner SQUARE
-    % overlay that is 10% of min(H, W) on each side (pixels). v19.2:
-    % SOLID YELLOW plate + BLACK text -- the v19.1 50/50-darkened
-    % background + white text was invisible against the bright
-    % Barnes-floor pixels in a real session. Yellow vs. black is
-    % maximum contrast and works on any underlying video colour.
-    % Supports corners: 'top-right' (default), 'bottom-right',
-    % 'top-left', 'bottom-left'.
-    persistent cache
-    if isempty(cache); cache = containers.Map(); end
-    if nargin < 3 || isempty(corner); corner = 'top-right'; end
-
-    [H, W, C] = size(img);
-    if C == 1; img = repmat(img, [1 1 3]); end
-    side = max(16, round(0.10 * min(H, W)));   % square side, >=16 px
-    side = min(side, min(H, W));               % can't exceed frame
-
-    % Corner placement (no margin -- flush with the edge).
-    switch corner
-        case 'bottom-right'
-            x0 = W - side + 1; y0 = H - side + 1;
-        case 'top-left'
-            x0 = 1;           y0 = 1;
-        case 'bottom-left'
-            x0 = 1;           y0 = H - side + 1;
-        otherwise % top-right
-            x0 = W - side + 1; y0 = 1;
-    end
-    x1 = x0 + side - 1; y1 = y0 + side - 1;
-
-    % Solid yellow plate -- guaranteed contrast vs. any video pixel.
-    yellow = uint8([255 220 0]);
-    region = img(y0:y1, x0:x1, :);
-    region(:, :, 1) = yellow(1);
-    region(:, :, 2) = yellow(2);
-    region(:, :, 3) = yellow(3);
-    img(y0:y1, x0:x1, :) = region;
-
-    % Render text bitmap sized so it fills most of the square. Cache
-    % per (txt, side) so each unique counter value is drawn once per
-    % video.
-    fontSize = max(8, round(0.55 * side));
-    key = sprintf('%s|%d', txt, fontSize);
-    if isKey(cache, key)
-        bm = cache(key);
-    else
-        bm = renderTextBitmap(txt, fontSize);
-        cache(key) = bm;
-    end
-    if isempty(bm); return; end
-
-    [bh, bw, ~] = size(bm);
-    % Centre the bitmap inside the square; clip if it overflows.
-    bh = min(bh, side); bw = min(bw, side);
-    bm = bm(1:bh, 1:bw, :);
-    tx0 = x0 + floor((side - bw) / 2);
-    ty0 = y0 + floor((side - bh) / 2);
-    tx1 = tx0 + bw - 1; ty1 = ty0 + bh - 1;
-
-    % Bitmap is rendered white-on-black; mask out the glyph and
-    % paint it BLACK onto the yellow plate (high-contrast text).
-    gray = sum(single(bm), 3);
-    mask = gray > 90;
-    if ~any(mask(:)); return; end
-    region = img(ty0:ty1, tx0:tx1, :);
-    for c = 1:3
-        rc = region(:, :, c);
-        rc(mask) = 0;
-        region(:, :, c) = rc;
-    end
-    img(ty0:ty1, tx0:tx1, :) = region;
-end
-
-function bm = renderTextBitmap(txt, fontSize)
-    % Render `txt` to an RGB uint8 image via an off-screen figure and
-    % crop to the glyph bounding box. White-on-black so the caller can
-    % threshold cleanly when stamping.
-    bm = uint8([]);
-    try
-        fig = figure('Visible', 'off', 'Color', 'k', ...
-            'Units', 'pixels', 'Position', [0 0 200 max(40, fontSize+16)]);
-        ax = axes('Parent', fig, 'Position', [0 0 1 1], ...
-            'Color', 'k', 'XLim', [0 1], 'YLim', [0 1], ...
-            'XTick', [], 'YTick', [], 'Visible', 'off');
-        text(ax, 0.5, 0.5, txt, 'Color', 'w', ...
-            'FontSize', fontSize, 'FontWeight', 'bold', ...
-            'HorizontalAlignment', 'center', ...
-            'VerticalAlignment', 'middle');
-        drawnow;
-        cdata = print(fig, '-RGBImage');
-        close(fig);
-        gray = sum(single(cdata), 3);
-        rows = find(any(gray > 90, 2));
-        cols = find(any(gray > 90, 1));
-        if ~isempty(rows) && ~isempty(cols)
-            bm = cdata(min(rows):max(rows), min(cols):max(cols), :);
-        end
-    catch
-        bm = uint8([]);
-    end
-end
+% R22: stampNumberCorner / renderTextBitmap moved to
+% sphynx.util.stampNumberCorner. renderActStitched + DefineActsTab
+% now share one definition (5%H sizing, yellow plate, BLACK text).
 
 function img = stampCircle(img, cx, cy, r, color)
     % Paint a filled disc onto an HxWx3 uint8 image at (cx, cy) with

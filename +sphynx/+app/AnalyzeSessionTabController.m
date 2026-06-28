@@ -904,6 +904,16 @@ classdef AnalyzeSessionTabController < handle
                         'Pick preprocess settings', startDir);
                     if ~isequal(f, 0); obj.PreprocessSettingsPathField.Value = fullfile(p, f); end
             end
+            % R22: uigetfile / uigetdir hand focus back to the OS file
+            % dialog parent (Explorer) when they close, so the user has
+            % to re-click the app window. Force focus back to our
+            % uifigure so Ctrl+S, Tab navigation, etc. keep working.
+            obj.refocusFigure();
+        end
+
+        function refocusFigure(obj)
+            if isempty(obj.Figure) || ~isvalid(obj.Figure); return; end
+            try; figure(obj.Figure); catch; end
         end
 
         function refreshResults(obj)
@@ -1159,6 +1169,10 @@ classdef AnalyzeSessionTabController < handle
             end
             ax.YTick = 1:n;
             ax.YTickLabel = flip({actsToPlot.ActName});
+            % R22: act names contain `_` (e.g. nose_at_hole1). Default
+            % TeX interpreter renders `_x` as a subscript; switch to
+            % literal so the names display verbatim.
+            ax.TickLabelInterpreter = 'none';
             xlabel(ax, 'frame', 'FontSize', 12);
             ax.FontSize = 11;
             ax.YLim = [0.5 n + 0.5];

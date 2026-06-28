@@ -187,10 +187,10 @@ function outPath = renderActStitched(result, videoPath, outDir, actNameOrIdx, va
             else;    rad = markSize;     col = bpColors(b, :); end
             img = stampCircleLocal(img, xb, yb, rad, col);
         end
-        img = stampNumberLocal(img, sprintf('%d', selEventIds(i)), 'top-right');
+        img = sphynx.util.stampNumberCorner(img, sprintf('%d', selEventIds(i)), 'top-right');
         if showVelocity && f <= numel(velocityTrace) ...
                 && isfinite(velocityTrace(f))
-            img = stampNumberLocal(img, ...
+            img = sphynx.util.stampNumberCorner(img, ...
                 sprintf('%.1f cm/s', velocityTrace(f)), 'bottom-right');
         end
         writeVideo(writer, img);
@@ -232,69 +232,7 @@ function img = stampCircleLocal(img, cx, cy, r, color)
     img(y0:y1, x0:x1, :) = sub;
 end
 
-function img = stampNumberLocal(img, txt, corner)
-    persistent cache
-    if isempty(cache); cache = containers.Map(); end
-    if nargin < 3 || isempty(corner); corner = 'top-right'; end
-    key = sprintf('%s|24', txt);
-    if isKey(cache, key)
-        bm = cache(key);
-    else
-        bm = renderTextBitmapLocal(txt, 24);
-        cache(key) = bm;
-    end
-    if isempty(bm); return; end
-    [H, W, ~] = size(img);
-    [bh, bw, ~] = size(bm);
-    margin = 10;
-    switch corner
-        case 'bottom-right'
-            x0 = max(1, W - bw - margin); y0 = max(1, H - bh - margin);
-        case 'top-left'
-            x0 = margin; y0 = margin;
-        case 'bottom-left'
-            x0 = margin; y0 = max(1, H - bh - margin);
-        otherwise
-            x0 = max(1, W - bw - margin); y0 = margin;
-    end
-    x1 = min(W, x0 + bw - 1);
-    y1 = min(H, y0 + bh - 1);
-    sub = bm(1:(y1-y0+1), 1:(x1-x0+1), :);
-    gray = sum(single(sub), 3);
-    mask = gray > 90;
-    if ~any(mask(:)); return; end
-    region = img(y0:y1, x0:x1, :);
-    for c = 1:3
-        rc = region(:, :, c);
-        bc = sub(:, :, c);
-        rc(mask) = bc(mask);
-        region(:, :, c) = rc;
-    end
-    img(y0:y1, x0:x1, :) = region;
-end
-
-function bm = renderTextBitmapLocal(txt, fontSize)
-    bm = uint8([]);
-    try
-        fig = figure('Visible', 'off', 'Color', 'k', ...
-            'Units', 'pixels', 'Position', [0 0 240 max(40, fontSize+16)]);
-        ax = axes('Parent', fig, 'Position', [0 0 1 1], ...
-            'Color', 'k', 'XLim', [0 1], 'YLim', [0 1], ...
-            'XTick', [], 'YTick', [], 'Visible', 'off');
-        text(ax, 0.5, 0.5, txt, 'Color', 'w', ...
-            'FontSize', fontSize, 'FontWeight', 'bold', ...
-            'HorizontalAlignment', 'center', ...
-            'VerticalAlignment', 'middle');
-        drawnow;
-        cdata = print(fig, '-RGBImage');
-        close(fig);
-        gray = sum(single(cdata), 3);
-        rows = find(any(gray > 90, 2));
-        cols = find(any(gray > 90, 1));
-        if ~isempty(rows) && ~isempty(cols)
-            bm = cdata(min(rows):max(rows), min(cols):max(cols), :);
-        end
-    catch
-        bm = uint8([]);
-    end
-end
+% R22: stampNumberLocal / renderTextBitmapLocal removed -- both
+% callers above now use sphynx.util.stampNumberCorner so the corner
+% counter style (5%H yellow square + BLACK text) is identical to
+% Make-video in Define Acts.

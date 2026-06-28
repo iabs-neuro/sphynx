@@ -112,8 +112,20 @@ function outPath = renderActsVideo(result, videoPath, outDir, varargin)
     else
         trajColor = [0.10 0.50 0.90]; trajLW = 1.2;
         zoneLW = 1.2;   zoneAlpha = 0.20;
-        speedFont = 18;  subFont = 16;  actsFont = 15;
-        panelDy   = 26;  actsDy  = 26;
+        % R22: scale label fonts so the whole info stack (Speed +
+        % Speed_act + Zone + "Acts:" + acts list) fits in ~20% of
+        % the video height. With a 12-line budget that maps line
+        % height to 0.20*H/12 and gives readable text at every
+        % resolution (296p crops, 720p, 1080p, 4K). Floors prevent
+        % unreadably tiny text on very small clips.
+        Hres = reader.Height;
+        nLinesBudget = 12;
+        lineH = max(10, round(0.20 * Hres / nLinesBudget));
+        speedFont = max(7, round(lineH * 0.72));
+        subFont   = max(7, round(lineH * 0.64));
+        actsFont  = max(7, round(lineH * 0.62));
+        panelDy   = lineH;
+        actsDy    = lineH;
     end
 
     % Body parts
