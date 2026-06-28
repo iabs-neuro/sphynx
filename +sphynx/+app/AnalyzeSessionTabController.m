@@ -912,8 +912,11 @@ classdef AnalyzeSessionTabController < handle
         end
 
         function refocusFigure(obj)
+            % R27: drawnow forces Windows to actually swap focus after
+            % uigetfile / uigetdir closes -- figure() alone left the
+            % window in the background sometimes.
             if isempty(obj.Figure) || ~isvalid(obj.Figure); return; end
-            try; figure(obj.Figure); catch; end
+            try; figure(obj.Figure); drawnow; catch; end
         end
 
         function refreshResults(obj)

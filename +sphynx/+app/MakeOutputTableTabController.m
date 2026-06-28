@@ -149,31 +149,16 @@ classdef MakeOutputTableTabController < handle
             obj.refreshActMetricTable();
         end
 
-        function metrics = barnesActDefaults(~, actName)
-            % R26: Barnes default-act family detection. Returns the
-            % metric list to tick when actName matches a Barnes pattern;
-            % empty cell otherwise (acts not from the Barnes library get
-            % no default ticks, matching prior behaviour).
+        function metrics = barnesActDefaults(~, actName) %#ok<INUSD>
+            % R27: Barnes default-act families ship with NO pre-ticked
+            % metrics. Earlier R26 ticked count / percent / duration
+            % (and FirstStartSec for nose_at_*) by default, which Mr P
+            % preferred to leave unset so the user picks per study.
+            % Returning empty here means every Barnes act starts with
+            % an empty row in the metric matrix; sphynx.acts.actParams
+            % entries (legacy non-Barnes acts) still get their normal
+            % default ticks.
             metrics = {};
-            % nose_at_<target|holeN|platform|any_hole>
-            if ~isempty(regexp(actName, ...
-                    '^nose_at_(target|hole\d+|platform|any_hole)$', 'once'))
-                metrics = {'ActNumber', 'ActDuration', ...
-                    'ActPercent', 'FirstStartSec'};
-                return;
-            end
-            % body_at_<target|holeN|platform>
-            if ~isempty(regexp(actName, ...
-                    '^body_at_(target|hole\d+|platform)$', 'once'))
-                metrics = {'ActNumber', 'ActDuration', 'ActPercent'};
-                return;
-            end
-            % mouse_inside_<target|holeN|platform>
-            if ~isempty(regexp(actName, ...
-                    '^mouse_inside_(target|hole\d+|platform)$', 'once'))
-                metrics = {'ActNumber', 'ActDuration'};
-                return;
-            end
         end
 
         function loadDefaults(obj)
@@ -633,10 +618,13 @@ classdef MakeOutputTableTabController < handle
         function restoreFocus(obj)
             % Bring the main Sphynx window back to front after any
             % modal picker so the user does not get pushed to other
-            % apps.
+            % apps. R27: drawnow forces the OS to actually swap focus
+            % when figure() alone leaves the window in the background
+            % (Windows R2020a quirk).
             try
                 if ~isempty(obj.Figure) && isvalid(obj.Figure)
                     figure(obj.Figure);
+                    drawnow;
                 end
             catch
             end

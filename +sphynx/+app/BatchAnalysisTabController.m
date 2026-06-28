@@ -354,6 +354,7 @@ classdef BatchAnalysisTabController < handle
             startDir = obj.resourceStartDir();
             [f, p] = uiputfile({'*.mat'}, ...
                 'Save analysis settings', fullfile(startDir, 'analysis_settings.mat'));
+            obj.restoreFocus();
             if isequal(f, 0); return; end
             settings = obj.collectSettings(); %#ok<NASGU>
             try
@@ -368,6 +369,7 @@ classdef BatchAnalysisTabController < handle
             if nargin < 2 || isempty(path)
                 startDir = obj.resourceStartDir();
                 [f, p] = uigetfile({'*.mat'}, 'Load analysis settings', startDir);
+                obj.restoreFocus();
                 if isequal(f, 0); return; end
                 path = fullfile(p, f);
             end
@@ -646,6 +648,7 @@ classdef BatchAnalysisTabController < handle
         function pickFolder(obj, kind)
             startDir = obj.resourceStartDir();
             d = uigetdir(startDir, ['Pick ' kind]);
+            obj.restoreFocus();
             if isequal(d, 0); return; end
             switch kind
                 case 'Root';      obj.RootPathField.Value = d;
@@ -659,9 +662,23 @@ classdef BatchAnalysisTabController < handle
             end
         end
 
+        function restoreFocus(obj)
+            % R27: pull the main Sphynx window back to front after any
+            % modal picker so keyboard input + Tab navigation keep
+            % working. drawnow forces Windows to actually swap focus.
+            try
+                if ~isempty(obj.Figure) && isvalid(obj.Figure)
+                    figure(obj.Figure);
+                    drawnow;
+                end
+            catch
+            end
+        end
+
         function pickSettingFile(obj, kind)
             startDir = obj.resourceStartDir();
             [f, p] = uigetfile({'*.mat'}, ['Pick ' kind ' .mat'], startDir);
+            obj.restoreFocus();
             if isequal(f, 0); return; end
             path = fullfile(p, f);
             switch kind
