@@ -2100,3 +2100,1237 @@ R14.8 -- зона "arena_realout" появляется во ВСЕХ страт�
 6. Стратегия `strips` → каждый страйп своего цвета, arena_realout не рисуется (strip*_realout уже покрывают внешнюю кайму).
 
 Если ок — "colors ok".
+
+## 2026-06-24 — После R15: проверка всей цепочки вкладок
+
+Запрос: "мы внесли некоторые изменения во вкладку CreatePreset, посмотри
+какие, нужно проверить работоспособность полного анализа через все
+оставшиеся вкладки, внести изменения. составь план работ".
+
+Что я нашёл (без правок):
+- Все изменения R10..R15 — в основном про новые имена зон (circle/middle/
+  stripN/objectN/_realout) и про гарантию arena_realout. Формат preset .mat
+  (Options/Zones/ArenaAndObjects) не сломан, downstream-вкладки грузят его
+  через тот же sphynx.io.readPreset.
+- Один мягкий косяк: в renderActsVideo и AnalyzeSession есть хардкод-список
+  "spatial" актов {corners, walls, walls_and_corners, center, middle_zone}.
+  Если ты сделаешь акт с именем зоны из новой стратегии (wall, middle,
+  strip1, objectN_real, ...), он попадёт не в "spatial", а в "composite"
+  bucket. Не падение, но порядок в etogram/overlay будет неправильный.
+- В DefineActs SimpleZoneListBox показывает все имена подряд, включая
+  композиты walls_and_corners* -- избыточно (они скипаются в новом рендере).
+- Тестов на интеграцию CreatePreset->Analyze по всем 6 стратегиям нет.
+  demoPipelineTest гонит только старый Demo/Preset/NOF_H01_1D_Preset.mat.
+
+План — 7 фаз: baseline smoke -> расширить actBucket (regex + единый
+helper) -> отфильтровать композиты в DefineActs -> параметризованный
+smoke по 6 стратегиям с Demo/Presettest -> multianimal end-to-end ->
+batch + OutputTable + PlotData -> legacy compat. Phase 7 (один цвет на
+объект в layout) отложил до твоего слова.
+
+Жду ответа на Q1-Q5 (или просто "делай" с дефолтами).
+
+## 2026-06-24 — Фазы 0-2 сделаны
+
+Baseline до правок: 270 pass / 0 fail / 3 skip. После: 293 pass / 0 fail /
+3 skip. Регрессий нет. Те же 3 skip -- это readFrameAt с VFR-фикстурой,
+было и раньше.
+
+Дамп твоего Barnes-пресета (Barnes_m183_5d_0t_26102024_120726_Preset.mat):
+- стратегия circle-with-center: zones wall/middle/center/arena_realout
+- 21 объект в ArenaAndObjects: [1]=Arena (Ellipse), [2]=target,
+  [3..21]=object1..object19 (class='mistakes'), [22]=start (class='platform')
+- per-object zones: <type>_real / _realout / _out (area) + <type>_center (point)
+- плюс objectall_real / _realout / _out
+- 91 зона всего
+
+Фаза 1 -- единый actBucket helper:
+- NEW +sphynx/+util/actBucket.m с regex-матчером, ловит все формы имён:
+  legacy {corners, walls, walls_and_corners, center, middle_zone, wall,
+  middle, arena}, per-region _realout, middle\d+, strip\d+(_realout)?,
+  arenacorner\d+, catch-all \w+_(real|realout|out|center).
+- Удалил локальные копии actBucket в renderActsVideo.m и
+  AnalyzeSessionTabController.m, оба теперь зовут sphynx.util.actBucket.
+- +16 unit-тестов (tests/unit/actBucketTest.m), включая Barnes-формы
+  (target_real, object19_realout, start_center, objectall_*).
+
+Фаза 2 -- DefineActs фильтр композитов:
+- NEW +sphynx/+util/filterZoneListForActs.m. Фильтрует только композиты
+  walls_and_corners и walls_and_corners_realout (они и так пропускаются
+  в R15-рендере как NaN, наглядно использовать их в актах смысла нет --
+  они = объединение составляющих).
+- DefineActs.applyPresetPath теперь через helper, в лог пишет "filtered N
+  composite" когда они были.
+- +7 unit-тестов, включая полный Barnes-набор зон (никаких композитов
+  не дропнуто) и стрипсы (тоже не дропнуто).
+
+Готов сделать коммит. После -- готов к большому циклу дефолтных Barnes-
+актов (target_real, escape_latency, errors-on-mistakes и т.п.). Скажи
+"делай коммит" -- закоммичу фазы 0-2 одним коммитом, либо двумя
+(actBucket / DefineActs filter) -- как тебе удобней.
+
+## 2026-06-25 — Коммиты сделаны + BARNES_v2 разведка
+
+Коммиты в sphynx-GUI:
+- 813c1a2 refactor(util): single actBucket helper (regex matcher)
+- 5c8c3ad feat(define-acts): filter composite zones from act-target listbox
+
+BARNES_v2 структура: 2_Video (11 mp4) / 3_DLC (11 csv, DLC superanimal_
+topviewmouse) / 4_Preset (11 подпапок, не плоские .mat). Каждая папка
+пресета содержит <basename>_Preset.mat + <basename>_layout.png.
+
+Basename-сопоставление 2_Video / 3_DLC / 4_Preset: 11/11 идеально, без
+mismatch.
+
+Все 11 пресетов: K=22 (Arena ellipse + 21 объект Circle), Barnes,
+pxl2sm=3.06, FR=19.334.
+
+Особенности и flag'и:
+- m178_0d_0t_22102024 -- БЕЗ target (все 20 как object1..object20 +
+  platform). Не размечена цель побега.
+- m488_4d_1t_03042026 -- inconsistency: type=object20 в AAO, но в Zones
+  есть target_* и нет object20_* (зоны не пересобрали после переименования
+  target -> object20). 93 зоны vs 90.
+- У всех 11: поле class пустое (нет 'mistakes'/'platform'/'target'
+  маркеров как в старом /BARNES/m183). Зона 'middle' отсутствует у всех
+  (хотя MiddleWidthCm=20 задан). 'start' -> 'platform' type.
+
+Жду:
+- F1: что делать с m178 (без target)
+- F2: что делать с m488 (stale target_* zones)
+- F3: формат дефолт-актов (target/mistakes/objectall vs per-objectN)
+- F4: язык имён актов (английский/русский)
+
+## 2026-06-25 — Barnes дефолт-акты v1 (черновик)
+
+Сделал +sphynx/+acts/actsLibraryBarnesDefaults.m -- 26 актов:
+- 6 area-актов: at_center, at_wall, at_outside, at_target,
+  at_platform, at_any_hole.
+- 19 per-hole: at_object1..at_object19 (параметром NumObjects можно
+  изменить).
+- 1 compound: at_mistake = at_any_hole EXCLUDE at_target.
+
+Соглашения по умолчанию:
+- Дырочные акты (target/objectN/any_hole) -- nose body-part (мыши
+  тычут носом в дырки, не центром тела).
+- Арена-кадровые акты (center/wall/outside) и platform -- bodycenter.
+- Дырочные акты гейтят на _realout (инфлятная зона) -- так
+  определяется визит в buildObjectZones.
+
+Префикс at_ для имён актов: расширил regex в +sphynx/+util/actBucket.m
+чтобы at_* падали в bucket 'spatial' (секция Zone в etogram).
+
+Не сделал, жду G1-G3:
+- UI интеграция в DefineActs (нет ещё кнопки "Load Barnes defaults"
+  или auto-load по ExperimentType).
+- Session-level метрики (escape latency, total path, search strategy)
+  -- это не акты, а статистики поверх at_* выходов.
+- Не трогал actsLibraryDefaults (backward-compat).
+
+Всё зелёное: 308 pass / 0 fail / 3 skip. Готов коммитить (один
+коммит) или сплит на 2 (at_ regex + Barnes library) -- скажи.
+
+## 2026-06-25 — Barnes-defaults v1 + UI кнопка коммитнуты
+
+Коммит 4812519 -- библиотека Barnes-actов + at_* regex.
+Коммит 2eb43f3 -- кнопка Load Barnes в DefineActs:
+  - Refactor loadDefaults в общий helper appendDefaultsWithChoice
+    (Append/Replace/Cancel диалог теперь в одном месте).
+  - Новый метод loadBarnesDefaults вызывает helper с Barnes-набором.
+  - UI Row 3: было 3 кнопки (Load defaults | Delete | Clear all),
+    стало 4 (Load defaults | Load Barnes | Delete | Clear all).
+    Обе Load-кнопки делят expanding-ширину поровну, Delete/Clear
+    остаются fit-content справа.
+  - testMergeStrategies проверяет наличие новых методов.
+
+Suite: 308 pass / 0 fail / 3 skip. Регрессий нет.
+
+Жду твою обратную связь по session-analyze + следующую партию Barnes-
+работы (session metrics: escape_latency, search strategy, и т.п.).
+
+## 2026-06-25 — Preprocess R16: UI пересборка + сняли session-start
+
+Сделал все 6 правок одним коммитом + перед этим показал, что в
+preprocess tracking есть только один TODO (cleanBodyPart magic
+numbers, polish-очередь), его не трогал.
+
+Что изменилось в Preprocess Tracking tab:
+1. Убрана метка "Session start: ..." из Блока 1. detectSessionStart
+   больше не вызывается из tab. defaultConfig.range.autoStart =
+   false (был true), так что и analyzeSession ничего автоматически
+   не считает. Детектор остался на месте, можно включить
+   программно cfg.range.autoStart = true.
+2. Блок 1 (Loading) -- высота 158 -> 130, Блок 2 (Outlier) --
+   140 -> 110.
+3. Блок 3 (Per-part settings) вынесен из левого столбца в отдельную
+   строку на полную ширину -- теперь шире чем удвоенный.
+4. Полоска с body-part switcher / Video / from-to / X / raw / interp
+   / smooth перенесена под графики координат (Row 3 -- сразу под
+   plots).
+5. Левый столбец 380 -> 570 px (x1.5).
+6. Вернул кнопку log Y. Причина её исчезновения была не баг
+   удаления, а коллизия раскладки: и log Y и smoothed жили в
+   колонке 13 одной строки -- log Y перекрывал smoothed. Перебрал
+   строку на 15 явных колонок: every widget pin'ит свою колонку,
+   log Y получил отдельный слот сразу за smoothed. Колонки галочек
+   raw/interp/smoothed расширены (60/75/85 px) чтобы имена не
+   обрезались.
+
+Один коммит. Тесты: 308/0/3 без регрессий. UI-смоук через matlab
+-batch не делаю (uifigure нужен display). Когда откроешь --
+скажи если что-то поплыло (особенно высоты блоков и видимость
+log Y), пощурю.
+
+TODO: cleanBodyPart magic numbers exposure (polish-pass) -- оставил.
+
+## 2026-06-25 — Preprocess R17: пропорциональная раскладка 25/50/25 + B4
+
+Сделал все 7 правок одним коммитом:
+
+1) OuterGrid 3 колонки {1x, 2x, 1x} = 25/50/25. Левый столбец (B1+B2)
+   занимает 25%, графики координат -- 50%, гистограмма -- 25%.
+2) B2 высота 110 -> 140 ("чуть больше").
+3) plotsGrid внутренне {2x, 1x} -- XY = 50% от общей ширины, hist
+   = 25%. Совпадает с outer 50:25.
+4) Row 2 высота = 280 = B1(130) + B2(140) + spacing -> графики по
+   высоте равны B1+B2.
+5) Block 3 как было (полная ширина, теперь cols [1 3]).
+6) Колонки B2 переписаны с фиксированных {110, 60, 60, 1x, 50} на
+   {110, fit, 1x, 1x, fit}. Col 1 оставил фиксированным (110), чтобы
+   галочки velocity-jump / Hampel / Kalman были выровнены друг под
+   другом; числовые поля скейлятся с окном. В B1 кнопки уже жили в
+   {1x,1x,1x,1x} -- они тоже скейлятся.
+7) Manual exclusion regions поднят к окончанию B3 (Row 5) и
+   переименован в "4. Manual exclusion regions" -- теперь это
+   отдельный блок с номером, как остальные.
+8) Log опущен в Row 6 на всю ширину (свободное место в окне).
+
+Тесты: 308/0/3, без регрессий. Открой -- проверь:
+- высоты B1=130, B2=140
+- пропорции колонок 25/50/25 (визуально)
+- хвост B3-B4-Log без зазоров
+- log Y на месте после "smoothed"
+- ресайз окна -- кнопки B1+B2 и графики тянутся
+
+## 2026-06-25 — Barnes defaults v2 + session metrics + first/rest stats
+
+Сделал одним коммитом.
+
+Дефолт-акты Barnes перебраны на per-body-part: nose поки и body визиты
+теперь живут отдельно. 43 акта (было 26):
+  1     nose_at_target              (nose, target_realout)
+  2-20  nose_at_object1..19         (nose, objectN_realout)
+  21    body_at_target              (bodycenter, target_real)
+  22-40 body_at_object1..19         (bodycenter, objectN_real)
+  41    nose_at_platform            (nose, platform_realout)
+  42    body_at_platform            (bodycenter, platform_real)
+  43    nose_at_any_hole            (nose, objectall_realout)
+Nose-акты гейтят на _realout (халка вокруг дырки -- нос въезжает
+раньше тела); body-акты на _real (тело физически в дырке/на платформе).
+Старые at_mistake/at_center/at_wall/at_outside убрал (mistake count
+теперь считается в session-metrics, остальные не просил).
+
+actBucket regex обновлён, чтобы nose_at_/body_at_/etc попадали в
+spatial bucket.
+
+actStats расширен:
+  FirstDurationSec  - длина первого эпизода (NaN если нет)
+  RestDurationSec   - суммарная длина всех остальных эпизодов
+                      (0 если был только один, NaN если ни одного)
+analyzeSession копирует оба поля в каждую строку Acts.
+
+NEW +sphynx/+pipeline/barnesSessionMetrics -- считает session-level
+метрики из result.Acts:
+- TotalNoseHoleVisits      сумма ActNumber по nose_at_objectN
+- TotalBodyHoleVisits      сумма ActNumber по body_at_objectN
+- NumCheckedHoles          число различных лунок с >=1 nose эпизодом
+- FirstCheckedHoleNumber   N с минимальным FirstStartSec
+- FirstCheckedHoleErrorDeg min(N*step, 360-N*step), step=360/(N+1)=18
+                           для N=19. object1 и object19 = 18, object10
+                           = 180.
+- MeanCheckedHoleErrorDeg  среднее по углам проверенных лунок
+- TargetHoleVisitOrder     порядковый номер целевой среди всех
+                           nose_at_objectN эпизодов + 1
+                           (1 = таргет был первой обнюханной лункой)
+Запускается автоматически в analyzeSession если
+Options.ExperimentType == 'Barnes'. Результат в result.BarnesMetrics.
+Если что-то пошло не так -- warn в лог, анализ продолжится.
+
+Тесты: 321/0/3 (+13 новых), без регрессий. Покрытие включает
+угол-математику, multi-episode сценарии target-order, edge cases
+(нет target, нет лунок, пустой Acts).
+
+UI Load Barnes кнопка осталась, теперь грузит 43 акта вместо 26.
+
+Open: если захочешь чтобы Barnes metrics показывались в Analyze Session
+UI (например, текст под header'ом с distance/speed) -- скажи, добавлю
+отдельным шагом. Сейчас они только в result.BarnesMetrics в .mat.
+
+## 2026-06-25 — Analyze Session: вынес Barnes в шапку
+
+В Analyze Session под существующей строкой "Session (bodycenter):
+avg speed ..." теперь появляется вторая строка с Barnes-метриками,
+если analyzeSession посчитал их (только когда
+Options.ExperimentType == 'Barnes').
+
+Формат строки 2:
+  Barnes: target visit #4 | 7 holes checked | first hole error 18 deg
+  | mean error 95.4 deg | nose-pokes 12 | body visits 5
+
+Когда метрики не посчитаны (не Barnes-сессия / ошибка), строка не
+показывается. Старая шапка работает без изменений.
+
+Под capot: Row 1 высота 24 -> 44 px, SessionStatsLabel.Text =
+cell-array; formatNum (%g формат + "-" для NaN) -- чтобы integer
+counts были "4" а не "4.0".
+
+Тесты: 321/0/3 без изменений. Шапка-текст -- через стандартный smoke;
+числа уже залочены barnesSessionMetricsTest.
+
+## 2026-06-25 — bodyparts: поддержка DLC superanimal_topviewmouse + soft fallback
+
+Make-video падал из-за того, что в DLC из BARNES_v2 имена body parts
+другие (underscored long-form: mouse_center, left_midside,
+right_midside, tail_base, head_midpoint, left_shoulder, ...). Старый
+synonymMap не знал ни одного -- computeCenter бросал ошибку.
+
+Сделал в два уровня:
+
+1. Расширил synonymMap в +sphynx/+bodyparts/identifyParts.m. Это
+   единая точка истины -- downstream код (computeCenter, freezing,
+   rear, relativeCoords, renderActsVideo) сразу подхватывает новые
+   синонимы. Покрыл superanimal_topviewmouse: mouse_center -> Center,
+   tail_base -> Tailbase, left/right_midside -> Left/RightBodyCenter,
+   left/right_shoulder -> Left/RightForeLimb, left/right_hip ->
+   Left/RightHindLimb, head_midpoint/neck -> HeadCenter, left/
+   right_ear -> Left/RightEar, snout -> Nose. Плюс варианты с
+   пробелами и underscored alias для legacy имён.
+
+2. computeCenter теперь НЕ падает. Если нет ни Center, ни L+R, считает
+   synthetic center = среднее по всем body parts (omitnan). Warn в лог
+   с подсказкой "extend synonymMap to silence". Make-video / analyze /
+   render выживают на неизвестных схемах.
+
+3. analyzeSession::pickSmoothWindow расширил bigParts тоже -- чтобы
+   mouse_center / tail_base получали большое окно smoothing'а как
+   bodycenter / tailbase на legacy схеме.
+
+Тесты: 329/0/3 (+8 новых).
+
+Открой Define Acts, Make video на BARNES_v2 -- должно отрендерить без
+ошибки. В логе увидишь "Computed body center from mouse_center" (нет
+warning'а), потому что теперь Point.Center резолвится напрямую.
+
+Если другой ошибочный hardcode всплывёт -- скинь сообщение, расширю.
+
+## 2026-06-25 — analyze: гард Barnes-метрик по библиотеке актов
+
+Шум в логе "Barnes metrics computed (0 nose visits...)" появлялся при
+Make-video из-за того, что эта операция сохраняет ОДИН выбранный акт
+во временную .mat, потом запускает analyzeSession против неё. Для
+Barnes-пресета метрики безусловно запускались -- и тривиально давали
+нули (в 1-актовой библиотеке нет nose_at_object*).
+
+Сделал guard hasBarnesNoseActs: метрики считаются только если в
+result.Acts есть хотя бы один акт с именем "nose_at_object...". Полная
+библиотека (43 акта Load Barnes) trip-нет guard как раньше; временные
+1-актовые либы для Make-video чисто скипают.
+
+Про "rest has zero active frames" -- это честная диагностика, не баг.
+Дефолтный rest threshold (speedMax=1 cm/s) слишком строгий для этой
+мыши -- она никогда не стоит. Если хочешь больше "rest" эпизодов --
+открой Define Acts, выбери "rest", подними speedMax. Можно также
+сменить дефолт в +sphynx/+pipeline/defaultConfig.m
+(cfg.acts.restThresholdCmS) если хочешь по всему проекту.
+
+Тесты: 329/0/3 без изменений.
+
+## 2026-06-25 — bodyparts/acts: alias-tolerant lookup + soft fallbacks
+
+Прогнал end-to-end probe на Demo/BARNES_v2/Barnes_m183. Нашёл 3
+блокера и пофиксил:
+
+1. **findPart искал по точному имени** -- библиотека пишет
+   'bodycenter'/'tailbase'/'lefthindlimb', superanimal DLC имеет
+   'mouse_center'/'tail_base'/'left_hip'. Результат: rest/walk/loc
+   + все body_at_*/nose_at_* возвращали 0%.
+
+   Фикс: NEW +sphynx/+bodyparts/resolvePart.m -- сначала точное
+   совпадение, потом резолв через canonical synonymMap. applyAct
+   теперь использует. 10 unit-тестов.
+
+2. **freezing/rear падали** с hard error когда у DLC нет
+   HeadCenter/Tailbase/HindLimb. Фикс: warn + fallback на
+   AllBodyParts mode (нужен только velocity).
+
+3. **mid_back был синонимом Center** -- неправильно (это
+   середина спины, не центр масс). Убрал, теперь mouse_center
+   корректно резолвится.
+
+После фиксов на Barnes_m183 (likelihoodThreshold=0.5):
+  rest 6.84% | walk 31.55% | locomotion 60.57%
+  freezing 4.66% | rear 0.86%
+  nose_at_target 8.39% (первый акт @ 3.52 s)
+  body_at_target 2.01% (@ 31.41 s -- центр тела позже)
+  nose_at_any_hole 86.61% (мышь почти всё время у дырок)
+  nose_at_object19 12.87% (8 визитов; 18 deg от таргета)
+
+Barnes session metrics:
+  44 nose-pokes / 15 body visits / 14 holes checked
+  first error  = 18 deg (object 19 -- соседняя с таргетом)
+  mean error   = 96 deg
+  target visit order = 1 (мышь нашла escape ПЕРВОЙ обнюханной лункой!)
+
+Тесты: 339/0/3 (+10 новых). Без регрессий.
+
+ВАЖНО про DLC: для superanimal_topviewmouse дефолтный
+cfg.preprocess.likelihoodThreshold=0.95 слишком строгий -- 20/27
+body parts уходят в NotFound, теряется nose. На 0.5 остаются
+24/27 и всё работает. Дефолт не менял (он подходит для legacy
+custom DLC моделей). Снизь через UI: Preprocess Tracking >
+per-part table > thr column, или через cfg в коде.
+
+## 2026-06-25 — analyze: auto-load BARNES_v2_PreprocessSettings.mat
+
+Ты был прав. PreprocessSettings.mat (тот что save из Preprocess
+Tracking) лежал в Demo/BARNES_v2/ с per-part likelihoodThreshold
+(nose=0.5, left_ear=0.68, right_ear=0.71, etc.) -- но analyzeSession
+его НЕ читал. Использовал только скаляр cfg.preprocess.likelihoodThreshold
+= 0.95 как для всех частей. Поэтому твой настроенный nose=0.5
+игнорировался и nose уходил в NotFound.
+
+Фикс:
+- cfg.paths.preprocessSettings (новое поле). Если задано -- грузим
+  оттуда.
+- Если пусто -- auto-discover: поднимаемся от папки DLC до 4
+  уровней вверх, ищем *_PreprocessSettings.mat. Для сессии в
+  Demo/BARNES_v2/3_DLC/ находим Demo/BARNES_v2/BARNES_v2_PreprocessSettings.mat
+  с одного уровня вверх.
+- cleanBodyPart теперь получает per-part likelihoodThreshold +
+  notFoundThresholdPct из Settings.bodyparts; для частей не из
+  Settings -- скаляр default.
+
+Probe на Barnes_m183 БЕЗ явного likelihoodThreshold:
+  [INFO] Auto-loaded preprocess settings: BARNES_v2_PreprocessSettings.mat (27 parts)
+  parts kept 24/27 (vs 7/27 раньше)
+  rest 8.22% | walk 41.26% | locomotion 50.29%
+  44 nose-pokes | target visit order = 1
+  first hole error 18 deg (object 19, соседняя с target)
+
+Теперь твой workflow работает as expected: Preprocess Tracking
+один раз настроил, сохранил -- все sessions experiment'а используют
+эти настройки автоматически.
+
+Тесты: 339/0/3 без регрессий.
+
+## 2026-06-25 — analyze: подхват ВСЕХ полей Preprocess Settings + батч
+
+Прошлый коммит подхватывал только likelihoodThreshold и
+notFoundThresholdPct. Ты попросил все поля (smoothWindowSec,
+interpolationMethod, smoothingMethod, smoothingPolyOrder, outlier)
+для single session и batch.
+
+Сделал: analyzeSession теперь делегирует clean/interp/smooth в
+sphynx.preprocess.applyPerPartSettings -- тот же orchestrator
+который использует Preprocess Tracking UI. То что ты видишь в
+preview tab -- ровно то что analyzeSession и batch потом
+посчитают. Single source of truth.
+
+Лоадер теперь возвращает (bodyparts, outlier):
+- bodyparts -- per-part settings (use, likelihoodThreshold,
+  smoothWindowSec, interpolationMethod, smoothingMethod,
+  smoothingPolyOrder, notFoundThresholdPct).
+- outlier -- session-wide velocity-jump / Hampel / Kalman параметры.
+
+В лог теперь пишется какие outlier-фильтры активны:
+  Auto-loaded preprocess settings: ...mat (27 parts, outlier=vj)
+  Auto-loaded preprocess settings: ...mat (27 parts, outlier=vj+hampel)
+
+Per-part "use=false" уважается -- такие части помечаются NotFound,
+warn, исключаются из downstream.
+
+**Batch Analysis работает без правок.** Он вызывает analyzeSession
+per session, а autodiscovery поднимается от папки DLC и находит
+experiment-level settings. То есть один раз сохранил настройки в
+Preprocess Tracking -> все sessions batch'а используют их
+автоматически.
+
+Probe на Barnes_m183 (БЕЗ явного override):
+  [INFO] (27 parts, outlier=vj)
+  parts kept 24/27 | rest 8.22% | walk 37.41% | locomotion 54.20%
+  46 nose-pokes | target visit order = 1
+
+Тесты: 339/0/3. Без регрессий.
+
+## 2026-06-25 — multianimal: проброс individual + warn о frame-count drift
+
+Аудит синхронизации Make-video на Barnes_m183 нашёл:
+
+1. **Главное**: DLC csv покрывает 1740 кадров, видео -- 2035. Разница
+   295 кадров. Если DLC обрезан с конца -- 1:1 mapping для первых
+   1740 правильное; если DLC начал с какого-то video frame > 0 --
+   все overlay-точки смещены. Сейчас analyzeSession при наличии
+   paths.video открывает его и кричит WARN если frame counts не
+   совпадают, с числом diff'а.
+
+2. **Individual выбор не пробрасывался**. readDLC auto-pick'ал
+   most populated на каждом вызове, но никто не передавал выбранного
+   animal между шагами. UI / batch не могли заfix'ить individual.
+
+Проброс теперь полный:
+- cfg.preprocess.individual -- новое поле (default '').
+- analyzeSession резолвит individual в порядке:
+    a. cfg.preprocess.individual (явное переопределение)
+    b. Settings.metadata.individual (из auto-loaded *_PreprocessSettings.mat)
+    c. readDLC auto-pick (legacy)
+  Передаёт в ОБА readDLC вызова -- предотвращает drift между
+  pre-scan'ом autostart'а и основным slice'ом.
+- result.SelectedIndividual + result.AllIndividuals -- для трассировки.
+- writeTracksSettings принимает 5-й arg `individual`, пишет в
+  Settings.metadata.individual.
+- exportTracks (Save preprocessed) автоматически берёт
+  state.dlc.selectedIndividual -- save сохраняет выбор.
+- DefineActs Make-video пишет в лог "overlay points sampled from
+  individual X (of N)" перед рендером.
+
+Probe на m183 подтвердил:
+  [WARN] DLC covers 1740 frames but video has 2035 (diff 295)...
+  result.SelectedIndividual = animal0
+  result.AllIndividuals = animal0..animal9
+
+Для m183 auto-pick правильный: только animal0 имеет данные, animal1..9
+все нули. Видимый sync drift в Make-video -- из-за обрезанного DLC.
+Если ты экспортируешь DLC с того же кадра что video начинается --
+drift пропадёт. Иначе можно либо обрезать video в начале на 295
+кадров, либо передавать в analyzeSession явный
+config.range.startFrame = (videoFrame_correspondsTo_DLCframe0).
+
+UI dropdown для выбора individual -- отдельный шаг, отложил.
+
+Тесты: 339/0/3 без регрессий.
+
+## 2026-06-25 — multianimal: per-session auto-pick, не кэшируем
+
+Откатил persistence из прошлого коммита по твоему запросу:
+1. exportTracks больше НЕ пишет selectedIndividual в Settings
+   .metadata.individual. Save preprocessed оставляет это поле пустым.
+2. analyzeSession больше НЕ читает Settings.metadata.individual.
+   Резолюция: либо явный cfg.preprocess.individual, либо readDLC
+   auto-pick fresh для этой сессии.
+
+Within-session lock сохранён: после первого readDLC выбранный
+individual записывается в config.preprocess.individual, и любой
+повторный readDLC в этом же analyzeSession run использует тот же
+animal. result.SelectedIndividual всё ещё показывает кого использовали.
+
+Frame-count audit по 9 живым сессиям BARNES_v2:
+  session                            | video |  DLC | diff
+  Barnes_m183_5d_0t_26102024_120726  |  2035 | 1740 | -295
+  Barnes_m191_12d_0t_02112024_171452 |  2116 | 1747 | -369
+  Barnes_m23_0d_0t_12062024_141150   |  7479 | 5792 | -1687
+  Barnes_m27_4d_1t_06032025_141211   |  1280 |  933 | -347
+  Barnes_m498_12d_0t_11042026_124722 |  2683 | 1804 | -879
+  Barnes_m548_1d_3t_30032026_172841  |  3525 | 3200 | -325
+  Barnes_m5718_0d_0t_01122023_101633 |  4127 | 1880 | -2247
+  Barnes_m60_12d_0t_05112024_122035  |  2304 | 1705 | -599
+  Barnes_m_0d_0t_12062024_143355     |  8319 | 5795 | -2524
+
+ВСЕ 9 DLC обрезаны (короче video). Все начинаются с frame 0
+contiguous. Если DLC frame 0 = video frame 1 (DLC просто
+остановился раньше) -- Make-video 1:1 alignment для первых N
+кадров, drift в overlay невозможен. Если DLC начал не с frame 0
+video (например после warmup периода) -- overlay сместится на
+offset кадров.
+
+Понять "DLC frame 0 = какой video frame" без metadata в csv
+нельзя. Способы проверки:
+1. Открыть video на frame 1, открыть DLC frame 0 coords (X, Y),
+   и сверить визуально -- лежит точка на животном?
+2. Если DLC pipeline всегда стартует с video frame 0 (default
+   DeepLabCut), то alignment 1:1 OK, drift нет (только нет
+   данных для кадров > N).
+
+Тесты: 339/0/3 без регрессий.
+
+## 2026-06-25 — barnes: убрал платформу из nose_at_any_hole
+
+Причина: nose_at_any_hole сидел на зоне objectall_realout. А
+buildObjectZones строит objectall_* как union ВСЕХ объектов
+(target + 19 mistakes + platform). Из-за этого нос мыши на
+платформе считался "any hole" активностью.
+
+Фикс: nose_at_any_hole теперь explicit OR-список зон
+{target_realout, object1_realout, ..., object19_realout}. Платформа
+по построению отсутствует.
+
+Аудит остальных счётчиков по лункам (нигде платформы не было):
+- TotalNoseHoleVisits / TotalBodyHoleVisits перебирают индексами
+  nose_at_object1..N -- platform никогда не входила.
+- NumCheckedHoles / FirstCheckedHoleNumber / ErrorDeg /
+  TargetHoleVisitOrder тоже идут по nose_at_objectN.
+- nose_at_platform / body_at_platform остались отдельными актами
+  (платформа трекается, но не примешивается к лункам).
+
+Дельта на m183:
+  до : nose_at_any_hole = 86.61%
+  после : nose_at_any_hole = 83.28%
+Barnes session metrics не изменились.
+
+Тесты: 341/0/3 (+2 новых: testNoseAtAnyHoleExcludesPlatform,
+testNoseAtAnyHoleScalesWithNumObjects).
+
+## 2026-06-25 — make-video: счётчик в углу квадратиком 10%
+
+Переписал stampNumberCorner. Теперь:
+- Квадрат, прижат к углу (no margin).
+- Сторона = max(16, round(0.10 * min(H, W))) -- 10% от меньшей
+  стороны кадра.
+- Под видеопикселями квадрат затеняется на 50% (полупрозрачная
+  тёмная плашка) -- так белый текст читается без жёсткого
+  чёрного фона.
+- FontSize авто = ~55% от стороны квадрата, текст центрируется.
+- Кэш bitmap'ов теперь учитывает fontSize в ключе.
+
+Используется для:
+- event-counter в Make-video (top-right)
+- velocity readout (bottom-right, для speed-gated актов)
+
+Тесты: 341/0/3. Помощник private, проверь визуально через
+Make-video на любой сессии.
+
+## 2026-06-26 — TS double-error: hardening + диагностика
+
+Сделал два фикса + diagnostic harness.
+
+(1) Derived-сглаживание оторвано от sgolay:
+rear.m (rear как акт), applyAct.m (rears act), computeVelocity.m
+теперь используют новый sphynx.util.smoothDerived -- NaN-safe
+moving average на smoothdata (base MATLAB, без Signal Processing).
+Position-traces по-прежнему идут через applyPerPartSettings с
+user-выбранным методом (sgolay/movmean/gaussian/kalman); derived
+сигналы (sumDist, velocity) теперь генерик. Архитектурно --
+ровно как ты просил.
+
+(2) smoothTrace.m теперь robust:
+- input явно кастуется к double (sgolayfilt single не принимает)
+- внутренние NaN заполняются fillmissing('linear') перед sgolay
+Так что NaN-run больше не убивает весь session.
+
+(3) NEW tools/diagnose_ts_error.m + homework doc:
+В docs/superpowers/homework/ts-double-error-diagnostic.md --
+пошаговая инструкция для пользователя удалённой машины (RU,
+не знаком с MATLAB). Запускает 8 проверок (locale, toolboxes,
+DecimalSeparator fix, парсинг csv, тип данных, sgolayfilt и
+hampel sanity, наш smoothTrace, git HEAD + история коммитов
+по relevant файлам). Все проверки печатают PASS/FAIL. Полный
+вывод можно скопировать в чат и прислать.
+
+Ответ на вопрос "помнишь почему было прошлый раз": ДА --
+2026-06-03 в коммите c4edd31. RU локаль на Windows + readmatrix
+без DecimalSeparator -> точки воспринимались как тысячные
+разделители -> вся csv-таблица читалась как NaN -> hampel/sgolay
+падали "real-valued vector of type double". Фикс на месте до сих
+пор. Раз сейчас raw signal/гистограмма видны -- значит csv
+читается ОК, и причина не та же. Возможные причины СЕЙЧАС:
+1) старый код на удалённой машине (фикс не накатился), 2)
+single precision где-то по пути, 3) NaN run в derived signal.
+Все три обработаны фиксами выше; diagnostic точно укажет какая.
+
+Что мне и пользователю сделать:
+- Этот код пуш в репо (готов к push).
+- Удалённая машина: PyCharm Update Project (или git pull в
+  терминале). Проверить что в git log появился сегодняшний
+  коммит.
+- Открыть docs/superpowers/homework/ts-double-error-diagnostic.md,
+  следовать шагам 1-3.
+- Прислать в чат: (a) вывод diagnose_ts_error, (b) полный
+  stack trace ошибки если она ещё возникает.
+
+Тесты: 341/0/3 без регрессий.
+
+## 2026-06-26 — sphynx_defaults.jsonc reference
+
+Создал sphynx_defaults.jsonc в корне проекта. Один файл = все
+дефолты пайплайна с альтернативами в комментах.
+
+Формат: JSONC (JSON-with-Comments, // line comments). Открывается
+в PyCharm/VSCode с подсветкой. Стандартный jsondecode такие
+комменты не съест -- файл для тебя/коллег читать, не для
+analyzeSession парсить.
+
+Что внутри:
+- paths (video/dlc/preset/outDir/preprocessSettings)
+- range (startFrame/endFrame/autoStart)
+- preprocess: likelihoodThreshold, smoothWindow*, maxVelocityCmS,
+  interpolationMethod, perPart (bigParts/smoothingMethod/poly/
+  notFoundThresholdPct), outlier (velocityJump/hampel/kalman)
+- acts: rest/walk/loc thresholds, minRunSeconds, freezingMode,
+  rearMode, rear thresholds, autoThreshold
+- io, viz, verbose
+- presetStrategies: arenaGeometry, squareStrategy, circleStrategy,
+  stripDirection -- какие стратегии CreatePreset может сохранить
+- autoThreshold: otsu/knee/quantile/preset -- dropdown в
+  Preprocess Tracking
+
+Для каждого режима/метода/strategy комментом перечислены
+альтернативы.
+
+## 2026-06-26 — sphynx_defaults: добавил все вкладки
+
+Расширил sphynx_defaults.jsonc -- одна секция на каждую вкладку
+sphynx. Только enum-варианты в комментах, без описаний. 198 строк.
+
+Добавлено: createPreset / preprocessTab / defineActs / analyzeTab /
+batchTab / makeOutputTable / plotData / preprocessVideo /
+syntheticData. presetStrategies перенёс внутрь createPreset.
+
+Источники -- начальные Value на uicheckbox/uidropdown/uieditfield +
+defaultSettings методы во всех +sphynx/+app/*.m.
+
+## 2026-06-26 — sphynx_defaults.jsonc: порядок + auto-load
+
+Три правки одним коммитом.
+
+1. **Перепорядок**: файл теперь в порядке GUI-вкладок (Create
+   Preset, Preprocess Tracking, Define Acts, Analyze Session,
+   Batch Analysis, Make Output Table, Plot Data, Preprocess
+   Video, Synthetic Data). Pipeline-настройки перенесены ВНУТРЬ
+   соответствующих tab-секций -- preprocessTab держит весь
+   cfg.preprocess.* (likelihood, smoothing, outlier), defineActs
+   держит cfg.acts.* (rest/loc thresholds, freezingMode,
+   rearMode и т.д.). Сверху остались только cross-cutting:
+   paths / range / io / viz / verbose.
+
+2. **Auto-load**: NEW sphynx.io.readDefaultsJsonc.
+   - Ищет sphynx_defaults.jsonc от pwd до 5 уровней вверх, потом
+     по repoRoot().
+   - Стрипает // line и /* */ block комменты, jsondecode.
+   - Возвращает [] молча если файла нет, warning если parse-error.
+
+3. **Merge**: NEW sphynx.pipeline.applyJsoncDefaults. Mapping
+   tab-section -> cfg-flat (preprocessTab.* -> cfg.preprocess.*;
+   defineActs.* -> cfg.acts.*; и т.д.). Вызывается из
+   defaultConfig() -- то есть jsonc становится новыми defaults, а
+   caller (controller или тест) может потом перетереть. Caller
+   wins, jsonc -- seed.
+
+Workflow теперь:
+- Открыл sphynx_defaults.jsonc в IDE.
+- Поменял например preprocessTab.likelihoodThreshold = 0.5.
+- Перезапустил analyzeSession / runBatch -- значение применилось.
+- preprocessTab.perPart.smoothingMethod = "gaussian" -- то же.
+- defineActs.restThresholdCmS = 2 -- акт rest пересчитается.
+
+Тесты: 348/0/3 (+7 новых). Без регрессий. Включён end-to-end --
+если в jsonc будет typo, test упадёт раньше user'а.
+
+## 2026-06-26 — Preprocess R18 + нумерация вкладок
+
+Вкладки получили нумерацию "1. Create Preset" ... "9. Synthetic Data *".
+
+Preprocess Tracking R18 (твои правки):
+- TopBar убран. Output dir + path -- одна строка в Block 1; Save /
+  save plots / Clear All переехали в правую кнопочную колонку Block 4.
+- Block 2 (Outlier): ColumnWidth теперь все фиксированные
+  {110, 60, 60, 60, 50}. Поля больше не схлопываются в ноль на узком окне.
+- Hampel default = on (был off). Также обновил jsonc.
+- Block 3 = "Plots" -- графики обёрнуты в uipanel с номером.
+- Block 4 (per-part, бывший Block 3): таблица 75% слева,
+  кнопочная колонка 25% справа. INFO-row над таблицей удалена,
+  INFO кнопка переехала в кнопочную колонку. Auto-строка: dropdown +
+  param + Auto this + Auto all в одной строке.
+- Manual exclusion regions: заголовок "Manual exclusion regions *" (нет
+  номера, со звёздочкой). Layout: контролы слева, listbox СПРАВА (не
+  снизу). Добавлен INFO с новым help-текстом.
+- Viewport-полоска переехала в LeftPanel как 2 sub-row (row 3 и 4).
+  from/to окошки квадратные 28x28. Графики получили полную высоту
+  row-1, стали выше.
+- OuterGrid стал компактнее: [6,3] -> [4,3].
+
+Тесты: 348/0/3 без регрессий. UI визуальная проверка -- у тебя.
+
+## 2026-06-26 — Preprocess R19 polish (7 правок)
+
+1. B1: Output dir теперь 5-я кнопка в общем ряду + 5-е поле пути.
+   Grid 5 колонок все {1x}.
+2. B2: ColumnWidth all-1x как в B1 -- скейлится тем же ритмом.
+3. B2: высота 140 -> 110 (плотно под 3 строки).
+4. B3 Plots: высота 350 -> 420 (+20%).
+5. Viewport: теперь 3 sub-row'a в LeftPanel:
+     row1: < bp > Video
+     row2: from / to / X / log Y
+     row3: raw | interp | smoothed (3 равных колонки)
+6. B4 per-part table: колонки name + status стали '1x' -- таблица
+   тянется на всё доступное пространство справа, нет пустоты.
+7. Manual exclusion regions *: высота 180 -> 90. Убрал пустую
+   3-ю row в ctrl-grid (listbox теперь справа, не снизу).
+
+Тесты: 348/0/3 без регрессий.
+
+## 2026-06-26 — DefineActs: log 2x + превью зон по селекту
+
+UI правки tab 3:
+- log/info textarea стал в 2 раза выше (80 -> 160). Список актов
+  (1x flex) ужался автоматически.
+- При выделении акта (или нескольких) в списке слева:
+    * на preview-axes рисуются зоны этих актов (как раньше для
+      SimpleZoneListBox -- 50/50 tint + контур);
+    * заголовок над кадром теперь это компактная params-строка
+      каждого выделенного акта: "name bp=X v[a..b]cm/s op=OP",
+      склеенная через '|'. Скорости/часть тела/zone op
+      выводятся текстом сверху кадра, как ты просил.
+  Мульти-селекшен -- зоны объединяются, params-строки
+  склеиваются.
+- refreshZonePreview принимает теперь optional (zoneNames,
+  titleStr), чтобы тот же renderer обслуживал и старую логику
+  (zones-listbox) и новую (acts-listbox).
+
+Сам Barnes v3 (64 акта, _real/_realout своп, mouse_inside_*,
+holeN naming) уже коммитнут отдельно (8b98847).
+
+Тесты: 350/0/3 без регрессий.
+
+## 2026-06-26 — Barnes v3.1 + желтый counter
+
+Прогнал probe на m60. Все 3 issue имеют одно объяснение:
+
+ROOT CAUSE: target_real polygon = всего 59 пикселей (~8x8 px),
+target_realout = 10009 px. DLC superanimal даёт ~10 px jitter на
+nose. Nose попадает в target_real ровно 1/1705 кадров (0.06%) ->
+после 0.25s refine = 0 эпизодов. Зона ТЕХНИЧЕСКИ рисовалась,
+но на 8x8 px на экране её просто не видно.
+
+То что ты просил (nose на _real, strict) -- математически верно,
+но на реальных данных DLC с jitter'ом не ловится.
+
+Откатил nose acts на _realout (v2 поведение):
+- nose_at_target -> target_realout
+- nose_at_hole<N> -> object<N>_realout
+- nose_at_platform -> platform_realout
+- nose_at_any_hole -> OR(object<N>_realout)
+
+body_* остались на _realout (как у тебя). mouse_inside_* остались
+на _real (это правильно -- срабатывает только когда мышь реально
+curled внутри дырки, а не просто рядом).
+
+Probe на m60 ПОСЛЕ фикса:
+  nose_at_target = 7.04% (1 эпизод, FirstStart=8.24 s)
+  body_at_target = 7.10% (1 эпизод, FirstStart=8.45 s)
+  nose_at_any_hole = 2.93% (2 эпизода, FirstStart=20.33 s)
+  mouse_inside_target = 0% (мышь не залезла внутрь полностью)
+
+Issue (2) counter: плашка была затемнена на 50% + белый текст.
+На светлом полу Barnes становилась почти невидимой. Поменял на
+СПЛОШНОЙ ЖЁЛТЫЙ фон + ЧЁРНЫЙ текст -- максимум контраста при
+любом цвете под видео.
+
+Тесты: 350/0/3 без регрессий.
+
+## 2026-06-26 — Analyze R20
+
+Три правки на tab 4:
+
+(1) Loader строка переделана в 2 row'a (как в Batch):
+    Row 1: Root | Preset | Video | DLC | Out dir
+    Row 2: Preproc settings | Acts library
+    Новая кнопка Preproc settings + поле path. pickPath('Preprocess')
+    добавлен. runAnalyze пушит PreprocessSettingsPathField.Value в
+    cfg.paths.preprocessSettings (вместе с auto-discover остаётся как
+    раньше, но теперь можно явно указать).
+
+(2) Render checkbox default = ON (был OFF). Также обновил
+    sphynx_defaults.jsonc.
+
+(3) Блок Acts videos уменьшен на 30% по высоте (с '1x' flex на
+    fixed 170 px). Лог получил освободившееся место -- '1x' внизу
+    вместо 90 px.
+
+Тесты: 350/0/3 без регрессий.
+
+## 2026-06-26 -- Analyze R21
+
+Четыре правки tab 4.
+
+(1) Удалил NOF хардкод в analyzeSession (step 9): corners/walls/
+    center/object1..4/objects больше не лезут в r.Acts независимо
+    от пресета. Канонический путь -- библиотека актов. Probe на
+    m60 БЕЗ библиотеки: 5 актов (rest/walk/loc/freezing/rear), NOF
+    leftover = 0.
+
+(2) Зоны и список актов в главном видео берутся из Acts(k).
+    Definition.zones в renderActsVideo. Удаление NOF из (1)
+    автоматически чистит и оверлей зон, и actsList фичу.
+
+(3) "Pick a video first" при render acts. Причина: runAnalyze не
+    передавал VideoPathField.Value в cfg.paths.video, поэтому
+    в result.config.paths.video был пустой. И render-функции
+    проверяли только поле. Фикс: добавил cfg.paths.video =
+    VideoPathField.Value + новый resolveVideoPath() (тримит
+    пробелы, снимает drag-and-drop кавычки, fallback на result.
+    config.paths.video). Warning теперь печатает фактический путь.
+
+(4) Etogram acts фильтр: новый вертикальный listbox в правой
+    панели, слева от траектории, тянется от траектории до самого
+    низа (rows 3-5, col 1). Multi-select; галочки -> перерисовка
+    этограммы с фильтром. Right grid: 5x2 -> 5x3 ({180,'1x','1x'}),
+    header + таблица -- на всю ширину, остальное в col 2-3.
+
+Default = все акты выделены, чтобы по умолчанию вид не менялся.
+
+Тесты: 350/0/3 без регрессий.
+
+## 2026-06-28 -- Analyze R22
+
+Четыре правки tab 4.
+
+(1) Фокус после выбора путей/файлов. На Windows uigetfile/uigetdir
+    отдают фокус в Explorer когда закрываются. pickPath теперь
+    зовёт refocusFigure() (figure(obj.Figure)) в конце.
+
+(2) Подчёркивания в этограмме (nose_at_hole1 -> "nose<sub>at...").
+    Добавил TickLabelInterpreter='none' в drawEtogram. Тот же фикс
+    в sphynx.plot.barWithStats (factor levels тоже могут иметь _).
+
+(3) Main video текст ~20% от H. Раньше speedFont=18 / actsFont=15
+    / panelDy=26 -- фиксированный пиксельный размер, написанный
+    под 720p. Теперь:
+       lineH    = max(10, round(0.20*H / 12))   # 12-line budget
+       speedFont= max(7,  round(lineH * 0.72))
+       subFont  = max(7,  round(lineH * 0.64))
+       actsFont = max(7,  round(lineH * 0.62))
+    Читается на любых разрешениях (от 296p crops до 4K). Режим
+    presentation не тронут.
+
+(4) Counter 5% от H, жёлтая плашка + чёрный текст. Вытащил
+    stampNumberCorner в sphynx.util.stampNumberCorner -- теперь
+    Make-video (DefineActs) и Render-acts (Analyze) используют
+    ОДИН и тот же штамп. side = max(12, round(0.05*H)) -- было
+    10% от min(H,W).
+
+Локальные копии stampNumberLocal/renderTextBitmapLocal в
+renderActStitched.m и stampNumberCorner/renderTextBitmap в
+DefineActsTabController.m удалены.
+
+Smoke H=500: side=25 (5%*500=25 OK), 1875 пикселей штампа.
+Тесты: 350/0/3 без регрессий.
+
+## 2026-06-28 -- R23
+
+Tab 4:
+
+(1) Counter в acts video: 10% от H (был 5%), floor 24 px. Для
+    видео 300p -> плашка 30x30 (была 15x15).
+
+(2) "Только чёрный квадрат" -- root cause: print('-RGBImage') на
+    off-screen figure в каких-то MATLAB-контекстах возвращает
+    пусто, плашка остаётся жёлтой без цифры. Добавил embedded
+    5x7 bitmap font fallback для 0-9 . / C M S (всё что нужно
+    для счётчика и "cm/s"). Smoke H=300: 218 чёрных пикселей
+    цифры на 30x30 жёлтой плашке -- видно.
+
+(3-4) Main video info block (renderActsVideo):
+    - Прижато к самому верх-лев углу (x0=4, y0=~один глиф)
+    - Убрал BackgroundColor (чёрная плашка)
+    - Белый текст + 1px чёрная обводка (drawOutlinedText: 8
+      теневых копий вокруг + основной цвет сверху)
+    - Расстояние между строками >= 1.35 * fontSize -- больше не
+      налезают друг на друга
+    - "Acts:" список теперь показывает ВСЕ активные акты, включая
+      spatial (раньше дедупил против Speed_act/Zone -- на Barnes
+      это убивало весь список)
+
+Tab 3:
+
+(5) mouse_inside_target / hole1..19 / platform получили
+    minDurationSec = 2.0 (был 0.25 из emptyAct). 1-2-кадровый
+    "все три части в зоне" во время пробегания -- шум; реальное
+    залезание внутрь длинное.
+
+Тесты: 350/0/3 без регрессий.
+
+## 2026-06-28 -- R24
+
+Tab 5 (Batch): сессии не собирались для BARNES_v2.
+
+Корень: sessionIdFromDlcName искала только литерал 'DLC' в имени
+csv. SuperAnimal-формат не содержит 'DLC' -- весь 95-символьный
+стем csv становился id'ом, ни с чем не сходился.
+
+Фикс: список маркеров расширил до
+  {'_superanimal', 'DLC_resnet', 'DLC_mobilenet',
+   'DLC_efficientnet', 'DLC_', '_DeepCut_'}
+первое попадание -- срез. Хвостовой '_el' (multi-animal ext)
+снимается. id не привязан к структуре (m60/m183/Barnes/barnes/12d/
+0t -- всё работает без явных правил). findFirstMatch теперь также
+смотрит layout с подпапкой '<folder>/<id>/<id><suffix>' (preset).
+
+Smoke Demo/BARNES_v2: 9/9 csv -> все сошлись с .mp4 + _Preset.mat.
+
+Tab 2 (Preprocess) -- две новые кнопки:
+
+(1) "Check another" -- рядом с Load (block 1, row 3). Выбираешь
+    другой DLC csv, текущие per-part настройки переносятся по
+    имени части тела, Compute all запускается. Удобно проверить
+    другую сессию под теми же параметрами.
+
+(2) "Load preprocessed" -- рядом с Save preprocessed (block 4,
+    row 5). Выбираешь сохранённый <exp>_PreprocessSettings.mat,
+    его bodyparts + outlier накладываются на текущий DLC,
+    Compute all запускается. UI outlier-полей (vj max, hampel
+    on/win/sigma, kalman Q/R) подсасываются обратно.
+
+Обе кнопки используют общий realignPerPartByName -- пересобирает
+perPart под текущий набор частей тела, копирует сохранённые поля
+по имени (case-insensitive); недостающие -- из perPartDefault.
+
+Тесты: 350/0/3 без регрессий.
+
+## 2026-06-28 -- verify: per-act minDurationSec end-to-end
+
+Roundtrip OK:
+  mouse_inside_target.minDurationSec = 2 (build time)
+  mouse_inside_hole5.minDurationSec  = 2
+  nose_at_target.minDurationSec      = 0.25 (default)
+  AFTER save+load -> mouse_inside_target.minDurationSec = 2
+
+End-to-end probe on Demo/BARNES_v2/m60 confirms each act applies
+its OWN minDurationSec inside analyzeSession's refine step:
+
+  nose_at_target      | minDur=0.25s | count=1 | 7.04%
+  body_at_target      | minDur=0.25s | count=1 | 7.10%
+  mouse_inside_target | minDur=2.00s | count=0 |  0.00%
+  mouse_inside_hole5  | minDur=2.00s | count=0 |  0.00%
+  rest                | minDur=0.25s | count=11 | 5.28%
+  walk                | minDur=0.25s | count=31 | 67.21%
+
+mouse_inside on m60 = 0 episodes -- correct: mouse didn't sustain
+2s curled inside any hole. nose_at_target / body_at_target still
+fire under 0.25s default. No cross-contamination.
+
+## 2026-06-28 -- R25 docs
+
+Primary vs Total errors разъяснил: они ОБЕ уже есть.
+- Total = TotalNoseHoleVisits (сумма episodes по nose_at_holeN, target
+  не входит -> это "errors" в литературе)
+- Primary = TargetHoleVisitOrder - 1 (implicit). Сделал явное поле
+  PrimaryErrors в barnesSessionMetrics.
+
+Документация:
+- НОВЫЙ docs/Barnes/metrics.md (323 строки) -- единственный
+  reference по Barnes-фичам: apparatus, зоны _real/_realout/_out,
+  все 64 default акта, каждое поле метрик с классическим
+  эквивалентом, как per-act minDurationSec применяется, таблица
+  соответствий Sunyer/Illouz/Pitts/ANY-maze/Rtrack, и что мы НЕ
+  считаем (strategy classification, probe quadrant, heading angle).
+- docs/CreatePresetApp/{user_guide,full_workflow}_{en,ru}.md
+  обновлены: нумерованные вкладки, R24-кнопки (Check another /
+  Load preprocessed), 64-актная Barnes-библиотека, R23 video
+  overlay, R24 SuperAnimal pairing, sphynx_defaults.jsonc, указатель
+  на metrics.md.
+- DefineActs "Load Barnes" tooltip развёрнут.
+- Preprocess INFO дополнен про R24 кнопки.
+
+Тесты: 350/0/3.
+
+## 2026-06-28 -- R26
+
+Tab 4 header: добавил PrimaryErrors + FirstCheckedHoleNumber.
+Теперь печатает все 8 полей barnesSessionMetrics:
+  target visit #N | primary errors X | M holes checked | first
+  hole #K (err D deg) | mean error D deg | nose-pokes N |
+  body visits N
+
+Tab 5: 
+- 3-я таблица справа -- BarnesTable, столбцы: session +
+  все 8 Barnes-метрик.
+- runBatch: после analyzeSession если res.BarnesMetrics есть ->
+  добавляется строка через barnesMetricsToRow.
+- saveTablesCsv пишет batch_barnes.csv ТОЛЬКО когда есть Barnes-
+  сессии в батче (не-Barnes батчи без изменений).
+
+Tab 6:
+(a) applyDefaults распознаёт по regex три Barnes-семейства:
+    nose_at_(target|holeN|platform|any_hole) ->
+        ActNumber + ActDuration + ActPercent + FirstStartSec
+    body_at_(target|holeN|platform)          ->
+        ActNumber + ActDuration + ActPercent
+    mouse_inside_(target|holeN|platform)     ->
+        ActNumber + ActDuration
+    Без хардкода object1..19 в actParams -- скейлится.
+(b) buildTable сканит _WorkSpace.mat -> union of BarnesMetrics
+    field names -> Barnes_<FieldName> в batch template -> flatten
+    в каждый rec.
+(c) buildSuperTable.addBarnesColumns детектит Barnes_ префикс
+    и добавляет per-(metric, session) колонки автоматически.
+
+Probe m60+m23:
+- m60: Primary=0, Total=3 (мышь быстро нашла target)
+- m23: Primary=15, Total=47 (долгий поиск)
+- 16 barnes-колонок в Wide (8 метрик x 2 сессии).
+
+Проверил: NOF-хардкодов нет. actParams содержит legacy NOF
+defaults (object1..4 и т.п.) но это OPT-IN -- колонка возникает
+только если акт такого имени реально есть в session.mat. Barnes
+сессии их игнорят. Синтез NOF zone-actов был удалён ещё в R21.
+
+Тесты: 350/0/3 без регрессий.
+
+## 2026-06-28 -- R27
+
+Tab 5 фокус: добавил restoreFocus + drawnow в 4 picker'а
+(pickFolder / pickSettingFile / saveSettings / loadSettings).
+Раньше Tab 5 вообще не возвращал фокус после uigetfile/uigetdir.
+
+Tab 6:
+- barnesActDefaults теперь возвращает {} для всех 3 Barnes-семей.
+  R26 ставил count/percent/duration by default -- ты хочешь чтобы
+  Barnes-акты были с отжатыми галками, юзер сам ставит.
+- Legacy non-Barnes акты (corners, walls, object1..4 и пр.) свои
+  defaults из sphynx.acts.actParams сохраняют.
+- В restoreFocus добавил drawnow -- Windows R2020a иногда не
+  переключал фокус без него.
+
+Tab 4: refocusFigure тоже получил drawnow для консистентности.
+
+Тесты: 350/0/3 без регрессий.
+
+## 2026-06-28 -- R28
+
+Tab 6 баг: Build table собирал ВСЕ акты независимо от галок.
+
+Корень: metricMatrixToStruct пропускал безгалочные строки
+(continue), а buildSuperTable.resolvePerActMetrics фолбэчил их на
+дефолтный flat Metrics список из 4 метрик (ActPercent, ActDuration,
+ActNumber, ActMeanTime). Итог: безгалочный акт -> 4 колонки на
+session всё равно появлялись.
+
+Фикс: в buildTable передаю 'Metrics', {} (пустой flat default).
+Теперь resolvePerActMetrics для безгалочных актов даёт {}, и
+buildTidy/pivotWide эмитят 0 колонок.
+
+Probe на m60+m23 с тикнутым только rest.ActNumber:
+  до фикса: 567 колонок в Wide
+  после   : 23 колонки (16 barnes + 4 dist/vel + mouse + 2 rest_count)
+
+Тесты: 350/0/3 без регрессий.
+
+## 2026-06-28 -- глобальный аудит
+
+Два субагента прошлись по коду: (а) маппинг body-parts -> acts,
+(б) хардкоды + поток настроек. Результат -- 12 новых записей
+в docs/TODO.md.
+
+P1 (срочно):
+- BatchAnalysisTab: preproc-settings picker мёртвый. Ты выбираешь
+  файл, но runBatch его НЕ копирует в cfg.paths.preprocessSettings.
+  Молчаливо подсасывается через auto-discover. 1-line фикс.
+- Barnes 19-hole default течёт везде. На 5-hole пресете angleStep
+  = 18 deg вместо 60 -- угловые метрики неправильные. И "Load
+  Barnes default" сеет 14 фантомных актов (hole6..19 x 3) с
+  нулём срабатываний.
+- applyAct.m строка 63-64: round(durSec * ctx.frameRate) без
+  guard. Если fps NaN -> minRunFrames NaN -> min-duration filter
+  R23 молча отключается.
+- Опечатка 'righforelimb' (без 't') в DefineActs dropdown.
+
+P2 (важно):
+- bcIdx silent fallback to 1 в 4 местах -- на SuperAnimal где
+  bodycenter -> mouse_center, idx=1 берёт nose. Треки + средние
+  скорости/дистанции пишутся для НОСА.
+- pxlPerCm=1 silent fallback в 5+ местах -- пиксели labelled
+  как cm.
+- DefineActs Make-video НЕ использует Preproc Settings ->
+  превью расходится с Analyze Session результатом.
+
+P3 (косметика):
+- 4-кратная дупликация defaults (minDurationSec / Kalman /
+  maxGapSec).
+- Synonym map gaps (eyes, mid_back, tail tip).
+
+Хорошие новости:
+- R21 cleanup (legacyZoneActSpec) чистый -- никаких преемников.
+- E2E smoke на m60 SuperAnimal: rest/walk/loc/freezing/rear все
+  отрабатывают, resolvePart правильно бриджит legacy <->
+  SuperAnimal имена.
+- analyzeSession настройки propagation полный -- все 14 полей
+  доезжают до consumers (только BatchTab UI картинка не
+  доезжает -- см P1 выше).
+
+Также добавил твою P2/C3 идею -- "per-class-of-objects" в
+конструкторе актов (раздел 3. Define Acts). Чтобы для барнсо-
+подобных 19-hole парадигм юзер выбирал класс целиком, а не
+тыкал 19 зон по одной.
+
+## 2026-06-29 -- R29
+
+Фикс P1-бага из R28 audit: BatchAnalysisTab picker для Preproc-
+Settings был мёртвый -- ты выбираешь файл, поле заполняется, но
+runBatch его не копировал в cfg. analyzeSession молча падал на
+auto-discover (walk-up по DLC parent dir) и мог подсасывать
+устаревший / чужой _PreprocessSettings.mat из родительских папок.
+
+3 места починены:
+
+1. BatchAnalysisTabController.runBatch (cfg0 build block):
+   cfg0.paths.preprocessSettings = obj.PreprocessSettingsField.Value
+   когда поле НЕ пустое И путь это файл.
+   Пустое -> auto-discover (back-compat).
+   Не файл -> warn + auto-discover.
+   applog "Preproc settings: <path>" один раз за батч -- видно
+   что применилось.
+
+2. DefineActsTabController.makeVideo (single-act preview ~:971)
+3. DefineActsTabController.renderAllActs (~:1188)
+   оба через новый private helper preprocessSettingsPath():
+   тримит whitespace, снимает drag-drop кавычки, '' если поле
+   пустое или путь не файл.
+
+AnalyzeSessionTab уже был правильно прошит (R20). Loader тоже
+всё это время был корректный -- баг был ТОЛЬКО в отсутствующем
+присваивании в caller'ах.
+
+E2E probe на m60 SuperAnimal с двумя синтетическими Settings:
+  nose.use=false -> 6 частей тела, nose отсутствует
+  nose.use=true  -> 7 частей тела, nose есть
+End-to-end проброс работает.
+
+Тесты: 350/0/3 без регрессий.
+
+## 2026-06-29 -- R30 коллегиан диагностика "double" разобрана
+
+Вердикт по выводу diagnose_ts_error на машине коллеги:
+
+  Signal Processing Toolbox license = 1
+  НО sgolayfilt и hampel НЕ найдены (Undefined function)
+
+Это не противоречие: license('test',...) проверяет лицензионный
+файл, а не факт установки. Toolbox в этой MATLAB-инсталляции
+просто не установлен (стрипнутая инсталляция / битый Add-Ons /
+выкошенный path). Гипотеза #4 из homework сбылась.
+
+Два пути:
+A) Установить Signal Processing Toolbox через Add-Ons Manager
+   на машине коллеги.
+B) Не устанавливать -- просто подтянуть sphynx-GUI HEAD после
+   R30: и smoothTrace, и hampelFilter теперь имеют fallback
+   на base MATLAB (movmean / rolling-MAD через movmedian).
+   Pipeline продолжит работать с однократным warning.
+
+Что починено в R30:
+
+1. +sphynx/+preprocess/smoothTrace.m
+   detect sgolayfilt, fallback на smoothdata movmean при отсутствии.
+
+2. +sphynx/+preprocess/hampelFilter.m
+   detect hampel, fallback на rolling-MAD при отсутствии.
+
+3. tools/diagnose_ts_error.m
+   [1] теперь печатает exist+which отдельно от license -- если бы
+       было раньше, root cause увидели бы сразу.
+   [8] починен git-quoting (на Windows закрывающую кавычку съедало
+       при trailing backslash в repoRoot).
+
+Тесты 350/0/3 без регрессий.
+
+Homework файл ts-double-error-diagnostic.md обновлён с новым
+вердиктом и инструкциями коллеге.

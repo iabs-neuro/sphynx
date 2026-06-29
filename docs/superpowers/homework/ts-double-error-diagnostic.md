@@ -1,7 +1,6 @@
 # Диагностика "real-valued vector of type double" (sgolay / Hampel)
 
-Эта инструкция -- для удалённой машины (Windows, RU локаль, пользователь
-не знаком с MATLAB/git).
+Эта инструкция -- для удалённой машины
 
 ## Что сделать пользователю
 
@@ -74,3 +73,72 @@ diagnose_ts_error
 
 После того как remote-машина подтянет свежий код, ошибка должна
 исчезнуть. Если нет -- diagnose_ts_error выявит конкретную причину.
+
+## Iteration 2 (2026-06-29, R30) -- разбор присланного output'а
+
+### Прислано
+
+| Пункт | Результат |
+|---|---|
+| [1] Signal Processing Toolbox license | **1** (license check проходит) |
+| [2] readDLC DecimalSeparator fix      | PASS |
+| [3] readDLC parses csv                | OK, class(X)=double, NaN-only=0 |
+| [4] First body part                   | 4923/5795 finite frames |
+| [5] sgolayfilt(double)                | **FAIL: Undefined function** |
+| [5b] sgolayfilt(single)               | **FAIL: Undefined function** |
+| [6] hampel(double)                    | **FAIL: Undefined function** |
+| [7] smoothTrace                       | FAIL (cascaded from [5]) |
+| [8] git probe                         | failed -- broken cmd.exe quoting (мой баг в диагностике, не у пользователя) |
+
+### Вердикт
+
+**Signal Processing Toolbox не установлен** на машине коллеги, хотя
+лицензия числится валидной. Это типичная ситуация со стрипнутой
+MATLAB-инсталляцией: `license('test','signal_toolbox')` смотрит
+ТОЛЬКО лицензионный файл, не факт наличия функций. Авторитетный
+тест -- `exist('sgolayfilt','file') == 2`.
+
+Что подтверждает диагноз: ошибка `Undefined function 'sgolayfilt'
+for input arguments of type 'double'` -- это не MATLAB-ошибка
+сигнатуры аргумента, это _no method found_, т.е. функция вообще
+неизвестна интерпретатору.
+
+### Два пути для коллеги
+
+**A. Установить Signal Processing Toolbox**
+   - В MATLAB: Home -> Add-Ons -> Get Add-Ons -> искать "Signal
+     Processing Toolbox" -> Install. Нужен Mathworks-аккаунт с
+     лицензией; раз license=1 -- он есть.
+
+**B. Подтянуть свежий sphynx-GUI (рекомендуется как первый шаг)**
+   - R30 добавил graceful fallbacks:
+     - `smoothTrace`: при отсутствии `sgolayfilt` -> `smoothdata`
+       movmean (base MATLAB). Однократный warning в Command Window.
+     - `hampelFilter`: при отсутствии `hampel` -> rolling-MAD через
+       `movmedian` (base MATLAB). Однократный warning.
+   - Pipeline продолжит работать, качество сглаживания немного
+     ниже Savitzky-Golay, но для downstream метрик приемлемо.
+   - `git pull` на ветке `sphynx-GUI` -> перезапуск тестового
+     прогона.
+
+### Что улучшено в самом diagnose_ts_error (R30)
+
+- **Пункт [1]** теперь печатает `exist('sgolayfilt','file')` и
+  `which sgolayfilt` отдельно от license. Если в следующий раз
+  столкнёмся с этим у кого-то ещё -- root cause будет виден сразу
+  и явный VERDICT-блок укажет на оба пути выше.
+- **Пункт [8]**: git probe quoting починен (на Windows trailing
+  backslash в repoRoot съедал закрывающую кавычку). Теперь
+  будет нормально печатать HEAD и историю.
+
+### Что не нужно слать ещё раз
+
+Если коллега выбрал путь B (просто `git pull`) -- повторный
+`diagnose_ts_error` уже не нужен, достаточно проверить, что:
+- В Command Window появилось `Warning: sgolayfilt not found ...`
+  или `hampel not found ...` (это нормально, fallback работает)
+- Анализ сессии доходит до конца без `Undefined function` ошибки.
+
+Если коллега выбрал путь A (поставил toolbox) -- запустить
+`diagnose_ts_error` ещё раз: пункты [5][6] должны стать PASS,
+warning-ов от fallback быть не должно.

@@ -42,12 +42,49 @@ function [Xout, Yout, badMask] = hampelFilter(X, Y, windowSize, nSigma)
     Xtmp(~finiteX) = medX;
     Ytmp(~finiteY) = medY;
 
-    [~, outX] = hampel(Xtmp, windowSize, nSigma);
-    [~, outY] = hampel(Ytmp, windowSize, nSigma);
+    if hasHampel()
+        [~, outX] = hampel(Xtmp, windowSize, nSigma);
+        [~, outY] = hampel(Ytmp, windowSize, nSigma);
+    else
+        warnNoHampelOnce();
+        outX = localHampelMask(Xtmp, windowSize, nSigma);
+        outY = localHampelMask(Ytmp, windowSize, nSigma);
+    end
 
     badMask = (outX | outY) & finiteX & finiteY;
 
     Xout = X; Yout = Y;
     Xout(badMask) = NaN;
     Yout(badMask) = NaN;
+end
+
+function tf = hasHampel()
+    persistent cached
+    if isempty(cached)
+        cached = exist('hampel', 'file') == 2;
+    end
+    tf = cached;
+end
+
+function warnNoHampelOnce()
+    persistent warned
+    if isempty(warned)
+        warning('sphynx:hampelFilter:noHampel', ...
+            ['hampel not found (Signal Processing Toolbox not ' ...
+             'installed). Falling back to a rolling-MAD outlier ' ...
+             'detector built on movmedian.']);
+        warned = true;
+    end
+end
+
+function mask = localHampelMask(v, windowSize, nSigma)
+% Rolling Hampel identifier built on base MATLAB only.
+% windowSize is the half-window; total window = 2*windowSize+1.
+    v = v(:);
+    win = 2 * windowSize + 1;
+    medLocal = movmedian(v, win, 'omitnan');
+    madLocal = movmedian(abs(v - medLocal), win, 'omitnan');
+    sigmaLocal = 1.4826 * madLocal;
+    sigmaLocal(sigmaLocal == 0) = eps;
+    mask = abs(v - medLocal) > nSigma * sigmaLocal;
 end

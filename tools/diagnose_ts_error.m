@@ -28,8 +28,22 @@ function diagnose_ts_error(csvPath)
     fprintf('    sprintf %%g 0.5 -> "%s"   (expect "0.5"; "0,5" = RU locale active)\n', decSep);
     haveSP = license('test', 'signal_toolbox');
     haveCV = license('test', 'computer_vision');
-    fprintf('    Signal Processing Toolbox : %d (need 1 for sgolayfilt/hampel)\n', haveSP);
-    fprintf('    Computer Vision Toolbox   : %d (optional)\n', haveCV);
+    fprintf('    Signal Processing Toolbox lic : %d (license check)\n', haveSP);
+    fprintf('    Computer Vision Toolbox lic   : %d (optional)\n', haveCV);
+    % License can show 1 while the actual function file is missing
+    % (stripped installation, broken path). exist(...,'file') is the
+    % authoritative test.
+    hasSg = exist('sgolayfilt', 'file') == 2;
+    hasHa = exist('hampel', 'file') == 2;
+    fprintf('    sgolayfilt INSTALLED          : %d  (which: %s)\n', hasSg, fallback(which('sgolayfilt'), '<not found>'));
+    fprintf('    hampel INSTALLED              : %d  (which: %s)\n', hasHa, fallback(which('hampel'), '<not found>'));
+    if haveSP && ~(hasSg && hasHa)
+        fprintf('    VERDICT -- license says yes but functions are MISSING.\n');
+        fprintf('               Signal Processing Toolbox is not actually\n');
+        fprintf('               installed on this machine. Either install it\n');
+        fprintf('               via Add-Ons, or pull sphynx-GUI HEAD which has\n');
+        fprintf('               fallbacks for both sgolayfilt and hampel.\n');
+    end
 
     % --- 2. Verify the readDLC fix is present --------------------------
     fprintf('\n[2] readDLC has DecimalSeparator fix\n');
@@ -129,11 +143,18 @@ function diagnose_ts_error(csvPath)
     try
         repoRoot = fileparts(which('sphynx.io.readDLC'));
         repoRoot = strrep(repoRoot, fullfile('+sphynx', '+io'), '');
-        [~, sha] = system(sprintf('git -C "%s" rev-parse --short HEAD', repoRoot));
+        % Normalise path so cmd.exe quoting doesn't break: strip trailing
+        % slash (the closing-quote-after-backslash chews up the quote),
+        % and convert backslashes to forward slashes which git accepts.
+        while ~isempty(repoRoot) && (repoRoot(end) == '\' || repoRoot(end) == '/')
+            repoRoot = repoRoot(1:end-1);
+        end
+        repoRootGit = strrep(repoRoot, '\', '/');
+        [~, sha] = system(sprintf('git -C "%s" rev-parse --short HEAD', repoRootGit));
         sha = strtrim(sha);
         fprintf('    repo: %s\n', repoRoot);
         fprintf('    HEAD: %s\n', sha);
-        [~, hist] = system(sprintf('git -C "%s" log --oneline -5 -- +sphynx/+io/readDLC.m +sphynx/+preprocess/smoothTrace.m +sphynx/+preprocess/hampelFilter.m', repoRoot));
+        [~, hist] = system(sprintf('git -C "%s" log --oneline -5 -- +sphynx/+io/readDLC.m +sphynx/+preprocess/smoothTrace.m +sphynx/+preprocess/hampelFilter.m', repoRootGit));
         fprintf('    recent commits touching readDLC/smoothTrace/hampelFilter:\n%s', hist);
     catch ME
         fprintf('    INFO -- git probe failed: %s\n', ME.message);
@@ -142,6 +163,10 @@ function diagnose_ts_error(csvPath)
     fprintf('\n================================================\n');
     fprintf('  Diagnostic done. Send the full output above.\n');
     fprintf('================================================\n');
+end
+
+function s = fallback(s, alt)
+    if isempty(s); s = alt; end
 end
 
 function [ok, why] = checkReadDLCFix()

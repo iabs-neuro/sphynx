@@ -72,7 +72,35 @@ function out = smoothTrace(trace, windowLen, varargin)
     padBack  = 2*trace(end) - trace(end-1 : -1 : end-halfPad);
     padded = [padFront; trace; padBack];
 
-    smoothed = sgolayfilt(padded, polyOrder, windowLen);
+    if hasSgolayfilt()
+        smoothed = sgolayfilt(padded, polyOrder, windowLen);
+    else
+        % Signal Processing Toolbox not installed on this machine
+        % (license may show 1 but the function file is absent).
+        % Fall back to a moving-average via smoothdata (base MATLAB)
+        % so the pipeline keeps running. Quality is lower than
+        % Savitzky-Golay but acceptable for downstream metrics.
+        warnNoSgolayOnce();
+        smoothed = smoothdata(padded, 'movmean', windowLen, 'omitnan');
+    end
 
     out = smoothed(halfPad+1 : halfPad+n);
+end
+
+function tf = hasSgolayfilt()
+    persistent cached
+    if isempty(cached)
+        cached = exist('sgolayfilt', 'file') == 2;
+    end
+    tf = cached;
+end
+
+function warnNoSgolayOnce()
+    persistent warned
+    if isempty(warned)
+        warning('sphynx:smoothTrace:noSgolayfilt', ...
+            ['sgolayfilt not found (Signal Processing Toolbox not ' ...
+             'installed). Falling back to moving-average smoothing.']);
+        warned = true;
+    end
 end

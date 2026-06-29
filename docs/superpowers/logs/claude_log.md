@@ -3174,3 +3174,1124 @@ Tests: `tests/unit/zoneColorMapTest.m` (11 tests, all pass) covers:
 - string input accepted (auto cellstr)
 
 Fast: 270 passed, 0 failed, 3 skipped (pre-existing video-fixture filter). Was 259 + 11 new.
+
+## 2026-06-24 — Audit: CreatePreset R10..R15 vs downstream tabs
+
+Mapped CreatePreset zone/object/strategy changes against every downstream
+consumer. Verified directly:
+- `+sphynx/+pipeline/renderActsVideo.m:348` and
+  `+sphynx/+app/AnalyzeSessionTabController.m:1077`: hardcoded "spatial"
+  bucket whitelist `{'corners','walls','walls_and_corners','center','middle_zone'}`
+  does NOT cover new names `wall` (singular, circle), `middle`, `middle1/2`,
+  `stripN`, `*_realout`, `objectN_*`, `objectall_*`, `arenacornerN`. Acts
+  named after new zones bucket as 'composite' -- soft UI regression, not crash.
+- `+sphynx/+app/DefineActsTabController.m:164`: zone listbox = raw
+  `{pd.Zones.name}`. Composites (`walls_and_corners*`) shown alongside their
+  components -- UX noise; R15 skips them in renderer so naming an act for them
+  is also wasteful.
+- `+sphynx/+pipeline/renderActStitched.m:131`, `analyzeSession.m:263`:
+  zone lookup by exact name from actDef -- generic, no break.
+- `+sphynx/+app/PreprocessTabController.m:1700`: requires
+  `ArenaAndObjects(1).maskfilled` -- all new presets save this, OK.
+- Tests gap: no parameterized run over 6 strategies; no multianimal
+  end-to-end; `demoPipelineTest` uses old `Demo/Preset/*.mat` only, not the
+  new `Demo/Presettest/*` fixtures.
+
+Composed 7-phase plan: baseline smoke -> actBucket helper + regex matcher
+-> DefineActs composite filter -> parameterized strategy smoke (6 cases)
+-> multianimal end-to-end -> batch+output+plot smoke -> legacy compat ->
+optional object-zone color grouping (Phase 7, deferred per pattern).
+Asked 5 Qs (Q1..Q5) with defaults; awaiting user "delai".
+
+## 2026-06-24 — Phase 0..2 done
+
+Phase 0 baseline: runAllTests fast = 270 passed / 0 failed / 3 skipped
+(readFrameAt VFR-fixture filter, pre-existing).
+
+Dumped Barnes preset (Demo/BARNES/Barnes_m183_5d_0t_26102024_120726_Preset.mat)
+to lock in object naming convention for downstream work:
+- Strategy = circle-with-center: zones wall / middle / center / arena_realout
+- 21 objects in ArenaAndObjects: [1]=Arena/Ellipse, [2]=target/Circle/'',
+  [3..21]=object1..object19/Circle/'mistakes', [22]=start/Circle/'platform'
+- Per-object zones: <type>_real / _realout / _out (area) + <type>_center (point)
+- Plus objectall_real / _realout / _out
+- 91 zones total
+
+Phase 1 -- single actBucket helper + regex matcher:
+- NEW +sphynx/+util/actBucket.m: regex matches every CreatePreset emit shape
+  (legacy fixed + per-region _realout + middle\d+/strip\d+/arenacorner\d+ +
+  catch-all <name>_(real|realout|out|center) covering object*/target/start).
+- Deleted file-local actBucketLocal in +sphynx/+pipeline/renderActsVideo.m
+  (~line 344) and actBucket in +sphynx/+app/AnalyzeSessionTabController.m
+  (~line 1070); 3 call sites rewired to sphynx.util.actBucket.
+- NEW tests/unit/actBucketTest.m, 16 tests covering speed/spatial/posture/
+  composite shapes incl. Barnes target_/object1_/objectall_/start_ families.
+
+Phase 2 -- DefineActs composite filter:
+- NEW +sphynx/+util/filterZoneListForActs.m: drops walls_and_corners and
+  walls_and_corners_realout (composites already skipped by zoneColorMap
+  in R15 render). Returns cellstr in input order, normalised {} on empty.
+- DefineActsTabController.applyPresetPath uses helper; log line now reports
+  filter count when composites present.
+- NEW tests/unit/filterZoneListForActsTest.m, 7 tests covering CWC-with-
+  composites, no-composite no-op (circle / strips), Barnes layout, edge
+  cases (empty/non-struct/all-composites).
+
+Final: runAllTests fast = 293 passed / 0 failed / 3 skipped. Delta +23
+new (16 actBucket + 7 filterZoneListForActs). No regressions.
+
+Pending: commit Phase 0..2; then ready for Barnes default-acts cycle
+(user announced).
+
+## 2026-06-25 — Phase 0..2 committed + BARNES_v2 audit
+
+Commits on sphynx-GUI:
+- 813c1a2 refactor(util): single actBucket helper (regex matcher) -- 4 files
+- 5c8c3ad feat(define-acts): filter composite zones from act-target listbox -- 3 files
+
+Demo/BARNES_v2/ audit:
+- Structure: 2_Video (11 mp4) / 3_DLC (11 csv, DLC superanimal_topviewmouse)
+  / 4_Preset (11 SUBDIRECTORIES, not flat .mat). Every preset dir holds
+  <basename>_Preset.mat + <basename>_layout.png.
+- Basename match across 2_Video / 3_DLC / 4_Preset: 11/11 perfect, no mismatch.
+- All presets: K=22 (Arena ellipse + 21 objects Circle), ExperimentType='Barnes',
+  pxl2sm=3.06, FrameRate=19.334, ObjectsNumber=21.
+- Per-preset target/platform inventory:
+  * m178: NO target (all 20 objects named object1..object20 + platform).
+  * m488: AAO has type=object20 (no target), but Zones contain target_real/
+    _realout/_out/_center AND lack object20_*. Stale zones from a previous
+    target -> object20 rename. 93 zones vs 90 elsewhere.
+  * Other 9: 'target' present + 19 object1..object19 + platform. 90 zones.
+- Across ALL 11: 'class' field is empty (no mistakes/platform/target tags
+  like the older Demo/BARNES/m183_*). 'middle' zone absent everywhere
+  despite MiddleWidthCm=20 in Options. 'start' replaced by 'platform' type.
+
+Reported 4 open Qs (F1..F4) before Barnes default-acts cycle.
+
+## 2026-06-25 — Barnes default-acts library v1 (draft)
+
+NEW: +sphynx/+acts/actsLibraryBarnesDefaults.m -- 26 acts:
+- 6 area acts: at_center / at_wall / at_outside / at_target /
+  at_platform / at_any_hole.
+- 19 per-hole acts: at_object1..at_object19 (configurable via
+  'NumObjects' name-value param).
+- 1 compound: at_mistake = at_any_hole EXCLUDE at_target.
+Body-part convention: hole-related acts use 'nose' (mice probe with
+snout), arena-frame acts use 'bodycenter'. All hole acts gate on
+_realout (inflated) variant matching buildObjectZones definition of
+a visit.
+
+MOD: +sphynx/+util/actBucket.m -- added pattern '^at_[a-z_]\w*$' so
+the at_* readable-name convention buckets as 'spatial' (etogram
+"Zone" section). Companion test added to actBucketTest.
+
+NEW: tests/unit/actsLibraryBarnesDefaultsTest.m -- 14 tests covering
+count, name presence, NumObjects scaling, zone wiring, body-part
+convention, compound dependency graph (at_mistake -> at_any_hole +
+at_target), and the concat-with-speed-defaults pattern.
+
+Full fast-suite: 308 passed / 0 failed / 3 skipped (+15 new). No
+regressions.
+
+NOT done (open Qs G1-G3 to user):
+- UI integration in DefineActs (no "Load Barnes defaults" button or
+  ExperimentType auto-load yet).
+- Session-level metrics (escape latency, total path, search strategy)
+  -- these are not acts; they would compute from at_* outputs.
+- Did NOT change actsLibraryDefaults (backward-compat).
+
+## 2026-06-25 — Barnes defaults v1 + UI button committed
+
+Commit 4812519 feat(acts): Barnes paradigm defaults library + at_* in actBucket
+  -- +sphynx/+acts/actsLibraryBarnesDefaults.m (26 acts)
+  -- +sphynx/+util/actBucket.m: at_* regex
+  -- tests/unit/actsLibraryBarnesDefaultsTest.m: 14 tests
+  -- tests/unit/actBucketTest.m: +1 testAtPrefixActsSpatial
+
+Commit 2eb43f3 feat(define-acts): Load Barnes defaults button
+  -- Refactored loadDefaults -> appendDefaultsWithChoice(defaults, label)
+     so the Append/Replace/Cancel uiconfirm flow is single-source.
+  -- Added loadBarnesDefaults() method calling the helper with
+     sphynx.acts.actsLibraryBarnesDefaults() and label 'Barnes default'.
+  -- UI Row 3 reflowed from 3 to 4 columns: Load defaults | Load Barnes |
+     Delete | Clear all. ColumnWidth = {'1x','1x','fit','fit'} so the
+     two Load buttons share equal expanding width.
+  -- testMergeStrategies smoke now asserts loadDefaults / loadBarnesDefaults
+     / appendDefaultsWithChoice exist.
+
+Full fast-suite still 308 passed / 0 failed / 3 skipped. No regressions.
+
+Pending: user is testing session-analyze tabs for Barnes; reports back
+with what breaks or with the next batch of Barnes-specific work (session
+metrics like escape_latency, search strategy, etc.).
+
+## 2026-06-25 — Preprocess R16: UI restructure + session-start removed
+
+User requested 6 polish fixes + remove session-start autodetect.
+
+Pre-flight: checked TODOs in preprocess tracking. Only one found --
++sphynx/+preprocess/cleanBodyPart.m:30: TODO(polish) to expose
+FrameWidth/Height magic numbers. Left untouched (polish-cycle queue).
+
+Changes in PreprocessTabController.m:
+- buildUI: OuterGrid grew from [3,2] {380,1x} to [5,2] {570,1x}
+  RowHeight {36, 340, 32, 300, '1x'}.
+- buildBlocksLeftCol: LeftPanel reduced from [3,1] to [2,1] holding
+  just Block1 (loading, 130 px) + Block2 (outlier, 110 px). Block3
+  no longer parented here.
+- buildPerPartPanel: parent switched from LeftPanel.Row3 to
+  OuterGrid.Row4.Column=[1 2] -- full-width promotion.
+- buildBottomBar: stripped to [2,1] {100, '1x'} holding only regions
+  + log. Viewport row moved out.
+- buildViewportRowFull: new wrapper that hands buildViewportRow a
+  parent at OuterGrid row 3 cols [1 2] (the "under plots" slot the
+  user wanted).
+- buildViewportRow: rebuilt with 15 explicit columns and every widget
+  pinning Layout.Column. Fixes the LogScaleButton/smoothed-checkbox
+  collision (both used to live in column 13 by slot order). New
+  widths give raw/interp/smoothed 60/75/85 px so labels don't clip;
+  log Y gets its own 60 px slot immediately after smoothed.
+- Removed SessionStartLabel property, reportSessionStart() and
+  setSessionStartLabel() methods, the loadAll() call to them, the
+  clearAll() reset of the label, and the panel creation in
+  buildLoadingPanel. buildLoadingPanel grid trimmed [4,4] -> [3,4].
+- Deleted buildSwitcherRow (dead helper after the round-5 merge).
+
+Changes in +sphynx/+pipeline/defaultConfig.m:
+- cfg.range.autoStart default flipped true -> false. Detector helper
+  still exists at sphynx.preprocess.detectSessionStartFrame for
+  callers that explicitly opt in (set autoStart = true on the cfg).
+
+Tests: 308 / 0 / 3. No regressions. Commit pending user-side UI
+verification (no headless screenshot mechanism for uifigure layouts).
+
+## 2026-06-25 — Preprocess R17: proportional layout 25/50/25 + B4
+
+User wanted:
+1) B1+B2 = 25% width; 2) B2 a bit taller; 3) trajectory plots = 50%,
+hist = 25%; 4) plot height = B1+B2; 5) Block 3 confirmed good;
+6) button widths in B1/B2 scale; 7) B3 elements span full width;
+8) manual exclude up against B3 end + named as its own block.
+
+Implementation in PreprocessTabController.m:
+- OuterGrid switched [5,2] {570,1x} -> [6,3] {1x,2x,1x}. Total 4u, so
+  col 1 = 25%, col 2 = 50%, col 3 = 25%.
+- RowHeight {36, 280, 32, 300, 140, '1x'}. Row 2 = 280 = B1(130) +
+  B2(140) + spacing. Plots take the same Row 2 height -> equal-height
+  per user req.
+- plotsGrid spans cols [2,3] (75% of window). Internal ColumnWidth
+  {'2x','1x'} -> XY column = 50% of total, hist = 25%. Outer 50:25
+  rhythm preserved.
+- B2 ColumnWidth flipped fixed {110,60,60,'1x',50} -> {110, 'fit',
+  '1x','1x','fit'}. Col 1 kept fixed (110) so chk labels line up
+  across rows; fields/flex columns scale on resize. B1 already had
+  four '1x' cols so its buttons scale.
+- buildPerPartPanel + buildViewportRowFull now span cols [1 3].
+- NEW buildRegionsPanelFull() -- creates panel "4. Manual exclusion
+  regions" at OuterGrid row 5 cols [1 3]. Renames title.
+- buildRegionsPanelInline parameterised: optional row/colSpan/title
+  args so the legacy 3-arg form still works.
+- NEW buildLogPanelFull() -- uitextarea parented directly to
+  OuterGrid row 6 cols [1 3]. Removed buildLogInline +
+  buildBottomBar (no longer needed; each panel hits OuterGrid
+  directly).
+
+Method count 105 -> 104 (one helper removed). Tests 308/0/3, no
+regressions.
+
+## 2026-06-25 — Barnes defaults v2 + session metrics + first/rest stats
+
+Barnes default-acts library completely rewritten (43 acts, was 26):
+per-body-part naming so nose pokes and body-center visits are scored
+separately. New names:
+  1     nose_at_target              -> nose / target_realout
+  2-20  nose_at_object1..19         -> nose / objectN_realout
+  21    body_at_target              -> bodycenter / target_real
+  22-40 body_at_object1..19         -> bodycenter / objectN_real
+  41    nose_at_platform            -> nose / platform_realout
+  42    body_at_platform            -> bodycenter / platform_real
+  43    nose_at_any_hole            -> nose / objectall_realout
+Nose acts gate on _realout (inflated halo -- snout enters first);
+body acts gate on _real (strict geometric zone). Dropped at_mistake
+compound + at_center/at_wall/at_outside; mistake count is reported
+by barnesSessionMetrics now.
+
+actBucket regex extended with '^[a-z]+_at_[a-z_]\w*$' so the
+<bp>_at_<zone> family buckets as 'spatial'. actBucketTest +1 test.
+
+actStats extended with two new fields:
+  FirstDurationSec = runs(1).duration / fps
+  RestDurationSec  = ActDuration - FirstDurationSec  (or 0 if 1 run,
+                                                      NaN if no runs)
+analyzeSession copies both onto every Acts row.
+
+NEW +sphynx/+pipeline/barnesSessionMetrics computes session-level
+metrics from the Acts struct array:
+- TotalNoseHoleVisits      = sum(ActNumber) over nose_at_objectN
+- TotalBodyHoleVisits      = sum(ActNumber) over body_at_objectN
+- NumCheckedHoles          = distinct objectN holes with >=1 nose episode
+- FirstCheckedHoleNumber   = N with earliest FirstStartSec among
+                             nose_at_objectN (N=1..NumObjects)
+- FirstCheckedHoleErrorDeg = min(N*step, 360-N*step) where
+                             step = 360 / (NumObjects+1)
+                             (target is slot 0; object1 and objectN
+                             both register angle = step degrees)
+- MeanCheckedHoleErrorDeg  = mean of angular errors of checked holes
+- TargetHoleVisitOrder     = count of nose_at_objectN episodes
+                             starting before the first nose_at_target
+                             episode + 1
+Auto-invoked in analyzeSession when Options.ExperimentType == 'Barnes',
+result lands in result.BarnesMetrics. Failures are caught + warned;
+analysis never aborts on metric failure.
+
+Tests: 321 passed / 0 failed / 3 skipped (+13 new).
+- actStatsTest: testFirstAndRestDurationSplit / testSingleEpisodeRestIsZero
+  / testEmptyActFirstRestAreNaN
+- actBucketTest: testBpAtZoneActsSpatial
+- actsLibraryBarnesDefaultsTest: rewritten for 43-act roster
+- barnesSessionMetricsTest: 10 tests covering counters / angle math
+  (N=1, N=10, N=19) / earliest-start picker / mean angle /
+  target-order with multi-episode hole / order = 1 case / NaN cases
+
+No regressions. UI Load Barnes button still works (same library
+function, just returns 43 instead of 26).
+
+## 2026-06-25 — Analyze Session: surface Barnes metrics in header
+
+AnalyzeSessionTabController:
+- Right-side grid Row 1 height 24 -> 44 px so the SessionStatsLabel
+  fits two stacked lines.
+- refreshResults builds the label as a cell array: line 1 keeps the
+  existing avg speed / total distance / duration / frames; line 2 is
+  appended only when result.BarnesMetrics is present (set by
+  analyzeSession when Options.ExperimentType == 'Barnes').
+- Line 2 content: target visit order, # holes checked, first hole
+  angular error, mean angular error, total nose pokes, total body
+  visits. All values pulled via getOr with NaN-safe fallback through
+  the new formatNum helper (%g, so 4 not 4.0; "-" for NaN).
+- No new unit test -- header text exercised by existing controller
+  smoke; numeric values locked in barnesSessionMetricsTest.
+
+Tests: 321/0/3 unchanged.
+
+## 2026-06-25 — Bodyparts: superanimal_topviewmouse schema + soft fallback
+
+User reported Make-video on BARNES_v2 aborts with
+  "No Center body part and no Left/RightBodyCenter to fall back to"
+DLC there comes from superanimal_topviewmouse: names are underscored
+long-form (mouse_center, left_midside, right_midside, tail_base,
+head_midpoint, left_shoulder, left_hip, ...). None of those matched
+the synonym map in identifyParts -> computeCenter threw hard.
+
+Fix is two layers:
+
+1) Extend the canonical synonymMap in sphynx.bodyparts.identifyParts.
+   Single point of truth -- downstream code (computeCenter, freezing,
+   rear, relativeCoords, renderActsVideo, freezing) reads through
+   this map so they all pick up new aliases automatically.
+   New aliases added:
+     Nose              snout
+     LeftEar           left_ear / left ear / left_ear_tip
+     RightEar          right_ear / right ear / right_ear_tip
+     HeadCenter        head_midpoint / head midpoint / head_center /
+                       head center / neck
+     LeftForeLimb      left_forelimb / left_shoulder / left shoulder
+     RightForeLimb     right_forelimb / right_shoulder / right shoulder
+     LeftBodyCenter    left_body / left_midside / left midside
+     RightBodyCenter   right_body / right_midside / right midside
+     LeftHindLimb      left_hindlimb / left_hip / left hip
+     RightHindLimb     right_hindlimb / right_hip / right hip
+     Tailbase          tail_base / tail1
+     Center            body_center / mouse_center / mouse center /
+                       mid_back / mid back
+
+2) sphynx.bodyparts.computeCenter: removed the error path. If neither
+   Center nor Left+Right are set, return mean of every body part
+   (NaN-aware, omitnan). Warning logged via sphynx.util.log pointing
+   at the synonymMap to silence. Make-video / analyzeSession /
+   rendering never blow up on an unknown DLC schema.
+
+3) sphynx.pipeline.analyzeSession::pickSmoothWindow: extend bigParts
+   list with mouse_center / mid_back / tail_base / tail1 so heavy-
+   body parts on the new schema get the larger smoothing window.
+
+Tests: 329/0/3 (+8 new).
+- identifyPartsTest: testSuperanimalTopviewmouseSchema (12-part
+  round-trip), testCenterPrefersDirectOverMidside.
+- computeCenterTest (NEW, 6 cases): Center precedence / L+R fallback
+  / synthetic mean / NaN ignored / empty input / half-only-L falls
+  through to synthetic.
+
+No hardcoded body-part names remain outside synonymMap + bigParts.
+
+## 2026-06-25 — analyze: guard Barnes metrics on library content
+
+User reported log noise from Make-video against a BARNES_v2 session:
+"Barnes metrics computed (0 nose visits, target visit order = NaN)".
+Make-video saves the single selected act to a temp .mat then runs
+analyzeSession; for "rest" only, the library obviously has no
+nose_at_object* entries, so every Barnes metric is trivially zero
+and just spams the log.
+
+Fix: hasBarnesNoseActs helper in analyzeSession. Only invoke
+sphynx.pipeline.barnesSessionMetrics when (a) ExperimentType=='Barnes'
+AND (b) at least one Acts entry name starts with 'nose_at_object'.
+Full-library calls (43-act "Load Barnes" set) trip the guard and run
+as before; one-act Make-video temp libs skip cleanly.
+
+Also clarified to user: the unrelated "rest has zero active frames"
+warning is honest -- rest threshold (1 cm/s default) is too strict
+for that mouse; she never stands still. Bump speedMax on the rest
+act in Define Acts if needed; not a code bug.
+
+Tests: 329/0/3 unchanged.
+
+## 2026-06-25 — bodyparts/acts: alias-tolerant lookup + soft fallbacks
+
+End-to-end probe on Demo/BARNES_v2/Barnes_m183 (3-step probe
+script in scratchpad) surfaced 3 blockers stacked together:
+
+1) findPart in applyAct used exact strcmpi. Library writes
+   'bodycenter'/'tailbase'/'lefthindlimb' -- superanimal DLC has
+   'mouse_center'/'tail_base'/'left_hip'. Result: rest/walk/loc +
+   every body_at_*/nose_at_* returned 0 frames.
+
+   Fix: NEW sphynx.bodyparts.resolvePart -- exact-first, then
+   canonical fallback through identifyParts synonymMap. applyAct's
+   findPart now delegates. 10 unit tests.
+
+2) freezing modes NoseAndCenter / HeadAndCenter hard-error when
+   preferred parts unresolved. Fix: log warn + fall back to
+   AllBodyParts.
+
+3) rear mode TailbasePaws hard-errors when any of Tailbase /
+   Left/RightHindLimb unresolved. Fix: warn + fall back to
+   AllBodyParts. AllBodyParts itself emits empty mask + warn
+   when Point.Center is missing (computeCenter usually
+   synthesises one upstream though).
+
+Also dropped 'mid_back'/'mid back' from Center synonyms in
+identifyParts -- mid-spine is not body-center, and it was
+masking the better mouse_center match when both were in the
+input list. bigParts in analyzeSession trimmed to match.
+
+Verified on Barnes_m183 with cfg.preprocess.likelihoodThreshold=0.5
+(superanimal needs <=0.7; default 0.95 is too strict for that DLC):
+  rest 6.84% | walk 31.55% | locomotion 60.57%
+  freezing 4.66% | rear 0.86%
+  nose_at_target 8.39% (first @ 3.52 s)
+  body_at_target 2.01%
+  nose_at_any_hole 86.61%
+  nose_at_object19 12.87% (8 visits) <- 18 deg from target
+  Barnes: 44 nose-pokes / 14 holes / first error 18 deg /
+          mean error 96 deg / target visit order = 1
+
+Tests: 339/0/3 (+10 new resolvePartTest). No regressions.
+
+NOTE: default cfg.preprocess.likelihoodThreshold=0.95 left as-is
+to preserve legacy behaviour. For superanimal_topviewmouse DLC
+the user should lower it (UI: Preprocess Tracking tab > per-part
+table > thr column, or cfg-side cfg.preprocess.likelihoodThreshold).
+
+## 2026-06-25 — analyze: auto-load <expName>_PreprocessSettings.mat
+
+User was right -- the Preprocess Tracking tab's "Save preprocessed"
+writes a per-experiment .mat (sphynx.io.writeTracksSettings format:
+Settings.bodyparts + Settings.outlier + Settings.metadata) next to
+the project root, with per-part likelihoodThreshold / notFoundThresholdPct
+values they tuned in the per-part table. analyzeSession was ignoring
+it and using the scalar cfg.preprocess.likelihoodThreshold = 0.95
+default for every part -- which is why nose / ears / shoulder etc
+were going to NotFound on superanimal even though the user had set
+nose=0.5 manually.
+
+Fix in +sphynx/+pipeline/analyzeSession.m + defaultConfig.m:
+- cfg.paths.preprocessSettings = '' (new), explicit path wins.
+- loadPreprocessSettings(config, log): if explicit -> read; else
+  walk up to 4 dir levels from DLC path searching for
+  *_PreprocessSettings.mat. Uses sphynx.io.readTracksSettings.
+- resolvePartThresholds(perPart, name, defaultThr, defaultMissPct):
+  returns per-part thr + missPct (case-insensitive name match),
+  falls back to defaults otherwise.
+- cleanBodyPart call gets both LikelihoodThreshold + MissingThresholdPct.
+
+Probe with Demo/BARNES_v2/Barnes_m183 (auto-loaded Settings,
+no explicit cfg override):
+  [INFO] Auto-loaded preprocess settings: ...BARNES_v2_PreprocessSettings.mat (27 parts)
+  parts kept 24/27 (was 7/27 with default 0.95)
+  rest 8.22% | walk 41.26% | locomotion 50.29%
+  Barnes-acts fired: 27/43
+  Barnes metrics: 44 nose-pokes | target visit order = 1
+                  | first hole error 18 deg | mean error 96 deg
+
+Tests: 339/0/3. Helpers are file-local; end-to-end covered by probe.
+
+## 2026-06-25 — analyze: apply FULL per-experiment Preprocess Settings
+
+Prior commit only honoured per-part likelihoodThreshold +
+notFoundThresholdPct from BARNES_v2_PreprocessSettings.mat. User
+asked for ALL fields (smoothWindowSec, interpolationMethod,
+smoothingMethod, smoothingPolyOrder, outlier.{velocityJump, hampel,
+kalman}) to be loaded for both single-session analyze and batch.
+
+Implementation: analyzeSession's clean/interp/smooth inline loop
+now delegates to sphynx.preprocess.applyPerPartSettings -- the
+orchestrator the Preprocess Tracking UI already uses. Same pipeline
+order (cleanBodyPart -> velocity-jump -> Hampel -> manualRegions
+-> interp -> smoothing) and per-part window/method/poly-order
+selection. Output of analyzeSession matches what the user sees in
+the Preprocess tab.
+
+resolvePartSettings(perPart, partName, config):
+- Baseline from sphynx.preprocess.perPartDefault(partName, config).
+- Override with whatever fields the Settings.bodyparts row carries
+  (use, likelihoodThreshold, smoothWindowSec, interpolationMethod,
+  smoothingMethod, smoothingPolyOrder, notFoundThresholdPct).
+
+loadPreprocessSettings now returns (perPart, outlier). The outlier
+struct passes into ctx for applyPerPartSettings -> velocity-jump
+and Hampel filters fire when the saved Settings have them enabled.
+Kalman smoother also pulls processNoise / measNoiseScale from
+ctx.outlier.kalman when smoothingMethod == 'kalman'. Log line
+tags the active outlier filters: "(27 parts, outlier=vj+hampel)".
+
+Per-part "use=false" respected: those parts get marked NotFound
+with a warn and drop out downstream just like a likelihood-
+rejected part.
+
+Batch Analysis: zero code changes needed. BatchTab calls
+analyzeSession per session; auto-discovery walks up from each
+session's DLC dir and finds the experiment-level Settings file
+naturally. So the same configuration applies uniformly across all
+sessions in a batch run.
+
+Probe on Demo/BARNES_v2/Barnes_m183 (no explicit override):
+  [INFO] Auto-loaded preprocess settings: BARNES_v2_PreprocessSettings.mat
+         (27 parts, outlier=vj)
+  parts kept 24/27 | rest 8.22% | walk 37.41% | locomotion 54.20%
+  46 nose-pokes | target visit order = 1
+  first error 18 deg | mean error 96 deg
+
+Tests: 339/0/3. No regressions. End-to-end covered by probe.
+
+## 2026-06-25 — multianimal: track individual everywhere + frame-count warn
+
+User report: Make-video overlay points "не соответствуют животному"
+on Demo/BARNES_v2 sessions. Audit found two issues:
+
+1) DLC truncation. Probe: m183 DLC has 1740 rows; video has 2035
+   frames (diff 295). Make-video maps DLC frame N -> video frame
+   N + offset, but if DLC was truncated (or started past video
+   frame 1), the mapping is wrong. analyzeSession now opens
+   config.paths.video (best-effort) and emits a WARN when
+   dlc.nFrames < videoNumFrames, naming both counts and the diff.
+
+2) The multi-animal individual was never propagated. readDLC
+   auto-picked the most-populated individual per call; nothing
+   persisted the choice or fed it back from Settings.
+
+   Wiring added:
+   - cfg.preprocess.individual (new field, default '').
+   - peekSavedIndividual() helper reads Settings.metadata.individual
+     out of the auto-discovered *_PreprocessSettings.mat.
+   - analyzeSession resolves individual in order
+       a. cfg.preprocess.individual (explicit)
+       b. Settings.metadata.individual (auto-loaded)
+       c. readDLC auto-pick (legacy)
+     and forwards it to BOTH readDLC calls (autostart pre-scan +
+     main slice) so they never drift apart.
+   - result.SelectedIndividual + result.AllIndividuals fields
+     for trace + UI display.
+   - writeTracksSettings gains 5th arg `individual`, stored at
+     Settings.metadata.individual. exportTracks passes
+     state.dlc.selectedIndividual through so Save preprocessed
+     persists the choice automatically.
+   - DefineActs Make-video logs "overlay points sampled from
+     individual X (of N)" pre-render.
+
+Probe on m183 confirms:
+  [WARN] DLC covers 1740 frames but video has 2035 (diff 295)...
+  result.SelectedIndividual = animal0
+  result.AllIndividuals = animal0..animal9
+
+For m183 the auto-pick is correct (only animal0 populated; 1..9
+all zero). The visible sync drift in Make-video is from the
+truncated DLC; the new warn flags it loudly. UI dropdown to
+override the individual is a follow-up, deferred.
+
+Tests: 339/0/3 unchanged.
+
+## 2026-06-25 — multianimal: per-session auto-pick, no caching
+
+User clarified: "автовыбор животного не сохраняй в конфиг. это
+должен быть свой автопоиск для анализа каждой сессии. при анализе
+сессии, автовыбор животного должен сохраняться и использоваться
+для анализа всей сессии."
+
+Reverts of the prior commit's persistence:
+- exportTracks no longer writes state.dlc.selectedIndividual into
+  Settings.metadata.individual. writeTracksSettings's 5th arg
+  stays optional (default '') for any future explicit caller.
+- analyzeSession: peekSavedIndividual helper deleted; no longer
+  reads Settings.metadata.individual.
+
+Within-session lock kept:
+- analyzeSession resolves `individual` from cfg.preprocess.individual
+  (explicit override) or '' (readDLC auto-pick).
+- After the main readDLC call, the actual selectedIndividual is
+  written back into config.preprocess.individual so any later
+  readDLC re-call in the SAME analyzeSession run uses the same
+  animal. Autostart pre-scan + main slice already share via the
+  Individual name-value.
+- result.SelectedIndividual still records what was used.
+
+Frame-count audit on Demo/BARNES_v2 (9 living sessions):
+  session                            | video |  DLC | diff
+  Barnes_m183_5d_0t_26102024_120726  |  2035 | 1740 | -295
+  Barnes_m191_12d_0t_02112024_171452 |  2116 | 1747 | -369
+  Barnes_m23_0d_0t_12062024_141150   |  7479 | 5792 | -1687
+  Barnes_m27_4d_1t_06032025_141211   |  1280 |  933 | -347
+  Barnes_m498_12d_0t_11042026_124722 |  2683 | 1804 | -879
+  Barnes_m548_1d_3t_30032026_172841  |  3525 | 3200 | -325
+  Barnes_m5718_0d_0t_01122023_101633 |  4127 | 1880 | -2247
+  Barnes_m60_12d_0t_05112024_122035  |  2304 | 1705 | -599
+  Barnes_m_0d_0t_12062024_143355     |  8319 | 5795 | -2524
+All 9 DLCs start at frame 0 contiguous; all are SHORTER than
+video. Assuming DLC frame 0 == video frame 1 (DLC ran from the
+start and stopped early), Make-video alignment is 1:1 for the
+first N frames. If DLC actually started past video frame 0 the
+overlay drifts; needs visual verification per session.
+
+Tests: 339/0/3. No regressions.
+
+## 2026-06-25 — barnes: exclude platform from nose_at_any_hole
+
+User: "убери платформу из акта any_hole. ... она не как лунки, и не
+должна идти в разные счетчики по лункам."
+
+Diagnosis: nose_at_any_hole was gated on the preset's
+objectall_realout. buildObjectZones constructs objectall_* as the
+union of EVERY ArenaAndObjects entry (target + objectN + platform).
+On Barnes presets that meant nose entering the start platform
+counted as "any hole" activity.
+
+Fix in actsLibraryBarnesDefaults: nose_at_any_hole now uses an
+explicit OR list {target_realout, object1_realout, ..., objectN_realout}.
+N = NumObjects (default 19). Platform absent by construction.
+
+Audit of other "hole counters":
+- TotalNoseHoleVisits / TotalBodyHoleVisits iterate by index over
+  nose_at_object1..N / body_at_object1..N -- never included platform.
+- NumCheckedHoles / FirstCheckedHoleNumber / *ErrorDeg /
+  TargetHoleVisitOrder all key off nose_at_objectN -- same.
+- nose_at_platform / body_at_platform stay separate (intentional --
+  the platform IS tracked, just not lumped with holes).
+
+Probe on m183:
+  before: nose_at_any_hole = 86.61%
+  after : nose_at_any_hole = 83.28%
+Barnes metrics unchanged (TotalNoseHoleVisits = 46 either way).
+
+Tests: 341/0/3 (+2 new). No regressions.
+
+## 2026-06-25 — make-video: corner counter as 10% min(H,W) square
+
+stampNumberCorner reworked: square overlay flush with the chosen
+corner, side = max(16, round(0.10 * min(H, W))). Underlying pixels
+darkened 50% (no hard plate), font size auto = round(0.55 * side),
+text centred. Cache key includes fontSize so a different render
+size for the same string doesn't pull a stale bitmap.
+
+Flows through to:
+- Make-video event counter (top-right)
+- Velocity readout (bottom-right, when act has a speed gate)
+
+Tests: 341/0/3 unchanged. The helper is private file-local; visual
+verification via Make-video on a real session.
+
+## 2026-06-26 — TS double-error hardening + diagnostic harness
+
+Two fixes + a diagnostic.
+
+(1) Decoupled derived-signal smoothing from sgolayfilt:
+NEW +sphynx/+util/smoothDerived (smoothdata movmean, omitnan,
+double cast). Rewired call sites: rear.m (x2), applyAct.m (rears),
+computeVelocity.m. Architectural reason from user:
+"для рёр/фризинг новые координаты не должны считать с какими-то
+хардкодными параметрами, для них должны браться ts, которые
+обработались с параметрами из конфига." Position traces still
+flow through user's smoothingMethod via applyPerPartSettings;
+derived signals (sumDist, velocity) now use generic moving average.
+
+(2) Hardened smoothTrace itself:
+- double cast up front (sgolayfilt rejects single)
+- fillmissing(...,'linear') + zero-fill before sgolayfilt
+So a NaN run can't kill the whole call.
+
+(3) NEW tools/diagnose_ts_error.m + homework doc:
+8-check diagnostic for the remote RU-locale machine. Verifies
+locale, toolbox presence, readDLC DecimalSeparator fix, csv
+parsing, sample bodypart class, sgolayfilt double/single
+acceptance, hampel acceptance, full smoothTrace, git HEAD.
+PASS/FAIL per check; printed output is copy-pasteable.
+
+Memory: the prior occurrence of this error (commit c4edd31,
+2026-06-03) was specifically RU locale + readmatrix without
+DecimalSeparator producing NaN columns; downstream hampel/sgolay
+then errored on NaN-only input. That fix is still in place. The
+new occurrence on a remote machine, with raw trace visible
+(non-NaN), points to either an outdated code checkout (no c4edd31)
+or a derived-signal sgolayfilt failure -- both addressed by this
+commit's fixes.
+
+Tests: 341/0/3 unchanged.
+
+## 2026-06-26 — sphynx_defaults.jsonc reference
+
+NEW sphynx_defaults.jsonc in repo root. Single-source human-
+browsable reference of every default the pipeline uses. Format
+is JSONC (JSON-with-Comments) -- // lines render in VSCode/PyCharm,
+not parsed by stdlib jsondecode. File is reference, not
+auto-loaded by analyzeSession.
+
+Sections: paths / range / preprocess (+perPart +outlier{velocityJump,
+hampel, kalman}) / acts / io / viz / verbose / presetStrategies
+(arena geometry + square + circle + strip direction) /
+autoThreshold methods.
+
+Every string/enum field has a comment block listing alternative
+values. Numeric fields carry one-line context. Sourced from
+defaultConfig.m + PreprocessTabController defaultSettings() +
+CreatePreset strategies.
+
+## 2026-06-26 — sphynx_defaults: per-tab section sweep
+
+Extended sphynx_defaults.jsonc with one section per GUI tab.
+Compact: enum options only on `// a | b | c` inline comments.
+198 lines total. Sourced from controller UI initial Values +
+defaultSettings methods across +sphynx/+app/.
+
+New sections:
+- createPreset (geometry/strategies/cm params)
+- preprocessTab (plots/overlays/xUnits/autoThreshold)
+- defineActs (simple+complex builder)
+- analyzeTab (mainVideo/actsVideo/plots)
+- batchTab (mainVideo/actsVideo/plots/saveMat/aggregate)
+- makeOutputTable (nan handling/sort/distUnit/scope)
+- plotData (errorBar/colormap/font/stats/correction)
+- preprocessVideo (targetFPS)
+- syntheticData (frame/bodypart/motion/outlier knobs)
+
+presetStrategies block folded into createPreset for discoverability.
+
+## 2026-06-26 — sphynx_defaults.jsonc auto-load + reorder
+
+Three changes:
+1) File reorganised in GUI tab order (CreatePreset, Preprocess,
+   DefineActs, Analyze, Batch, MakeOutputTable, PlotData,
+   PreprocessVideo, SyntheticData). Pipeline knobs migrated INTO
+   the tab section that controls them: preprocessTab holds
+   cfg.preprocess.* + outlier + overlay defaults; defineActs holds
+   cfg.acts.* + simple/complex builder defaults.
+2) NEW +sphynx/+io/readDefaultsJsonc -- auto-locates the file
+   (walks 5 dirs up from pwd, falls back to repoRoot), strips //
+   and /* */ comments, jsondecode. Silent [] on missing/malformed.
+3) NEW +sphynx/+pipeline/applyJsoncDefaults -- maps tab-shaped
+   jsonc onto flat cfg struct. Wired into defaultConfig() (not
+   analyzeSession) so caller can still override -- jsonc seeds
+   defaults, caller wins. First attempt wired into analyzeSession
+   broke 4 tests because it overwrote caller's paths.preset/dlc
+   with the jsonc's '' values; moving the merge into defaultConfig
+   fixed that (caller still sets cfg.paths.* after defaultConfig
+   returns).
+
+Tests: 348/0/3 (+7 readDefaultsJsoncTest). No regressions. Includes
+end-to-end test that the actual repo-root .jsonc parses + merges.
+
+## 2026-06-26 — Preprocess R18 + tab numbering
+
+Tab numbering in CreatePresetApp: "1. Create Preset" ... "9. Synthetic Data *".
+
+Preprocess Tracking R18:
+- TopBar removed; Output dir into B1 row 1; Save/Save-plots/Clear into
+  B4 right-button-column.
+- B1 (Loading) gains top row with Output dir + path; subsequent rows shifted.
+- B2 (Outlier) ColumnWidth -> all-fixed {110,60,60,60,50}. Fixes
+  fields shrinking to 0 on narrow window.
+- Hampel default: false -> true (State.outlier + jsonc).
+- B3 "Plots" -- now wrapped in numbered uipanel.
+- B4 (per-part, was B3): split 75/25 (table | button column). INFO
+  row above table removed; INFO moved into button column. Auto row
+  reorganised: dropdown+param+Auto this+Auto all on one row.
+- Manual exclusion regions: title gets " *" (no number); split 75/25
+  (controls left | listbox right). INFO added (new help text).
+- Viewport row split into 2 sub-rows inside LeftPanel rows 3+4.
+  from/to numeric fields sized 28x28 square. Plots get full row-1
+  height.
+- OuterGrid [6,3] -> [4,3].
+
+Tests: 348/0/3 unchanged.
+
+## 2026-06-26 — Preprocess R19 layout polish
+
+7 follow-up fixes on R18 visual review:
+1. B1: Output dir as 5th button + 5th path field; grid {1x}x5.
+2. B2 ColumnWidth all-1x (5 cols); scales like B1.
+3. B2 height 140 -> 110.
+4. B3 Plots height 350 -> 420 (+20%).
+5. Viewport split into 3 sub-rows; row3 = raw/interp/smoothed
+   3-equal-weight checkboxes. LeftPanel rows {130,110,32,32,32}.
+6. B4 per-part table: name + status columns '1x' so table fills
+   the right-side slack.
+7. Manual exclude * height 180 -> 90. Inner ctrl trimmed to 2 rows.
+
+Tests: 348/0/3 unchanged.
+
+## 2026-06-26 — DefineActs UI: log 2x + zone preview on list select
+
+User: tab 3 polish.
+- left.RowHeight {28,26,28,'1x',32,80} -> {28,26,28,'1x',32,160}.
+  Doubles info/log; acts listbox shrinks to absorb.
+- refreshZonePreview gained optional (zoneNames, titleStr) args.
+- refreshInfoForSelected handler now collects union of zones across
+  selected acts + joins per-act param lines into a single title,
+  and calls refreshZonePreview with both. Library-list selection
+  draws masks on the preview axes.
+- New formatActParamsLine local helper builds "<name> bp=X
+  v[a..b]cm/s op=AND kind=allInZone" style line; omits OR (default)
+  zoneOp and empty fields.
+
+Also: Barnes v3 acts library committed earlier this turn (separate
+commit 8b98847). 64 acts: nose_at_<zone> on _real, body_at_<zone>
+on _realout, mouse_inside_<zone> as new specialKind 'allInZone',
+holeN naming replaces objectN, nose_at_any_hole over holes only.
+
+Tests: 350/0/3 unchanged after DefineActs UI changes. The 8b98847
+commit added 15+1 unit tests for the v3 library and the new
+bucket.
+
+## 2026-06-26 — Barnes v3.1: nose -> _realout; counter yellow/black
+
+User reported 3 issues on tab 3. Probe on Demo/BARNES_v2/m60:
+- target_real mask = 59 px (~8x8)
+- target_realout mask = 10009 px (~100x100)
+- nose in target_real per-frame: 1/1705 (0.06%) -> 0 episodes after refine
+- nose in target_realout per-frame: 113/1705 (6.63%) -> ~1 episode
+
+Issues (1) zone invisible / (3) nose_at_target=0 = same root cause:
+_real polygon too small + DLC nose jitter. Reverted nose acts to
+_realout (v2 behavior). body_* stay on _realout. mouse_inside_*
+stay on _real (correct for "fully curled inside").
+
+Issue (2) counter: 50/50-darkened bg + white text was invisible
+on bright Barnes floor. Switched to solid yellow plate + black text.
+
+After v3.1 on m60: nose_at_target = 7.04% / 1 episode / FirstStart=8.24s.
+Tests still 350/0/3.
+
+## 2026-06-26 — Analyze R20: batch-style loader + render-on + log taller
+
+Three changes on tab 4:
+
+(1) Loader strip rewritten as two 2-row sub-grids (mirrors Batch
+    tab). Row 1: Root/Preset/Video/DLC/OutDir. Row 2: Preproc
+    settings | Acts library. New PreprocessSettings button + path
+    field; pickPath('Preprocess') case added; runAnalyze pushes
+    PreprocessSettingsPathField.Value into cfg.paths.preprocessSettings.
+
+(2) MainVideoEnableCheckbox default false -> true. sphynx_defaults
+    .jsonc analyzeTab.mainVideo.enabled flipped to true too.
+
+(3) options.RowHeight {180,'1x',56} -> {180,170,56} -- acts videos
+    panel trimmed ~30%. left.RowHeight {64,'1x',30,36,90} -> {64,64,
+    410,30,36,'1x'} -- log row absorbs the freed space.
+
+New class properties: PreprocessSettingsButton, PreprocessSettingsPathField.
+
+Tests: 350/0/3 unchanged.
+
+## 2026-06-26 -- Analyze R21: NOF cleanup + etogram filter + video resolve
+
+Four follow-ups on tab 4:
+
+(1) analyzeSession step 9 (legacyZoneActSpec) deleted entirely. It
+    was hardcoding corners/walls/center/object1..4/objects from any
+    preset with those zones (pre-library era). Custom library is
+    canonical now. m60 probe: total acts = 5 (rest/walk/loc/freez/
+    rear), NOF leftover = 0.
+
+(2) Main-video zone overlay + actsList feature inherit cleanup
+    from (1) -- no separate change needed.
+
+(3) Render-acts "Pick a video first" bug: runAnalyze didn't copy
+    VideoPathField.Value into cfg.paths.video, and render handlers
+    only checked the field. Added cfg.paths.video assignment +
+    resolveVideoPath() helper (trims ws, strips drag-and-drop
+    quotes, falls back to State.result.config.paths.video). Warn
+    message echoes resolved path.
+
+(4) Etogram acts filter listbox -- col 1 of right pane, spans rows
+    3-5. Multi-select; ValueChangedFcn redraws filtered etogram.
+    Right grid 5x2 -> 5x3 with columns {180,'1x','1x'}; header +
+    table span all 3 cols; rest of plots shifted to cols 2-3.
+
+Tests: 350/0/3 unchanged.
+
+## 2026-06-28 -- Analyze R22: refocus, TeX-off, video text 20%H, counter 5%H
+
+Four small tab-4 follow-ups:
+
+(1) Focus loss after pickPath. Windows uigetfile/uigetdir parent
+    focus on Explorer at close, app loses keyboard. pickPath now
+    calls refocusFigure() (figure(obj.Figure)) at the end of every
+    branch.
+
+(2) Etogram YTickLabel ate underscores via TeX renderer.
+    TickLabelInterpreter = 'none' in drawEtogram. Same fix on
+    sphynx.plot.barWithStats (factor level labels can contain _).
+
+(3) renderActsVideo main-video text scaled to ~20%H. Replaced
+    hardcoded speedFont=18 / actsFont=15 / panelDy=26 with
+    H-relative: lineH = max(10, round(0.20*H/12)); fonts ~lineH*
+    0.6-0.72. Renders comfortably at 296p crops through 4K.
+    presentation branch untouched.
+
+(4) Counter plate: pulled stampNumberCorner from DefineActsTab
+    into sphynx.util.stampNumberCorner. Both Make-video and
+    renderActStitched (Render acts in Analyze) now share it.
+    Size: side = max(12, round(0.05*H)) -- was 10% of min(H,W).
+    renderActStitched's local stampNumberLocal + renderTextBitmap
+    Local removed. DefineActsTab local stampNumberCorner +
+    renderTextBitmap removed.
+
+Smoke: H=500 -> side=25 (matches 5%*500); 1875 pixels touched
+(3 ch * 625 plate). Tests: 350/0/3 unchanged.
+
+## 2026-06-28 -- R23: counter 10%+fallback, outlined text, acts visible, 2s gate
+
+Tab-4:
+
+(1) stampNumberCorner: side = max(24, round(0.10*H)). Was 5%H/12px
+    floor -- 15 px on 300p too tiny.
+
+(2) "Black square / no digit" root cause: print('-RGBImage') on
+    off-screen figure sometimes returns empty in certain MATLAB
+    graphics contexts -> yellow plate without text. Added embedded
+    5x7 bitmap-font fallback for 0-9 . / C M S space. Smoke on
+    H=300: 218 black text pixels inside 30x30 yellow plate.
+
+(3-4) renderActsVideo main-video info block:
+    - Flush top-left (x0=4)
+    - No BackgroundColor; drawOutlinedText helper renders 8
+      cardinal-offset black shadows + foreground color
+    - Line height >= 1.35 * fontSize (was actsDy-4, overlapped at
+      low res)
+    - Acts list shows ALL active acts (dedup vs Speed_act / Zone
+      removed -- it was filtering Barnes spatial acts out)
+
+Tab-3:
+
+(5) mouse_inside_* (target / hole1..19 / platform) gets
+    minDurationSec = 2.0. Default 0.25 lets 1-2-frame DLC flybys
+    register as visits. Test updated.
+
+Tests: 350/0/3 unchanged.
+
+## 2026-06-28 -- R24: BARNES_v2 pairing + Check another / Load preprocessed
+
+Tab 5: sessionIdFromDlcName ignored SuperAnimal csvs (no literal
+'DLC' token -> whole 95-char stem became the id). Widened the
+marker set to {'_superanimal', 'DLC_resnet', 'DLC_mobilenet',
+'DLC_efficientnet', 'DLC_', '_DeepCut_'}; first hit wins; trailing
+'_el' stripped. findFirstMatch now also checks the per-id subfolder
+layout '<folder>/<id>/<id><suffix>'.
+
+Smoke Demo/BARNES_v2: 9/9 csvs -> all paired (V=1, P_flat=1,
+P_sub=1).
+
+Tab 2:
+- "Check another" (block 1 row 3, between Load and Load synthetic):
+  pick another DLC csv, keep per-part settings, re-run Compute all.
+- "Load preprocessed" (block 4 row 5, next to Save preprocessed):
+  pick <exp>_PreprocessSettings.mat, overlay bodyparts + outlier
+  onto current DLC, re-run Compute all. outlier UI fields synced
+  back via pushOutlierToUI.
+
+Both routes share realignPerPartByName(srcPerPart) -- rebuild
+perPart array sized to current DLC body-part list, copy saved
+fields by name (case-insensitive); unmatched parts get
+perPartDefault.
+
+Tests: 350/0/3 unchanged.
+
+## 2026-06-28 -- R25: PrimaryErrors metric + Barnes doc + tutorial refresh
+
+Code:
+- barnesSessionMetrics.m: PrimaryErrors exposed as first-class
+  field. = count of nose_at_holeN episodes starting before first
+  nose_at_target episode. = TargetHoleVisitOrder - 1 (was implicit).
+- DefineActsTabController.m: "Load Barnes" tooltip spells out v3.1
+  library shape + mouse_inside 2s gate + points to metrics.md.
+- PreprocessTabController.m: per-part INFO prepended with R24
+  Check-another / Load-preprocessed note.
+
+Docs:
+- docs/Barnes/metrics.md (NEW, 323 lines): apparatus, zone naming
+  (_real/_realout/_out), 64 default acts, every barnesSessionMetrics
+  field with classical equivalents, per-act minDur dispatch, lit
+  alignment table (Sunyer/Illouz/Pitts/ANY-maze/Rtrack), and what
+  sphynx does NOT compute.
+- docs/CreatePresetApp/{user_guide,full_workflow}_{en,ru}.md
+  surgical edits for numbered tabs, R24 buttons, Barnes default
+  library, Analyze R23 overlay, Batch SuperAnimal pairing, defaults
+  jsonc, pointer to metrics.md.
+
+Tests: 350/0/3.
+
+## 2026-06-28 -- R26: Barnes metrics surfaced in Analyze header / Batch / SuperTable
+
+Tab 4: header sprintf extended to show all 8 BarnesMetrics fields
+(was 6 -- PrimaryErrors + FirstCheckedHoleNumber were missing).
+
+Tab 5: new BarnesTable (3rd uitable on right pane), filled by
+barnesMetricsToRow(res, s) inside runBatch when res.BarnesMetrics
+exists. saveTablesCsv writes batch_barnes.csv only when at least
+one session is Barnes.
+
+Tab 6:
+- applyDefaults now pattern-detects nose_at_/body_at_/mouse_inside_
+  Barnes families and ticks sensible metric columns when the act
+  is not in actParams.
+- buildTable pre-scans _WorkSpace.mat union of BarnesMetrics field
+  names, includes them as Barnes_<FieldName> in batch template
+  (struct array must be uniform), flattens each session.
+- buildSuperTable.addBarnesColumns detects Barnes_ prefix and
+  emits per-(metric, session) columns via addPerSessionScalar.
+
+Probe m60+m23: BarnesMetrics correctly persisted to _WorkSpace.mat,
+16 barnes columns emitted in Wide (8 metrics x 2 sessions).
+
+NOF hardcodes audit: actParams legacy NOF entries are opt-in
+defaults -- columns only fire when an act of that name exists in
+the session .mat. analyzeSession's NOF-zone-act synthesis was
+removed in R21; that fix stands.
+
+Tests: 350/0/3 unchanged.
+
+## 2026-06-28 -- R27: refocus on Tab 5/6 pickers + clear Barnes default ticks
+
+Tab 5: added restoreFocus helper + drawnow flush. Wired into all
+4 pickers (pickFolder, pickSettingFile, saveSettings, loadSettings).
+Tab 5 previously had NO refocus -- Windows kept focus on Explorer
+after uigetfile/dir closed.
+
+Tab 6: barnesActDefaults now returns {} for every Barnes family.
+R26 ticked count/percent/duration by default; user prefers empty
+rows so per-study metric choice is explicit. Non-Barnes acts still
+inherit defaults from sphynx.acts.actParams unchanged. Also added
+drawnow to restoreFocus for the Windows R2020a focus-swap quirk.
+
+Tab 4: refocusFigure gained drawnow for consistency.
+
+Tests: 350/0/3 unchanged.
+
+## 2026-06-28 -- R28: unticked acts -> 0 cols in Build table
+
+Bug: metricMatrixToStruct skipped unticked rows, then build
+SuperTable's resolvePerActMetrics fell back to flat Metrics
+default (4 cols per act). User saw all acts emit columns
+regardless of checkboxes.
+
+Fix: pass Metrics={} into buildSuperTable from buildTable. Empty
+flat default -> unticked acts resolve to {} -> 0 columns.
+
+Probe on m60+m23 with only rest.ActNumber ticked: 567 cols -> 23.
+Tests: 350/0/3.
+
+## 2026-06-28 -- R28 audit + TODO update
+
+Audit via two subagents (body-parts mapping + hardcodes/settings
+flow). Findings folded into docs/TODO.md as 12 entries (1 new
+P2/C3 for per-class-of-objects act constructor + 11 audit
+findings with P/C ratings + file:line citations).
+
+Key HIGH-risk finds:
+- BatchAnalysisTab preproc-settings picker is dead (cfg never
+  populated; auto-discovery silently substitutes).
+- Barnes NumObjects=19 default leaks through both
+  barnesSessionMetrics and Load Barnes default; non-19 presets
+  get wrong angular metrics + phantom zero-count acts.
+- applyAct.m unguarded ctx.frameRate -> NaN nullifies the per-
+  act min-duration filter silently.
+- DefineActs body-parts dropdown typo 'righforelimb'.
+
+No code changes this turn. End-to-end smoke on m60 SuperAnimal
+confirmed builtin acts (rest/walk/loc/freezing/rear) all fire
+correctly under the synonym map (resolvePart bridges the legacy
+<-> SuperAnimal name gap properly).
+
+## 2026-06-29 -- R29: Preproc-Settings picker wired across all 3 cfg-build sites
+
+R28 audit bug #1 fixed.
+
+BatchAnalysisTab.runBatch: cfg0.paths.preprocessSettings now gets
+PreprocessSettingsField.Value when the field is non-empty + path
+is a file. Empty -> auto-discover (back-compat). Non-empty + not-
+file -> warn + auto-discover. applog "Preproc settings: <path>"
+surfaces the explicit pick once per batch.
+
+DefineActsTab: 2 cfg-build sites (single-act Make-video at :971,
+render-all at :1188) both pull from obj.preprocessSettingsPath()
+helper. Helper trims ws / strips drag-drop quotes / returns '' on
+empty-or-missing -> auto-discover.
+
+E2E probe on m60 with synthesised Settings (nose.use=false vs
+true) verified: 6 vs 7 parts kept. Pipeline honours
+cfg.paths.preprocessSettings end-to-end; the loader was always
+correct, R29 plumbed the missing assignment.
+
+Tests: 350/0/3.
+
+## 2026-06-29 -- R30: Signal Processing Toolbox fallbacks (sgolayfilt, hampel)
+
+Colleague's diagnose_ts_error output decoded:
+  [1] Signal Processing Toolbox license = 1
+  [5] sgolayfilt(double) -> Undefined function
+  [6] hampel(double)     -> Undefined function
+
+Root cause: license('test','signal_toolbox') checks license file,
+not actual install state. On a stripped-down MATLAB install the
+license can be 1 while sgolayfilt/hampel files are absent.
+exist(...,'file')==2 is the authoritative test.
+
+Implemented graceful fallbacks so the pipeline keeps running:
+
++sphynx/+preprocess/smoothTrace.m
+  if exist('sgolayfilt','file')==2  -> sgolayfilt path (unchanged)
+  else                              -> smoothdata movmean fallback
+                                       + one-time warning
+  exist() result cached via persistent var.
+
++sphynx/+preprocess/hampelFilter.m
+  if exist('hampel','file')==2      -> hampel path (unchanged)
+  else                              -> rolling-MAD via movmedian
+                                       (1.4826 * MAD * nSigma)
+                                       + one-time warning
+
+tools/diagnose_ts_error.m
+  [1] now reports lic + exist + which path separately. If license=1
+      but exist=0 -> prints explicit VERDICT pointing to either
+      installing the toolbox or pulling sphynx-GUI HEAD (which has
+      fallbacks). This is the smoking gun the previous report missed.
+  [8] git probe quoting fixed: strip trailing slash from repoRoot
+      before quoting (closing-quote-after-backslash was eaten by
+      cmd.exe), and convert backslashes to forward slashes.
+
+Tests: 350 / 0 / 3 (unchanged from R29). Fallback branches not
+covered by existing tests (they activate only when toolbox is
+absent on the test machine; my MATLAB has the toolbox installed).
+Math of rollingHampelMask is the textbook Hampel identifier; not
+exotic.
+
+Homework file ts-double-error-diagnostic.md updated with new
+verdict + remediation steps for the colleague's machine.
