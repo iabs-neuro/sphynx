@@ -4295,3 +4295,29 @@ exotic.
 
 Homework file ts-double-error-diagnostic.md updated with new
 verdict + remediation steps for the colleague's machine.
+
+## 2026-06-29 -- R30b: unwrapForSmooth fallback + colleague clarification
+
+Same colleague (Женя) reported the same Undefined-function error
+firing from the Preprocess Tab's `Compute this` button on nose:
+  [ERROR] Compute nose failed: Undefined function 'hampel' ...
+  [ERROR] Compute nose failed: Undefined function 'sgolayfilt' ...
+
+Confirmed: their machine doesn't have R30 yet (computePart ->
+applyPerPartSettings -> hampelFilter / smoothTrace -- all three
+wrapped post-R30; pre-R30 they hard-fail). Fix for them is `git
+pull` + restart.
+
+Audit for residual direct call sites turned up one more in
++sphynx: angles.unwrapForSmooth.m:30 was still calling sgolayfilt
+directly (used for HeadDirection / BodyDirection smoothing).
+Added the same fallback pattern there. Now zero direct callsites
+of sgolayfilt or hampel left inside +sphynx -- all three live
+inside their own wrapper with cached exist-probe + fallback +
+one-time warning.
+
+Files touched:
+  +sphynx/+angles/unwrapForSmooth.m   - fallback branch added
+  docs/superpowers/homework/ts-double-error-diagnostic.md  - iter 3
+
+Tests: 350 / 0 / 3, unchanged.

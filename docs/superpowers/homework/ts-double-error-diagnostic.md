@@ -142,3 +142,63 @@ for input arguments of type 'double'` -- это не MATLAB-ошибка
 Если коллега выбрал путь A (поставил toolbox) -- запустить
 `diagnose_ts_error` ещё раз: пункты [5][6] должны стать PASS,
 warning-ов от fallback быть не должно.
+
+## Iteration 3 (2026-06-29, R30b) -- Женя: та же ошибка в Compute body part
+
+### Что прислала
+
+```
+[ERROR] [Preprocess] Compute nose failed:
+        Undefined function 'hampel' for input arguments of type 'double'.
+[ERROR] [Preprocess] Compute nose failed:
+        Undefined function 'sgolayfilt' for input arguments of type 'double'.
+```
+
+Кнопка `Compute this` в Preprocess Tracking tab. Та же машина без
+Signal Processing Toolbox.
+
+### Что это значит
+
+R30 на её машине **ещё не подтянут**. Pull ветки `sphynx-GUI`
+включит fallback'и -- ошибка превратится в однократный warning
+`sgolayfilt not found ...` / `hampel not found ...` и Compute
+доедет до конца.
+
+`PreprocessTabController.computePart` (line 199) -> вызывает
+`sphynx.preprocess.applyPerPartSettings` -> внутри идут наши
+обёртки `sphynx.preprocess.hampelFilter` и
+`sphynx.preprocess.smoothTrace`. R30 их обернул, R30b добавил
+покрытие для `sphynx.angles.unwrapForSmooth` -- последнего
+прямого callsite в `+sphynx`.
+
+### Инструкция Жене
+
+1. В терминале на её машине:
+   ```
+   cd <папка проекта sphynx>
+   git pull
+   ```
+2. В MATLAB перезапустить:
+   ```
+   clear functions
+   sphynx.app.CreatePresetApp
+   ```
+3. Загрузить тот же DLC, нажать `Compute this` на nose.
+   Ожидается:
+   - В Command Window появится **один** Warning:
+     `Warning: sgolayfilt not found ...` (или hampel)
+   - Compute доедет до конца, в Preprocess Tab появится статус
+     `Computed nose: status=ok, NaN=...%`.
+
+### R30b -- patch для unwrapForSmooth
+
+Один файл: `+sphynx/+angles/unwrapForSmooth.m`. Тот же паттерн
+что в R30: cached `exist`-probe + fallback на `smoothdata movmean`
++ однократный warning. Срабатывает при сглаживании HeadDirection /
+BodyDirection.
+
+Если бы оставили как есть, после Compute body part (который
+работает через applyPerPartSettings) Женя наткнулась бы на ту же
+ошибку при попытке посчитать direction.
+
+Тесты после R30b: 350 / 0 / 3, без регрессий.

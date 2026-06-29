@@ -3334,3 +3334,32 @@ B) Не устанавливать -- просто подтянуть sphynx-GUI
 
 Homework файл ts-double-error-diagnostic.md обновлён с новым
 вердиктом и инструкциями коллеге.
+
+## 2026-06-29 -- R30b Женя те же ошибки в Compute (nose)
+
+Женя прислала ошибки из Preprocess Tab кнопка Compute this:
+  Undefined function 'hampel' for input arguments of type 'double'
+  Undefined function 'sgolayfilt' for input arguments of type 'double'
+
+Это та же машина без Signal Processing Toolbox. Просто R30 ещё
+не подтянут. Compute body part идёт через
+  PreprocessTabController.computePart
+  -> sphynx.preprocess.applyPerPartSettings
+  -> sphynx.preprocess.{hampelFilter, smoothTrace}
+
+После R30 эти три обёртки имеют fallback. Жене нужно:
+  cd <проект sphynx>
+  git pull
+  -> в MATLAB перезапустить app
+  -> повторить Compute. Будет один Warning + результат.
+
+Бонус: при ревизии нашёл ещё ОДИН прямой sgolayfilt-callsite
+вне обёрток -- `+sphynx/+angles/unwrapForSmooth.m` (для
+HeadDirection / BodyDirection). Если бы оставили, после Compute
+body part Женя наткнулась бы на ту же ошибку при direction'е.
+R30b добавляет fallback там же тем же паттерном.
+
+Теперь во всём +sphynx ноль прямых sgolayfilt/hampel вызовов
+мимо обёрток.
+
+Тесты 350/0/3 без регрессий.

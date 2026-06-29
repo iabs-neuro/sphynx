@@ -25,9 +25,33 @@ function out = unwrapForSmooth(angles, windowLen, varargin)
     if numel(unwrapped) < windowLen
         smoothed = unwrapped;
     else
-        % Use sgolayfilt (Signal Processing Toolbox) instead of
-        % smooth(...,'sgolay',...) (Curve Fitting Toolbox dependency).
-        smoothed = sgolayfilt(unwrapped, polyOrder, windowLen);
+        if hasSgolayfilt()
+            smoothed = sgolayfilt(unwrapped, polyOrder, windowLen);
+        else
+            % Signal Processing Toolbox not installed -- fall back to
+            % a moving-average via smoothdata (base MATLAB). Matches
+            % the fallback in sphynx.preprocess.smoothTrace.
+            warnNoSgolayOnce();
+            smoothed = smoothdata(unwrapped, 'movmean', windowLen, 'omitnan');
+        end
     end
     out = sphynx.angles.wrap(smoothed);
+end
+
+function tf = hasSgolayfilt()
+    persistent cached
+    if isempty(cached)
+        cached = exist('sgolayfilt', 'file') == 2;
+    end
+    tf = cached;
+end
+
+function warnNoSgolayOnce()
+    persistent warned
+    if isempty(warned)
+        warning('sphynx:unwrapForSmooth:noSgolayfilt', ...
+            ['sgolayfilt not found (Signal Processing Toolbox not ' ...
+             'installed). Angle smoothing falls back to moving-average.']);
+        warned = true;
+    end
 end
