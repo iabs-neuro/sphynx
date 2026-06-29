@@ -258,6 +258,24 @@ classdef DefineActsTabController < handle
             obj.applog('info', 'Preprocess settings loaded: %s', fname);
         end
 
+        function path = preprocessSettingsPath(obj)
+            % R29: resolve the Preproc-Settings .mat to push into
+            % cfg.paths.preprocessSettings for any Make-video preview.
+            % Trim whitespace / strip drag-and-drop wrapping quotes;
+            % return '' when the field is empty or not a file (in
+            % which case analyzeSession's auto-discover kicks in).
+            path = '';
+            if isempty(obj.PreprocessPathField) ...
+                    || ~isvalid(obj.PreprocessPathField)
+                return;
+            end
+            raw = strtrim(char(obj.PreprocessPathField.Value));
+            if numel(raw) >= 2 && raw(1) == '"' && raw(end) == '"'
+                raw = raw(2:end-1);
+            end
+            if ~isempty(raw) && isfile(raw); path = raw; end
+        end
+
         function addSimpleAct(obj)
             name = strtrim(obj.SimpleNameField.Value);
             if isempty(name)
@@ -975,6 +993,14 @@ classdef DefineActsTabController < handle
                 cfg.acts.libraryPath = tmpLib;
                 cfg.viz.headless = true;
                 cfg.io.saveWorkspace = false;
+                % R29: wire the tab's Preproc picker so Make-video
+                % previews use the same per-part / outlier settings
+                % the user runs in Preprocess Tracking / Analyze
+                % Session. Empty -> analyzeSession's auto-discover.
+                preprocPath = obj.preprocessSettingsPath();
+                if ~isempty(preprocPath)
+                    cfg.paths.preprocessSettings = preprocPath;
+                end
 
                 result = sphynx.pipeline.analyzeSession(cfg);
 
@@ -1184,6 +1210,12 @@ classdef DefineActsTabController < handle
                 cfg.acts.libraryPath = tmpLib;
                 cfg.viz.headless = true;
                 cfg.io.saveWorkspace = false;
+                % R29: same Preproc-Settings wiring as the single-
+                % act Make-video path above.
+                preprocPath = obj.preprocessSettingsPath();
+                if ~isempty(preprocPath)
+                    cfg.paths.preprocessSettings = preprocPath;
+                end
                 result = sphynx.pipeline.analyzeSession(cfg);
 
                 fps = result.Options.FrameRate;

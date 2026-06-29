@@ -184,6 +184,30 @@ classdef BatchAnalysisTabController < handle
                     && isfile(obj.ActsLibraryField.Value)
                 cfg0.acts.libraryPath = obj.ActsLibraryField.Value;
             end
+            % R29 (audit fix): wire the Preproc-Settings picker into
+            % cfg.paths.preprocessSettings. Pre-R29 the picker stored
+            % the path in the UI field but runBatch never copied it,
+            % so analyzeSession silently fell back to its auto-
+            % discovery walk-up from the DLC parent dir -- which
+            % could pick up a stale or unrelated <exp>_Preprocess
+            % Settings.mat sitting in some ancestor folder. Now an
+            % explicit user pick overrides discovery, exactly as
+            % AnalyzeSessionTabController.m:116-119 already does for
+            % the single-session tab. Empty field still triggers
+            % auto-discovery (back-compat).
+            preprocPath = '';
+            if ~isempty(obj.PreprocessSettingsField) ...
+                    && isvalid(obj.PreprocessSettingsField)
+                preprocPath = strtrim(char(obj.PreprocessSettingsField.Value));
+            end
+            if ~isempty(preprocPath) && isfile(preprocPath)
+                cfg0.paths.preprocessSettings = preprocPath;
+                obj.applog('info', 'Preproc settings: %s', preprocPath);
+            elseif ~isempty(preprocPath)
+                obj.applog('warn', ...
+                    'Preproc settings path not a file (auto-discover instead): %s', ...
+                    preprocPath);
+            end
 
             saveMat       = obj.SaveMatChk.Value;
             aggregate     = obj.AggregateChk.Value;
