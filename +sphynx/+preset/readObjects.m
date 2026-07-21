@@ -23,7 +23,11 @@ function objects = readObjects(frame, geometries, varargin)
     parse(p, frame, geometries, varargin{:});
 
     K = numel(geometries);
-    objects = struct('type', {}, 'geometry', {}, 'border_x', {}, 'border_y', {}, ...
+    % Field set must match sphynx.preset.readArenaGeometry's output
+    % (which always sets .class); otherwise objects(k) = a throws
+    % "dissimilar structures" on the first assignment.
+    objects = struct('type', {}, 'geometry', {}, 'class', {}, ...
+                     'border_x', {}, 'border_y', {}, ...
                      'border_separate_x', {}, 'border_separate_y', {}, 'mask', {});
 
     for k = 1:K

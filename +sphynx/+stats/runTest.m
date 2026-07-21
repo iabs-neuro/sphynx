@@ -304,14 +304,14 @@ function R = doRMAnova(R, L, factorNames, fInfo, opts)
             'WithinDesign', table((1:nW)', 'VariableNames', {wn}));
     end
     ra = ranova(rmModel, 'WithinModel', wn);
-    % Pick the within main effect row.
+    % Pick the within main effect row. ranova always puts the between-
+    % subjects '(Intercept)' term in row 1, so both p AND F must come
+    % from the within-effect row -- reading F from row 1 reported the
+    % intercept's statistic against the within effect's p-value.
     idxWithin = find(contains(string(ra.Properties.RowNames), wn), 1);
-    if isempty(idxWithin)
-        R.p = ra.pValue(1);
-    else
-        R.p = ra.pValue(idxWithin);
-    end
-    R.stat = ra.F(1);
+    if isempty(idxWithin); rowIdx = 1; else; rowIdx = idxWithin; end
+    R.p = ra.pValue(rowIdx);
+    R.stat = ra.F(rowIdx);
     % Pairwise: collect within-factor + each between-factor. Within
     % uses numeric indices (1..nW) -> map back to level names.
     pwAll = cell(0, 3);

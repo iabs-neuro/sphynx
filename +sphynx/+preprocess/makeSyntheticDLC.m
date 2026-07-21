@@ -171,9 +171,10 @@ function [X, Y, L] = injectOutliers(X, Y, L, mode, W, H, ...
     end
     if apply("long_gap")
         % gapCountPerPart gaps per part, length drawn from log-normal
-        % distribution in seconds, converted to frames via fps.
+        % distribution in seconds, converted to frames via fps. A count
+        % of 0 injects no gaps (loop runs zero times).
         for i = 1:nP
-            for g = 1:max(1, gapCountPerPart)
+            for g = 1:gapCountPerPart
                 lenSec = exp(gapMuLog + randn * gapSigmaLog);
                 len = max(2, round(lenSec * fps));
                 len = min(len, n - 1);
@@ -183,9 +184,17 @@ function [X, Y, L] = injectOutliers(X, Y, L, mode, W, H, ...
         end
     end
     if apply("poor_likelihood")
-        % Globally low likelihood (around 0.55)
-        L = 0.55 + randn(size(L)) * 0.1;
-        L = max(0, min(1, L));
+        % Low likelihood floor (around 0.55). In 'mixed' mode compose it
+        % with the existing matrix (element-wise min) so the spike/gap
+        % low-likelihood signatures from earlier stages survive instead
+        % of being wiped by a global reassignment.
+        Lpoor = 0.55 + randn(size(L)) * 0.1;
+        Lpoor = max(0, min(1, Lpoor));
+        if any(strcmp(modes, "mixed"))
+            L = min(L, Lpoor);
+        else
+            L = Lpoor;
+        end
     end
 end
 

@@ -98,6 +98,27 @@ Do not touch without explicit user ask.
 - [ ] **P3 / C1** **Document `identifyParts.m` first-match rule.** When both `neck` and `head_midpoint` are present, the earlier in kept-list order wins for `HeadCenter`. Surprising; document or make explicit-preference.
 - [ ] **P3 / C2** **4-way duplication of defaults.** `minDurationSec=0.25` (applyAct.m:54, emptyAct.m:33, buildSimpleAct.m:11, buildComplexAct.m:10) + Kalman defaults (kalmanFilter2D.m:35-36, applyPerPartSettings.m:185-186, PreprocessTabController.m:881-882) + `maxGapSec=0.25` (no cfg counterpart at all). Centralise in `defaultConfig` + `sphynx_defaults.jsonc`.
 
+## R31 ultra-audit findings (2026-07-20) -- see `docs/audit-r2025-engine-bugs.md`
+
+Multi-agent adversarial bug audit of the engine. 8 confirmed. Being fixed this
+session via TDD; left here for traceability.
+
+- [ ] **P1 / C2** **Golden regression test is missing.** `tests/golden/` has only
+  `buildSnapshots.m` (generator) + snapshot `.mat`, NO comparison test, so
+  `runAllTests('golden'|'full')` finds 0 tests and README overstates coverage.
+  Write a real golden test: run `sphynx` pipeline on `NOF_H01_1D` (DLC+Preset),
+  compare numeric Acts fields to `snapshots/NOF_H01_1D_Acts.mat` with tolerance.
+  Gives a numeric-drift guard for the R2020a->R2025b move. Do this BEFORE large
+  refactors so drift is caught.
+- [x] **2026-07-20 (R31, TDD)** `+pipeline/analyzeSession.m` (HIGH) freezing() OOB when body center synthesized -- synthetic center now a first-class trace row. `analyzeSessionSyntheticCenterTest`.
+- [x] **2026-07-20 (R31, TDD)** `+stats/runTest.m` RM-ANOVA F now read from the within-effect row (was intercept). `runTestRMAnovaFStatTest`.
+- [x] **2026-07-20 (R31, TDD)** `+pipeline/analyzeSession.m` per-act velocity/distance now uses the synthetic center (same fix as the HIGH item).
+- [x] **2026-07-20 (R31, TDD)** `+acts/applyAct.m` freezing/allInZone now degrade to resolvable parts instead of zeroing. `applyActMissingPartTest`.
+- [x] **2026-07-20 (R31, TDD)** `+preset/readObjects.m` added `class` to preallocation to match readArenaGeometry. `readObjectsFieldSetTest`.
+- [x] **2026-07-20 (R31, TDD)** `+preprocess/computeVelocity.m` handles 1 / 0 surviving samples without interp1 crash. `computeVelocitySingleSampleTest`.
+- [x] **2026-07-20 (R31, TDD)** `+preprocess/makeSyntheticDLC.m` 'mixed' composes likelihood (min) instead of clobbering. `makeSyntheticDLCOutlierParamsTest`.
+- [x] **2026-07-20 (R31, TDD)** `+preprocess/makeSyntheticDLC.m` GapCountPerPart=0 injects no gap. `makeSyntheticDLCOutlierParamsTest`.
+
 ## 5. Batch Analysis
 
 - [ ] **P2 / C1** Surface a Min-run-s field on Batch (mirror of Analyze, once Analyze gets one).

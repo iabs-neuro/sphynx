@@ -1,0 +1,49 @@
+function tests = applyActMissingPartTest
+% APPLYACTMISSINGPARTTEST  R31 audit #4: a freezing / all-in-zone act
+% must not be silently zeroed just because ONE listed body part is
+% unresolvable. It should degrade to the resolvable parts, matching the
+% graceful behaviour of the built-in sphynx.acts.freezing.
+    tests = functiontests(localfunctions);
+end
+
+function testFreezingFiresWhenOnePartUnresolved(testCase)
+    % Animal is frozen (velocity 0 < speedMax). The act lists two parts
+    % but only 'bodycenter' exists in the schema; 'headcenter' cannot be
+    % resolved. Pre-fix the missing part left an all-false mask row and
+    % all(...) nulled the act on every frame.
+    N = 100;
+    ctx = struct( ...
+        'X', zeros(1, N), 'Y', zeros(1, N), ...
+        'velocityCmS', zeros(1, N), ...
+        'bodyParts', {{'bodycenter'}}, ...
+        'frameRate', 30);
+    act = struct( ...
+        'type', 'special', 'specialKind', 'freezing', ...
+        'bodyParts', {{'headcenter', 'bodycenter'}}, ...
+        'speedMax', 1, 'minDurationSec', 0);
+
+    bool = sphynx.acts.applyAct(act, ctx);
+
+    verifyEqual(testCase, numel(bool), N);
+    verifyTrue(testCase, any(bool), ...
+        'frozen animal with one resolvable part should still register freezing');
+end
+
+function testFreezingStaysZeroWhenNoPartResolves(testCase)
+    % If NONE of the listed parts resolve, the act legitimately cannot
+    % fire -- must be all-false, not an error.
+    N = 50;
+    ctx = struct( ...
+        'X', zeros(1, N), 'Y', zeros(1, N), ...
+        'velocityCmS', zeros(1, N), ...
+        'bodyParts', {{'leftpaw'}}, ...
+        'frameRate', 30);
+    act = struct( ...
+        'type', 'special', 'specialKind', 'freezing', ...
+        'bodyParts', {{'headcenter', 'bodycenter'}}, ...
+        'speedMax', 1, 'minDurationSec', 0);
+
+    bool = sphynx.acts.applyAct(act, ctx);
+
+    verifyFalse(testCase, any(bool));
+end

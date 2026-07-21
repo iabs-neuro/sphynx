@@ -173,24 +173,36 @@ function b = applyAllInZone(act, ctx, nFrames)
     zoneMask = ctx.zones(zIdx).maskfilled;
     if ~islogical(zoneMask); zoneMask = zoneMask > 0; end
     inMatrix = true(numel(act.bodyParts), nFrames);
+    resolved = false(1, numel(act.bodyParts));
     for k = 1:numel(act.bodyParts)
         partIdx = findPart(ctx.bodyParts, act.bodyParts{k});
-        if isempty(partIdx); inMatrix(k, :) = false; continue; end
+        if isempty(partIdx); continue; end
+        resolved(k) = true;
         inMatrix(k, :) = pointsInMask(ctx.X(partIdx, :), ctx.Y(partIdx, :), zoneMask);
     end
-    b = all(inMatrix, 1);
+    % Degrade to the resolvable parts rather than letting one missing
+    % body part zero the whole act (an unresolved row would force all()
+    % false on every frame). If none resolve, the act cannot fire.
+    if ~any(resolved); b = false(1, nFrames); return; end
+    b = all(inMatrix(resolved, :), 1);
 end
 
 function b = applyFreezing(act, ctx, nFrames)
     parts = act.bodyParts;
     if isempty(parts); parts = {'headcenter', 'bodycenter'}; end
     masks = false(numel(parts), nFrames);
+    resolved = false(1, numel(parts));
     for k = 1:numel(parts)
         idx = findPart(ctx.bodyParts, parts{k});
         if isempty(idx); continue; end
+        resolved(k) = true;
         masks(k, :) = ctx.velocityCmS(idx, :) < act.speedMax;
     end
-    b = all(masks, 1);
+    % Degrade to the resolvable parts rather than letting one unresolved
+    % body part zero the whole act (mirrors the graceful degradation in
+    % the built-in sphynx.acts.freezing). If none resolve, no freezing.
+    if ~any(resolved); b = false(1, nFrames); return; end
+    b = all(masks(resolved, :), 1);
 end
 
 function b = applyRears(act, ctx, nFrames)

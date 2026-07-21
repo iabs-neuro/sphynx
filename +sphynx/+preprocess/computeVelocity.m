@@ -45,12 +45,16 @@ function v = computeVelocity(x, y, frameRate, pxlPerCm, varargin)
     cleanedV = rawV;
     cleanedV(bad) = NaN;
 
-    % Linear interpolate over NaN gaps
+    % Linear interpolate over NaN gaps. interp1 needs >= 2 sample points;
+    % with exactly one surviving sample (e.g. every frame after the first
+    % got clipped) hold that value, and with none fall back to zero.
     if any(isnan(cleanedV))
         good = ~isnan(cleanedV);
-        if any(good)
+        if nnz(good) >= 2
             idx = (1:n)';
             cleanedV(~good) = interp1(idx(good), cleanedV(good), idx(~good), 'linear', 'extrap');
+        elseif nnz(good) == 1
+            cleanedV(:) = cleanedV(good);
         else
             cleanedV(:) = 0;
         end

@@ -227,10 +227,31 @@ function result = analyzeSession(config)
     Point = sphynx.bodyparts.identifyParts(bodyPartsNames);
     [centerX, centerY] = sphynx.bodyparts.computeCenter(BPX, BPY, Point);
     if isempty(Point.Center)
-        % append synthetic center to BPX/BPY and update Point
+        % No native body-center in this DLC schema: synthesise one (mean
+        % of all parts) and register it as a first-class trace row. It
+        % must live in BPX/BPY AND in BodyPartsTraces/bodyPartsNames so
+        % that (a) freezing() can index Point.Center in BPV without going
+        % out of bounds and (b) the per-act velocity/distance stats read
+        % the center, not the last real body part. Bumping nKept makes
+        % the per-part velocity loop (below) compute this row's velocity
+        % and the BPV matrix include it.
         BPX(end+1, :) = centerX; %#ok<AGROW>
         BPY(end+1, :) = centerY; %#ok<AGROW>
         Point.Center = size(BPX, 1);
+        sc = numel(BodyPartsTraces) + 1;
+        BodyPartsTraces(sc).BodyPartName = 'synthetic_center';
+        BodyPartsTraces(sc).TraceOriginal.X     = centerX(:);
+        BodyPartsTraces(sc).TraceOriginal.Y     = centerY(:);
+        BodyPartsTraces(sc).TraceInterpolated.X = centerX(:);
+        BodyPartsTraces(sc).TraceInterpolated.Y = centerY(:);
+        BodyPartsTraces(sc).TraceSmoothed.X     = centerX(:);
+        BodyPartsTraces(sc).TraceSmoothed.Y     = centerY(:);
+        BodyPartsTraces(sc).TraceLikelihood     = ones(numel(centerX), 1);
+        BodyPartsTraces(sc).Status = 'Synthetic';
+        BodyPartsTraces(sc).PercentNaN = 0;
+        BodyPartsTraces(sc).PercentLowLikelihood = 0;
+        bodyPartsNames{end+1} = 'synthetic_center'; %#ok<AGROW>
+        nKept = numel(BodyPartsTraces);
     end
 
     % --- 5. Per-part velocities ----------------------------------------------
