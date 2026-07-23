@@ -219,8 +219,10 @@ function b = applyRears(act, ctx, nFrames)
         if isempty(tIdx) || isempty(lIdx) || isempty(rIdx)
             b = false(1, nFrames); return;
         end
-        dL = sqrt((ctx.X(tIdx,:) - ctx.X(lIdx,:)).^2 + (ctx.Y(tIdx,:) - ctx.Y(lIdx,:)).^2);
-        dR = sqrt((ctx.X(tIdx,:) - ctx.X(rIdx,:)).^2 + (ctx.Y(tIdx,:) - ctx.Y(rIdx,:)).^2);
+        xk = 1;
+        if isfield(ctx, 'xKcorr') && ~isempty(ctx.xKcorr); xk = ctx.xKcorr; end
+        dL = sphynx.geom.hypotKcorr(ctx.X(tIdx,:) - ctx.X(lIdx,:), ctx.Y(tIdx,:) - ctx.Y(lIdx,:), xk);
+        dR = sphynx.geom.hypotKcorr(ctx.X(tIdx,:) - ctx.X(rIdx,:), ctx.Y(tIdx,:) - ctx.Y(rIdx,:), xk);
         sumPx = dL + dR;
         % Smooth sumDist on the same FrameRate/2 window the built-in
         % uses, so threshold semantics line up.

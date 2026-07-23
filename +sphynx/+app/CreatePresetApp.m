@@ -204,7 +204,8 @@ classdef CreatePresetApp < handle
         function setArena(app, geometry, points)
             try
                 arena = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
-                    'Points', points, 'ExistingObjects', app.State.objects);
+                    'Points', points, 'ExistingObjects', app.State.objects, ...
+                    'XKcorr', app.State.x_kcorr);
                 app.State.arena = arena;
                 app.applog('info', 'Arena: %s OK', geometry);
                 app.refreshPreview();
@@ -220,7 +221,7 @@ classdef CreatePresetApp < handle
             try
                 obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
                     'Points', points, 'ExistingObjects', app.State.objects, ...
-                    'ExistingArena', app.State.arena);
+                    'ExistingArena', app.State.arena, 'XKcorr', app.State.x_kcorr);
                 obj.type = sprintf('object%d', numel(app.State.objects) + 1);
                 objCanon = app.canonicalizeObjects(obj);
                 existing = app.canonicalizeObjects(app.State.objects);
@@ -274,7 +275,7 @@ classdef CreatePresetApp < handle
                 otherIdx = setdiff(1:numel(app.State.objects), idx);
                 obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
                     'ExistingObjects', app.State.objects(otherIdx), ...
-                    'ExistingArena', app.State.arena);
+                    'ExistingArena', app.State.arena, 'XKcorr', app.State.x_kcorr);
                 obj.type = app.State.objects(idx).type;     % preserve label
                 app.State.objects(idx) = obj;
                 app.refreshObjectsList();
@@ -306,7 +307,8 @@ classdef CreatePresetApp < handle
                 Zobj = sphynx.preset.buildObjectZones(app.State.savedObjects, ...
                     app.State.height, app.State.width, ...
                     'PixelsPerCm', app.State.pxlPerCm, ...
-                    'ZoneWidthCm', app.ObjectZoneWidthField.Value);
+                    'ZoneWidthCm', app.ObjectZoneWidthField.Value, ...
+                    'XKcorr', app.State.x_kcorr);
                 Z = [Z, Zobj];
             end
             if isempty(Z); return; end
@@ -573,7 +575,8 @@ classdef CreatePresetApp < handle
                     Zobj = sphynx.preset.buildObjectZones(app.State.savedObjects, ...
                         app.State.height, app.State.width, ...
                         'PixelsPerCm', app.State.pxlPerCm, ...
-                        'ZoneWidthCm', app.ObjectZoneWidthField.Value);
+                        'ZoneWidthCm', app.ObjectZoneWidthField.Value, ...
+                        'XKcorr', app.State.x_kcorr);
                     Z = [Z, Zobj];
                 else
                     sphynx.util.log('info', '[App] object zones already committed, not duplicating');
@@ -1197,7 +1200,8 @@ classdef CreatePresetApp < handle
                         pts = h.Position;
                 end
                 try
-                    obj = sphynx.preset.readArenaGeometry(app.State.frame, geom, 'Points', pts);
+                    obj = sphynx.preset.readArenaGeometry(app.State.frame, geom, ...
+                        'Points', pts, 'XKcorr', app.State.x_kcorr);
                     obj.type  = sprintf('object%d', numel(app.State.objects) + 1);
                     obj.class = '';
                     objCanon = app.canonicalizeObjects(obj);
@@ -2813,7 +2817,7 @@ function onPickArena(app)
     end
     try
         arena = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
-            'PickMode', pickMode);
+            'PickMode', pickMode, 'XKcorr', app.State.x_kcorr);
         app.State.arena = arena;
         app.applog('info', 'Arena: %s OK', geometry);
         app.refreshPreview();
@@ -2843,7 +2847,7 @@ function onAddObject(app)
             obj = sphynx.preset.readArenaGeometry(app.State.frame, geometry, ...
                 'PickMode', pickMode, ...
                 'ExistingObjects', app.State.objects, ...
-                'ExistingArena', app.State.arena);
+                'ExistingArena', app.State.arena, 'XKcorr', app.State.x_kcorr);
             obj.type = sprintf('object%d', numel(app.State.objects) + 1);
             if isempty(app.State.objects)
                 app.State.objects = obj;
@@ -3042,78 +3046,111 @@ function Z = computeZonesFromUI(app)
     try
         strategy = app.ZonesStrategyDropDown.Value;
         wallCm = app.WallWidthField.Value;
-        switch strategy
-            case 'corners-walls-center'
-                cornerType = 'round';
-                if ~isempty(app.CornerTypeDropDown)
-                    cornerType = app.CornerTypeDropDown.Value;
-                end
-                Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, ...
-                    'Strategy', 'corners-walls-center', ...
-                    'PixelsPerCm', app.State.pxlPerCm, ...
-                    'WallWidthCm', wallCm, ...
-                    'CornerType', cornerType, ...
-                    'CornerPoints', cornerPointsFromArena(app.State.arena));
-            case 'strips'
-                % Pass arena vertices when geometry is Polygon so strips
-                % run parallel to the arena's sides (TODO #7).
-                arenaVerts = [];
-                if strcmp(app.State.arena.geometry, 'Polygon')
-                    arenaVerts = arenaPolygonVertices(app.State.arena);
-                end
-                Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, ...
-                    'Strategy', 'strips', ...
-                    'PixelsPerCm', app.State.pxlPerCm, ...
-                    'WallWidthCm', wallCm, ...
-                    'NumStrips', app.NumStripsField.Value, ...
-                    'StripDirection', app.StripDirDropDown.Value, ...
-                    'ArenaVertices', arenaVerts);
-            case 'circle'
-                Z = sphynx.preset.buildZonesCircleWall(app.State.arena.mask, ...
-                    'PixelsPerCm', app.State.pxlPerCm, ...
-                    'WallWidthCm', wallCm);
-            case 'circle-rings'
-                Z = sphynx.preset.buildZonesCircle(app.State.arena.mask, ...
-                    'PixelsPerCm', app.State.pxlPerCm, ...
-                    'WallWidthCm', wallCm, ...
-                    'MiddleWidthCm', app.MiddleWidthField.Value);
-            case 'circle-with-center'
-                Z = sphynx.preset.buildZonesCircleCenter(app.State.arena.mask, ...
-                    'PixelsPerCm', app.State.pxlPerCm, ...
-                    'CenterDiameterCm', app.CenterDiameterCmField.Value, ...
-                    'WallWidthCm', app.WallWidthField.Value);
-            case 'none'
-                Z = sphynx.preset.buildZonesSquare(app.State.arena.mask, 'Strategy', 'none');
+        kc = app.State.x_kcorr;
+        ppc = app.State.pxlPerCm;
+        cornerType = 'round';
+        if ~isempty(app.CornerTypeDropDown)
+            cornerType = app.CornerTypeDropDown.Value;
         end
-        % R14.8: every strategy must contribute an 'arena_realout' zone --
-        % the arena mask extended outward by the wall width so downstream
-        % code has a "barely outside the arena" band to tolerate tracking
-        % jitter at the boundary. corners-walls-center and strips already
-        % emit it from classifySquare; circle/circle-rings/circle-with-center
-        % and 'none' did not. Append here when missing so behaviour is
-        % uniform across strategies.
-        if ~isempty(Z)
-            hasArenaRealout = any(strcmp({Z.name}, 'arena_realout'));
-        else
-            hasArenaRealout = false;
+        % Pre-normalize the point-geometry inputs (corner points, arena
+        % vertices) so the builder runs entirely in normalized (isotropic-
+        % cm) space alongside the resampled arena mask. Ring widths and
+        % corner disks then come out physically uniform on both axes; the
+        % wrapper resamples every zone mask back to pixel space for display.
+        cornerPtsNorm = normalizePts(cornerPointsFromArena(app.State.arena), kc);
+        arenaVertsNorm = [];
+        if strcmp(app.State.arena.geometry, 'Polygon')
+            arenaVertsNorm = normalizePts(arenaPolygonVertices(app.State.arena), kc);
         end
-        if ~hasArenaRealout
-            outWidthCm = wallCm;
-            if isnan(outWidthCm) || outWidthCm <= 0
-                outWidthCm = 3;   % fallback margin
-            end
-            ringPx = outWidthCm * app.State.pxlPerCm;
-            arenaMask = app.State.arena.mask > 0;
-            distOutside = bwdist(arenaMask);
-            outerRing = (distOutside > 0) & (distOutside <= ringPx);
-            zr.name = 'arena_realout';
-            zr.type = 'area';
-            zr.maskfilled = arenaMask | outerRing;
-            if isempty(Z); Z = zr; else; Z(end+1) = zr; end
-        end
+        buildFn = @(m) buildArenaZonesNorm(m, strategy, ppc, wallCm, ...
+            cornerType, cornerPtsNorm, arenaVertsNorm, app);
+        Z = sphynx.geom.buildZonesInNorm(app.State.arena.mask, kc, buildFn);
     catch ME
         app.status(sprintf('Zone build failed: %s', ME.message));
         Z = struct('name', {}, 'type', {}, 'maskfilled', {});
+    end
+end
+
+function ptsNorm = normalizePts(pts, x_kcorr)
+    % Map an Nx2 [x y] point set into normalized space (X stretched by
+    % x_kcorr). Empty in -> empty out.
+    if isempty(pts)
+        ptsNorm = pts;
+        return;
+    end
+    [nx, ny] = sphynx.geom.toNormPoints(pts(:, 1), pts(:, 2), x_kcorr);
+    ptsNorm = [nx, ny];
+end
+
+function Z = buildArenaZonesNorm(arenaMask, strategy, ppc, wallCm, ...
+        cornerType, cornerPtsNorm, arenaVertsNorm, app)
+    % Build arena-strategy zones on a normalized (isotropic-cm) mask.
+    % Called by sphynx.geom.buildZonesInNorm, which resamples the mask in
+    % and every emitted zone mask back to pixel space. All point-geometry
+    % inputs are already normalized by the caller.
+    switch strategy
+        case 'corners-walls-center'
+            Z = sphynx.preset.buildZonesSquare(arenaMask, ...
+                'Strategy', 'corners-walls-center', ...
+                'PixelsPerCm', ppc, ...
+                'WallWidthCm', wallCm, ...
+                'CornerType', cornerType, ...
+                'CornerPoints', cornerPtsNorm);
+        case 'strips'
+            % Arena vertices (normalized) keep strips parallel to the
+            % arena's sides for Polygon geometry.
+            Z = sphynx.preset.buildZonesSquare(arenaMask, ...
+                'Strategy', 'strips', ...
+                'PixelsPerCm', ppc, ...
+                'WallWidthCm', wallCm, ...
+                'NumStrips', app.NumStripsField.Value, ...
+                'StripDirection', app.StripDirDropDown.Value, ...
+                'ArenaVertices', arenaVertsNorm);
+        case 'circle'
+            Z = sphynx.preset.buildZonesCircleWall(arenaMask, ...
+                'PixelsPerCm', ppc, ...
+                'WallWidthCm', wallCm);
+        case 'circle-rings'
+            Z = sphynx.preset.buildZonesCircle(arenaMask, ...
+                'PixelsPerCm', ppc, ...
+                'WallWidthCm', wallCm, ...
+                'MiddleWidthCm', app.MiddleWidthField.Value);
+        case 'circle-with-center'
+            Z = sphynx.preset.buildZonesCircleCenter(arenaMask, ...
+                'PixelsPerCm', ppc, ...
+                'CenterDiameterCm', app.CenterDiameterCmField.Value, ...
+                'WallWidthCm', wallCm);
+        case 'none'
+            Z = sphynx.preset.buildZonesSquare(arenaMask, 'Strategy', 'none');
+        otherwise
+            Z = struct('name', {}, 'type', {}, 'maskfilled', {});
+    end
+
+    % R14.8: every strategy must contribute an 'arena_realout' zone -- the
+    % arena mask extended outward by the wall width so downstream code has a
+    % "barely outside the arena" band to tolerate tracking jitter at the
+    % boundary. corners-walls-center and strips already emit it from
+    % classifySquare; circle/circle-rings/circle-with-center and 'none' did
+    % not. Append here (in normalized space) when missing so behaviour is
+    % uniform across strategies.
+    if ~isempty(Z)
+        hasArenaRealout = any(strcmp({Z.name}, 'arena_realout'));
+    else
+        hasArenaRealout = false;
+    end
+    if ~hasArenaRealout
+        outWidthCm = wallCm;
+        if isnan(outWidthCm) || outWidthCm <= 0
+            outWidthCm = 3;   % fallback margin
+        end
+        ringPx = outWidthCm * ppc;
+        am = arenaMask > 0;
+        distOutside = bwdist(am);
+        outerRing = (distOutside > 0) & (distOutside <= ringPx);
+        zr.name = 'arena_realout';
+        zr.type = 'area';
+        zr.maskfilled = am | outerRing;
+        if isempty(Z); Z = zr; else; Z(end+1) = zr; end
     end
 end
 

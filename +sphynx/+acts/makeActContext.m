@@ -26,6 +26,12 @@ function ctx = makeActContext(result)
     else
         ctx.pixelsPerCm = 1;
     end
+    if isfield(result.Options, 'x_kcorr') && isnumeric(result.Options.x_kcorr) ...
+            && isscalar(result.Options.x_kcorr) && result.Options.x_kcorr > 0
+        ctx.xKcorr = result.Options.x_kcorr;
+    else
+        ctx.xKcorr = 1;
+    end
     ctx.allActs = sphynx.acts.emptyActsArray();
     ctx.resultsByName = containers.Map();
 end

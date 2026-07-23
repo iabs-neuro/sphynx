@@ -33,7 +33,9 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
     addParameter(p, 'SmoothWindowFrames', [], @(v) isempty(v) || (isnumeric(v) && v >= 3 && mod(v,2)==1));
     addParameter(p, 'MinRunFrames', 5);
     addParameter(p, 'FrameRate', 30);
+    addParameter(p, 'XKcorr', 1, @(v) isnumeric(v) && isscalar(v) && v > 0);
     parse(p, varargin{:});
+    xKcorr = p.Results.XKcorr;
 
     if ~ismember(mode, {'AllBodyParts', 'TailbasePaws'})
         error('sphynx:rear:unknownMode', ...
@@ -74,7 +76,7 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
             for part = 1:size(BodyPartsX, 1)
                 dx = cx - BodyPartsX(part, :);
                 dy = cy - BodyPartsY(part, :);
-                sumDist = sumDist + sqrt(dx.^2 + dy.^2);
+                sumDist = sumDist + sphynx.geom.hypotKcorr(dx, dy, xKcorr);
             end
             window = orDefault(p.Results.SmoothWindowFrames, makeOdd(round(p.Results.FrameRate)));
             % Derived-signal denoising -- generic moving average so it
@@ -90,7 +92,7 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
             for part = [Point.LeftHindLimb, Point.RightHindLimb]
                 dx = tx - BodyPartsX(part, :);
                 dy = ty - BodyPartsY(part, :);
-                sumDist = sumDist + sqrt(dx.^2 + dy.^2);
+                sumDist = sumDist + sphynx.geom.hypotKcorr(dx, dy, xKcorr);
             end
             window = orDefault(p.Results.SmoothWindowFrames, makeOdd(ceil(p.Results.FrameRate / 2)));
             smoothed = sphynx.util.smoothDerived(sumDist(:), window);

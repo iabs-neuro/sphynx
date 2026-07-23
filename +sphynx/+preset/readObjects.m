@@ -20,6 +20,7 @@ function objects = readObjects(frame, geometries, varargin)
     addRequired(p, 'frame');
     addRequired(p, 'geometries');
     addParameter(p, 'PointsPerObject', {});
+    addParameter(p, 'XKcorr', 1, @(v) isnumeric(v) && isscalar(v) && v > 0);
     parse(p, frame, geometries, varargin{:});
 
     K = numel(geometries);
@@ -37,7 +38,8 @@ function objects = readObjects(frame, geometries, varargin)
         else
             extraArgs = {};
         end
-        a = sphynx.preset.readArenaGeometry(frame, geometries{k}, extraArgs{:});
+        a = sphynx.preset.readArenaGeometry(frame, geometries{k}, ...
+            'XKcorr', p.Results.XKcorr, extraArgs{:});
         a.type = sprintf('object%d', k);
         objects(k) = a;
     end

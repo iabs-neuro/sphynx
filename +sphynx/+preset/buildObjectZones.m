@@ -14,6 +14,11 @@ function Zones = buildObjectZones(objects, frameH, frameW, varargin)
 %     'PixelsPerCm'        required when ZoneWidthCm > 0
 %     'ZoneWidthCm'        default 2.5 — inflation radius for the
 %                          interaction zone around each object
+%     'XKcorr'             default 1 — pixel anisotropy factor
+%                          (pxlPerCmY / pxlPerCmX). When ~= 1 the
+%                          interaction rings are inflated in normalized
+%                          (isotropic-cm) space so the ZoneWidthCm band is
+%                          physically uniform on the video frame.
 %
 %   For each object i, three zones are built (matching legacy):
 %     objecti_real     - the object polygon itself
@@ -33,6 +38,7 @@ function Zones = buildObjectZones(objects, frameH, frameW, varargin)
     addRequired(p, 'frameW');
     addParameter(p, 'PixelsPerCm', [], @(v) isempty(v) || (isnumeric(v) && v > 0));
     addParameter(p, 'ZoneWidthCm', 2.5, @(v) isnumeric(v) && v >= 0);
+    addParameter(p, 'XKcorr', 1, @(v) isnumeric(v) && isscalar(v) && v > 0);
     parse(p, objects, frameH, frameW, varargin{:});
 
     Zones = struct('name', {}, 'type', {}, 'maskfilled', {});
@@ -43,6 +49,7 @@ function Zones = buildObjectZones(objects, frameH, frameW, varargin)
             'PixelsPerCm is required when ZoneWidthCm > 0');
     end
     widthPxl = p.Results.ZoneWidthCm * ifEmpty(p.Results.PixelsPerCm, 1);
+    kc = p.Results.XKcorr;
 
     nObj = numel(objects);
 
@@ -54,10 +61,9 @@ function Zones = buildObjectZones(objects, frameH, frameW, varargin)
 
         Zones(end+1) = mkZone([objName '_real'], objMask); %#ok<AGROW>
         if widthPxl > 0
-            d = bwdist(objMask);
-            inflated = d <= widthPxl;
+            [inflated, ring] = inflateNorm(objMask, widthPxl, kc);
             Zones(end+1) = mkZone([objName '_realout'], inflated); %#ok<AGROW>
-            Zones(end+1) = mkZone([objName '_out'], inflated & ~objMask); %#ok<AGROW>
+            Zones(end+1) = mkZone([objName '_out'], ring); %#ok<AGROW>
         end
     end
 
@@ -68,8 +74,7 @@ function Zones = buildObjectZones(objects, frameH, frameW, varargin)
         for i = 1:nObj
             allReal = allReal | logical(objects(i).mask);
             if widthPxl > 0
-                d = bwdist(logical(objects(i).mask));
-                allRealOut = allRealOut | (d <= widthPxl);
+                allRealOut = allRealOut | inflateNorm(logical(objects(i).mask), widthPxl, kc);
             end
         end
         Zones(end+1) = mkZone('objectall_real', allReal);
@@ -78,6 +83,25 @@ function Zones = buildObjectZones(objects, frameH, frameW, varargin)
             Zones(end+1) = mkZone('objectall_out', allRealOut & ~allReal);
         end
     end
+end
+
+function [inflated, ring] = inflateNorm(objMask, widthPxl, x_kcorr)
+% Inflate objMask by widthPxl in normalized (isotropic-cm) space, then
+% map the result back to pixel space. widthPxl is expressed on the Y
+% (reference) scale, which is the isotropic scale of normalized space.
+    if x_kcorr == 1
+        d = bwdist(objMask);
+        inflated = d <= widthPxl;
+        ring = inflated & ~objMask;
+        return;
+    end
+    sz = size(objMask);
+    mn = sphynx.geom.toNormMask(objMask, x_kcorr);
+    d = bwdist(mn);
+    inflatedNorm = d <= widthPxl;
+    ringNorm = inflatedNorm & ~mn;
+    inflated = sphynx.geom.fromNormMask(inflatedNorm, sz);
+    ring = sphynx.geom.fromNormMask(ringNorm, sz);
 end
 
 function z = mkZone(name, mask)

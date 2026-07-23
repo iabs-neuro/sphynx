@@ -28,8 +28,10 @@ function arena = readArenaGeometry(frame, geometry, varargin)
     addParameter(p, 'PickMode', 'shape', @(s) any(strcmpi(s, {'shape', 'points'})));
     addParameter(p, 'ExistingObjects', struct('border_x', {}, 'border_y', {}));
     addParameter(p, 'ExistingArena', []);
+    addParameter(p, 'XKcorr', 1, @(v) isnumeric(v) && isscalar(v) && v > 0);
     parse(p, frame, geometry, varargin{:});
 
+    xk = p.Results.XKcorr;
     [H, W, ~] = size(frame);
     th = linspace(0, 2*pi, 20000)';
 
@@ -162,22 +164,33 @@ function arena = readArenaGeometry(frame, geometry, varargin)
             arena.border_separate_x = sx;
             arena.border_separate_y = sy;
         case 'Circle'
-            [xc, yc, R] = sphynx.util.circleFit(pts(:,1), pts(:,2));
-            arena.border_x = xc + R * cos(th);
-            arena.border_y = yc + R * sin(th);
+            % Fit the circle in normalized (isotropic-cm) space so a
+            % physically round object is a true circle there; map the dense
+            % border back to pixels (an ellipse when x_kcorr ~= 1) so it
+            % overlays the video frame.
+            [pnx, pny] = sphynx.geom.toNormPoints(pts(:,1), pts(:,2), xk);
+            [xc, yc, R] = sphynx.util.circleFit(pnx, pny);
+            bxN = xc + R * cos(th);
+            byN = yc + R * sin(th);
+            [arena.border_x, arena.border_y] = sphynx.geom.fromNormPoints(bxN, byN, xk);
         case 'Ellipse'
             e = sphynx.util.ellipseFit(pts(:,1), pts(:,2));
             arena.border_y = e.Y0_in + e.b*cos(th)*cos(e.phi) - e.a*sin(th)*sin(e.phi);
             arena.border_x = e.X0_in + e.b*cos(th)*sin(e.phi) + e.a*sin(th)*cos(e.phi);
         case 'O-maze'
-            % Two concentric circles; we keep both as separate fields.
+            % Two concentric circles; fit both in normalized space, map the
+            % dense borders back to pixels (ellipses when x_kcorr ~= 1).
             split = find(any(isnan(pts), 2), 1);
             outer = pts(1:split-1, :);
             inner = pts(split+1:end, :);
-            [xcO, ycO, RO] = sphynx.util.circleFit(outer(:,1), outer(:,2));
-            [xcI, ycI, RI] = sphynx.util.circleFit(inner(:,1), inner(:,2));
-            arena.border_x = [xcO + RO*cos(th), xcI + RI*cos(th)];
-            arena.border_y = [ycO + RO*sin(th), ycI + RI*sin(th)];
+            [onx, ony] = sphynx.geom.toNormPoints(outer(:,1), outer(:,2), xk);
+            [inx, iny] = sphynx.geom.toNormPoints(inner(:,1), inner(:,2), xk);
+            [xcO, ycO, RO] = sphynx.util.circleFit(onx, ony);
+            [xcI, ycI, RI] = sphynx.util.circleFit(inx, iny);
+            [boxN, boyN] = sphynx.geom.fromNormPoints(xcO + RO*cos(th), ycO + RO*sin(th), xk);
+            [bixN, biyN] = sphynx.geom.fromNormPoints(xcI + RI*cos(th), ycI + RI*sin(th), xk);
+            arena.border_x = [boxN, bixN];
+            arena.border_y = [boyN, biyN];
         otherwise
             error('sphynx:readArenaGeometry:unknownGeometry', ...
                 'geometry must be Polygon|Circle|Ellipse|O-maze; got "%s"', geometry);

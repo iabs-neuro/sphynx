@@ -30,6 +30,7 @@ function v = computeVelocity(x, y, frameRate, pxlPerCm, varargin)
     addRequired(p, 'pxlPerCm', @(v) validateattributes(v, {'numeric'}, {'positive'}));
     addParameter(p, 'MaxVelocityCmS', 50, @(v) isnumeric(v) && v > 0);
     addParameter(p, 'SmoothWindow', 11, @(v) isnumeric(v) && v >= 3 && mod(v,2)==1);
+    addParameter(p, 'XKcorr', 1, @(v) isnumeric(v) && isscalar(v) && v > 0);
     parse(p, x, y, frameRate, pxlPerCm, varargin{:});
 
     x = x(:); y = y(:);
@@ -38,7 +39,8 @@ function v = computeVelocity(x, y, frameRate, pxlPerCm, varargin)
     dx = [0; diff(x)];
     dy = [0; diff(y)];
 
-    rawV = sqrt(dx.^2 + dy.^2) * frameRate / pxlPerCm;  % cm/s per frame
+    % Anisotropy-corrected displacement (X stretched by x_kcorr) / Y scale.
+    rawV = sphynx.geom.hypotKcorr(dx, dy, p.Results.XKcorr) * frameRate / pxlPerCm;  % cm/s per frame
 
     % Clip outliers
     bad = rawV > p.Results.MaxVelocityCmS;
