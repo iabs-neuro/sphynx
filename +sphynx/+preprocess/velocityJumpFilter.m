@@ -1,4 +1,4 @@
-function [Xout, Yout, badMask] = velocityJumpFilter(X, Y, frameRate, pxlPerCm, maxCmS)
+function [Xout, Yout, badMask] = velocityJumpFilter(X, Y, frameRate, pxlPerCm, maxCmS, xKcorr)
 % VELOCITYJUMPFILTER  Mark frames where between-frame displacement
 % exceeds the biological max velocity. Pre-interpolation outlier gate.
 %
@@ -25,6 +25,7 @@ function [Xout, Yout, badMask] = velocityJumpFilter(X, Y, frameRate, pxlPerCm, m
 %   outliers blend with neighbors and the threshold no longer triggers.
 
     if nargin < 5 || isempty(maxCmS); maxCmS = 50; end
+    if nargin < 6 || isempty(xKcorr); xKcorr = 1; end
     X = X(:); Y = Y(:);
     n = numel(X);
     badMask = false(n, 1);
@@ -35,7 +36,7 @@ function [Xout, Yout, badMask] = velocityJumpFilter(X, Y, frameRate, pxlPerCm, m
 
     dx = diff(X);
     dy = diff(Y);
-    dispCm = sqrt(dx.^2 + dy.^2) / pxlPerCm;
+    dispCm = sphynx.geom.hypotKcorr(dx, dy, xKcorr) / pxlPerCm;
     velCmS = dispCm * frameRate;
 
     % NaN-safe: NaN comparisons -> false; we don't flag from NaN propagation

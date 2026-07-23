@@ -132,6 +132,13 @@ function result = analyzeSession(config)
     nFrames = dlc.nFrames;
     frameRate = Options.FrameRate;
     pxlPerCm = Options.pxl2sm;
+    % Pixel anisotropy (pxlPerCmY / pxlPerCmX). When ~= 1 all distance and
+    % velocity math stretches the X component so magnitudes are physical.
+    xKcorr = 1;
+    if isfield(Options, 'x_kcorr') && isnumeric(Options.x_kcorr) ...
+            && isscalar(Options.x_kcorr) && Options.x_kcorr > 0
+        xKcorr = Options.x_kcorr;
+    end
     log('info', 'Loaded %d frames, %d body parts', nFrames, nParts);
 
     % --- 2. Smooth-window sizes from frame rate -------------------------------
@@ -163,6 +170,7 @@ function result = analyzeSession(config)
         ctxBase.frameHeight  = Options.Height;
         ctxBase.frameRate    = frameRate;
         ctxBase.pixelsPerCm  = pxlPerCm;
+        ctxBase.xKcorr       = xKcorr;
         if ~isempty(outlierSettings); ctxBase.outlier = outlierSettings; end
 
         for part = 1:nParts
@@ -238,7 +246,7 @@ function result = analyzeSession(config)
         win = pickSmoothWindow(BodyPartsTraces(part).BodyPartName, smallWin, bigWin);
         v = sphynx.preprocess.computeVelocity(BPX(part,:)', BPY(part,:)', frameRate, pxlPerCm, ...
             'MaxVelocityCmS', config.preprocess.maxVelocityCmS, ...
-            'SmoothWindow', win);
+            'SmoothWindow', win, 'XKcorr', xKcorr);
         BodyPartsTraces(part).Velocity = v;            %#ok<AGROW>
         BodyPartsTraces(part).VelocitySmoothed = v;    % already smoothed in computeVelocity
         BodyPartsTraces(part).AverageSpeed = round(mean(v, 'omitnan'), 2);
@@ -259,7 +267,7 @@ function result = analyzeSession(config)
         % Fallback: use computeCenter row
         velocity = sphynx.preprocess.computeVelocity(centerX(:), centerY(:), frameRate, pxlPerCm, ...
             'MaxVelocityCmS', config.preprocess.maxVelocityCmS, ...
-            'SmoothWindow', bigWin);
+            'SmoothWindow', bigWin, 'XKcorr', xKcorr);
     else
         velocity = BodyPartsTraces(velPartIdx).VelocitySmoothed;
     end
@@ -316,7 +324,8 @@ function result = analyzeSession(config)
                 'TailbasePawsThresholdCm',  config.acts.rearThresholdTailbasePawsCm, ...
                 'AutoThreshold', autoFlag, ...
                 'FrameRate', frameRate, ...
-                'MinRunFrames', minRunFrames);
+                'MinRunFrames', minRunFrames, ...
+                'XKcorr', xKcorr);
             Acts(end+1).ActName = 'rear';
             Acts(end).ActArrayRefine = double(r(:)');
             Acts(end).Category = 'builtin';
@@ -341,6 +350,7 @@ function result = analyzeSession(config)
                 ctx.zones = Zones;
                 ctx.frameRate = frameRate;
                 ctx.pixelsPerCm = pxlPerCm;
+                ctx.xKcorr = xKcorr;
                 ctx.allActs = customActs;
                 ctx.resultsByName = containers.Map();
                 results = sphynx.acts.evalActsLibrary(customActs, ctx);

@@ -83,10 +83,12 @@ function out = applyPerPartSettings(rawX, rawY, likelihood, settings, ctx)
         % velocity-jump
         if isfield(ctx.outlier, 'velocityJump') && ...
                 ctx.outlier.velocityJump.enabled && ~isempty(ctx.pixelsPerCm)
+            vjKcorr = 1;
+            if isfield(ctx, 'xKcorr') && ~isempty(ctx.xKcorr); vjKcorr = ctx.xKcorr; end
             [out.X_clean, out.Y_clean, badV] = ...
                 sphynx.preprocess.velocityJumpFilter(out.X_clean, out.Y_clean, ...
                     ctx.frameRate, ctx.pixelsPerCm, ...
-                    ctx.outlier.velocityJump.maxVelocityCmS);
+                    ctx.outlier.velocityJump.maxVelocityCmS, vjKcorr);
             outliers = outliers | badV;
         end
         % Hampel — window can be specified in seconds (preferred) or samples
