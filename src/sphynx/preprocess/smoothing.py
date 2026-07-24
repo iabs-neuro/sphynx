@@ -11,6 +11,8 @@ from sphynx.exceptions import SphynxValueError
 
 
 def smooth_trace(trace, window_len, poly_order: int = 3) -> np.ndarray:
+    if int(window_len) != window_len:
+        raise SphynxValueError(f"window_len must be an integer; got {window_len}")
     if window_len % 2 == 0:
         raise SphynxValueError(f"window_len must be odd; got {window_len}")
     if window_len < 3:

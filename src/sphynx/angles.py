@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.signal import savgol_filter
 
+from sphynx.exceptions import SphynxValueError
+
 
 def wrap(angles) -> np.ndarray:
     """Wrap angles into (-pi, pi]. pi stays pi; -pi maps to pi. Port of
@@ -17,6 +19,11 @@ def wrap(angles) -> np.ndarray:
 def unwrap_for_smooth(angles, window_len, poly_order: int = 3) -> np.ndarray:
     """Unwrap a circular signal, Savitzky-Golay smooth it, re-wrap into
     (-pi, pi]. Port of sphynx.angles.unwrapForSmooth (Bug-2 fix)."""
+    if window_len % 2 == 0:
+        raise SphynxValueError(f"window_len must be odd; got {window_len}")
+    if window_len < 3:
+        raise SphynxValueError(f"window_len must be >= 3; got {window_len}")
+
     a = np.asarray(angles, dtype=float).ravel()
     unwrapped = np.unwrap(a)
     if unwrapped.size < window_len:

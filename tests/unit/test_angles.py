@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from sphynx.angles import wrap, unwrap_for_smooth, head_direction
+from sphynx.exceptions import SphynxValueError
 from tests.fixtures.synthetic import make_rotating_mouse_dlc
 
 
@@ -39,6 +40,23 @@ def test_unwrap_for_smooth_short_input_returns_wrapped():
     out = unwrap_for_smooth(a, 11)
     assert out.size == 3
     assert np.all(out >= -np.pi) and np.all(out <= np.pi)
+
+
+def test_unwrap_for_smooth_even_window_raises():
+    with pytest.raises(SphynxValueError):
+        unwrap_for_smooth(np.zeros(50), 4)
+
+
+def test_unwrap_for_smooth_too_small_window_raises():
+    with pytest.raises(SphynxValueError):
+        unwrap_for_smooth(np.zeros(50), 1)
+
+
+def test_head_direction_even_smooth_window_raises():
+    f = make_rotating_mouse_dlc(50, 4)
+    with pytest.raises(SphynxValueError):
+        head_direction(f["head_tip_x"], f["head_tip_y"],
+                        f["head_center_x"], f["head_center_y"], 4)
 
 
 def test_head_direction_no_large_jumps():

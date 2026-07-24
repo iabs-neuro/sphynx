@@ -15,6 +15,11 @@ def test_too_small_window_raises():
         smooth_trace(np.arange(20.0), 1)
 
 
+def test_non_integral_window_raises():
+    with pytest.raises(SphynxValueError):
+        smooth_trace(np.arange(20.0), 3.5)
+
+
 def test_short_trace_passthrough():
     x = np.array([1.0, 2.0, 3.0])
     assert np.allclose(smooth_trace(x, 11), x)
