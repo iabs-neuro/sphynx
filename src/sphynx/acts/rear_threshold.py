@@ -14,7 +14,7 @@ def auto_rear_threshold_cm(
     s = s[np.isfinite(s)]
     if s.size == 0:
         return float("nan")
-    pctl_thr = float(np.percentile(s, pctl))
+    pctl_thr = float(np.percentile(s, pctl, method="hazen"))
     std = float(np.std(s, ddof=1)) if s.size > 1 else 0.0
     std_thr = float(np.median(s)) - std_k * std
     thr = min(pctl_thr, std_thr)

@@ -20,6 +20,8 @@ def freezing(body_parts_velocity, point: Point, mode: str, rest_threshold_cm_s, 
         raise SphynxValueError(
             f"mode must be AllBodyParts|NoseAndCenter|HeadAndCenter; got {mode}")
     bpv = np.asarray(body_parts_velocity, dtype=float)
+    if bpv.ndim != 2:
+        raise SphynxValueError("body_parts_velocity must be a 2-D Parts x N matrix")
     parts, n = bpv.shape
 
     eff = mode

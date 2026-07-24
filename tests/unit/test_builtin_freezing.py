@@ -25,3 +25,9 @@ def test_degrades_to_all_body_parts():
 def test_unknown_mode_raises():
     with pytest.raises(SphynxValueError):
         freezing(np.zeros((2, 10)), Point(), "Bogus", 1, 5)
+
+
+def test_1d_input_raises_sphynx_value_error():
+    # TDD: 1-D input should raise SphynxValueError, not raw ValueError
+    with pytest.raises(SphynxValueError, match="must be a 2-D"):
+        freezing(np.zeros(10), Point(), "AllBodyParts", 1, 5)
