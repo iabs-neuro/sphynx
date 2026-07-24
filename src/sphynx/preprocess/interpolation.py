@@ -14,9 +14,15 @@ def _interp1(x, y, xq, method: str, extrap: bool) -> np.ndarray:
             return interp1d(x, y, kind="linear", fill_value="extrapolate")(xq)
         return np.interp(xq, x, y)
     if method == "pchip":
-        return PchipInterpolator(x, y, extrapolate=True)(xq)
+        try:
+            return PchipInterpolator(x, y, extrapolate=True)(xq)
+        except ValueError as e:
+            raise SphynxValueError(f"interpolation method '{method}' failed: {e}") from e
     if method == "spline":
-        return CubicSpline(x, y, extrapolate=True)(xq)
+        try:
+            return CubicSpline(x, y, extrapolate=True)(xq)
+        except ValueError as e:
+            raise SphynxValueError(f"interpolation method '{method}' failed: {e}") from e
     raise SphynxValueError(f"method must be linear|pchip|spline; got {method}")
 
 

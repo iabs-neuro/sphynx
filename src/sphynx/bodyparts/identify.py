@@ -3,7 +3,7 @@ sphynx.bodyparts.identifyParts."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 
 
 @dataclass

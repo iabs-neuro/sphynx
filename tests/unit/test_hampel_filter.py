@@ -38,3 +38,13 @@ def test_too_short_unchanged():
     xo, yo, bad = hampel_filter([1.0, 2.0], [1.0, 2.0])
     assert np.array_equal(xo, [1.0, 2.0])
     assert bad.sum() == 0
+
+
+def test_flags_spike_on_flat_baseline():
+    n = 200
+    x = np.full(n, 100.0)
+    y = np.full(n, 100.0)
+    x[100] = 9999.0
+    xo, _, bad = hampel_filter(x, y, 7, 3)
+    assert bad[100]
+    assert np.isnan(xo[100])

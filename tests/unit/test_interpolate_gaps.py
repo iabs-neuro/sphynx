@@ -1,6 +1,18 @@
 import numpy as np
+import pytest
 
+from sphynx.exceptions import SphynxValueError
 from sphynx.preprocess.interpolation import interpolate_gaps
+
+
+def test_spline_too_few_points_raises_sphynx_error():
+    # A single valid sample with edge_mode="extrap" drives CubicSpline down
+    # to 1 point, which scipy rejects ("`x` must contain at least 2
+    # elements") -- must surface as SphynxValueError, not a raw ValueError.
+    with pytest.raises(SphynxValueError):
+        interpolate_gaps(
+            np.array([np.nan, 10.0, np.nan]), method="spline", edge_mode="extrap"
+        )
 
 
 def test_no_gaps_unchanged():

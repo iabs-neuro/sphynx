@@ -12,9 +12,9 @@ from sphynx.geom import hypot_kcorr
 def _hampel_mask(v: np.ndarray, window_size: int, n_sigma: float) -> np.ndarray:
     # Windowed MAD (median |window - window median|), matching MATLAB's
     # builtin hampel semantics -- NOT the lower-quality movmedian-of-
-    # pointwise-residuals fallback. A flat window (sigma == 0) is never
-    # flagged, since that fallback collapses toward 0 on smooth signals
-    # and spuriously flags tiny deviations.
+    # pointwise-residuals fallback. When the local window is flat
+    # (sigma == 0), MATLAB substitutes sigma=eps rather than suppressing
+    # the flag, so a genuine spike on a flat baseline still gets flagged.
     win = 2 * window_size + 1
     s = pd.Series(v)
     med = s.rolling(win, center=True, min_periods=1).median().to_numpy()
@@ -24,8 +24,9 @@ def _hampel_mask(v: np.ndarray, window_size: int, n_sigma: float) -> np.ndarray:
         .to_numpy()
     )
     sigma = 1.4826 * mad
+    sigma = np.where(sigma == 0, np.finfo(float).eps, sigma)
     with np.errstate(invalid="ignore"):
-        return (sigma > 0) & (np.abs(v - med) > n_sigma * sigma)
+        return np.abs(v - med) > n_sigma * sigma
 
 
 def hampel_filter(X, Y, window_size: int = 7, n_sigma: float = 3):
