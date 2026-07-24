@@ -71,6 +71,32 @@ def test_malformed_column_count_raises(tmp_path):
         read_dlc(_write(tmp_path, text))
 
 
+def test_non_numeric_data_cell_raises(tmp_path):
+    text = (
+        "scorer,DLC,DLC,DLC\n"
+        "bodyparts,nose,nose,nose\n"
+        "coords,x,y,likelihood\n"
+        "0,foo,2.0,0.9\n"
+    )
+    with pytest.raises(SphynxIOError):
+        read_dlc(_write(tmp_path, text))
+
+
+def test_forced_individual_on_single_animal_csv_raises(tmp_path):
+    with pytest.raises(SphynxIOError):
+        read_dlc(_write(tmp_path, SINGLE_CSV), individual="animal3")
+
+
+def test_start_frame_zero_raises(tmp_path):
+    with pytest.raises(SphynxIOError):
+        read_dlc(_write(tmp_path, SINGLE_CSV), start_frame=0)
+
+
+def test_end_frame_negative_raises(tmp_path):
+    with pytest.raises(SphynxIOError):
+        read_dlc(_write(tmp_path, SINGLE_CSV), end_frame=-1)
+
+
 def test_multi_animal_stfp_selects_true_animal():
     csv = REPO / "Demo" / "DLC" / (
         "Stfp 1 D5 T2 1-14-1DLC_resnet50_STFP_2T_1GJun13shuffle1_100000_el.csv"

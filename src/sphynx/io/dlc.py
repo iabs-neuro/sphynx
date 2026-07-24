@@ -32,17 +32,25 @@ def read_dlc(
     true animal (>1 bodypart), excluding 'single' trackers, unless `individual`
     forces one. Negative x/y sentinels (-1.0) become NaN.
     """
+    if start_frame < 1:
+        raise SphynxIOError(f"start_frame must be >= 1, got {start_frame}")
+    if end_frame < 0:
+        raise SphynxIOError(f"end_frame must be >= 0, got {end_frame}")
+
     path = Path(csv_path)
     if not path.is_file():
         raise SphynxIOError(f"DLC csv not found: {path}")
 
     header_lines: list[str] = []
-    with open(path, "r", encoding="utf-8", newline="") as fh:
-        for k in range(4):
-            line = fh.readline()
-            if line == "":
-                raise SphynxIOError(f"CSV ended before header line {k + 1}")
-            header_lines.append(line.rstrip("\n").rstrip("\r"))
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as fh:
+            for k in range(4):
+                line = fh.readline()
+                if line == "":
+                    raise SphynxIOError(f"CSV ended before header line {k + 1}")
+                header_lines.append(line.rstrip("\n").rstrip("\r"))
+    except OSError as e:
+        raise SphynxIOError(f"Failed to open DLC csv {path}: {e}") from e
 
     row2 = header_lines[1].split(",")
     is_multi = bool(row2) and row2[0].strip().lower() == "individuals"
@@ -59,7 +67,10 @@ def read_dlc(
     if n_cols % 3 != 0:
         raise SphynxIOError(f"Expected 3 columns per part, got {n_cols} data columns")
 
-    data = pd.read_csv(path, skiprows=num_header, header=None).to_numpy(dtype=float)
+    try:
+        data = pd.read_csv(path, skiprows=num_header, header=None).to_numpy(dtype=float)
+    except (OSError, ValueError) as e:
+        raise SphynxIOError(f"Failed to parse DLC csv data {path}: {e}") from e
     n_total = data.shape[0]
     end = end_frame if (end_frame != 0 and end_frame <= n_total) else n_total
     rows = slice(start_frame - 1, end)  # 1-based inclusive -> 0-based half-open
@@ -71,6 +82,11 @@ def read_dlc(
         individuals_out: list[str] | None = all_individuals
         selected_out: str | None = picked
     else:
+        if individual:
+            raise SphynxIOError(
+                f'Forced Individual "{individual}" requested but CSV is '
+                "single-animal (no individuals to select)"
+            )
         n_parts = n_cols // 3
         part_names = [bodyparts_tokens[i * 3] for i in range(n_parts)]
         part_cols = [i * 3 for i in range(n_parts)]
