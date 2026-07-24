@@ -17,20 +17,20 @@ plan), tomllib (stdlib, read) + tomli-w (write); pytest + ruff; hatchling build.
 
 ## Global Constraints
 
-- **Python project lives in the repo subdirectory `python/`.** The MATLAB tree
-  (`+sphynx/`, `tests/`, `Demo/`) stays in place as the porting reference, so the
-  Python package must not collide with the MATLAB `tests/` dir. All paths below
-  are relative to repo root and start with `python/`. All commands run from
-  inside `python/` (each command block `cd`s there).
+- **Python project lives at the repo ROOT** (`src/sphynx/`, `tests/`,
+  `pyproject.toml`). `Demo/` also stays at root. The MATLAB porting reference was
+  moved into `matlab/` (`matlab/+sphynx/`, `matlab/tests/`, ...) so it does not
+  collide with the Python `tests/` dir. All paths below are relative to repo root.
+  All commands run from repo root.
 - **Python 3.11+** (uses stdlib `tomllib`).
-- **src layout:** importable package is `python/src/sphynx`, imported as `sphynx`.
+- **src layout:** importable package is `src/sphynx`, imported as `sphynx`.
 - **No silent fallbacks** (engine spec §10): on bad input raise a `SphynxError`
   subclass or warn + return an explicit NaN — never substitute a plausible value.
 - **Behavioural parity** with the MATLAB functions being ported; tests are ported
   from the MATLAB unit tests (same known-answer inputs).
 - **TDD:** every function gets a failing test first.
 - **Environment setup (once, right after Task 0 creates `pyproject.toml`):**
-  from `python/`, create and activate a venv, then
+  from the repo root, create and activate a venv, then
   `pip install -e ".[dev]"`. This installs numpy/scipy/pandas/tomli-w + pytest/ruff
   and makes `sphynx` importable. Re-run only if dependencies change.
 
@@ -39,12 +39,12 @@ plan), tomllib (stdlib, read) + tomli-w (write); pytest + ruff; hatchling build.
 ### Task 0: Project scaffold
 
 **Files:**
-- Create: `python/pyproject.toml`
-- Create: `python/src/sphynx/__init__.py`
-- Create: `python/src/sphynx/exceptions.py`
-- Create: `python/src/sphynx/logging_setup.py`
-- Create: `python/.gitignore`
-- Test: `python/tests/test_smoke.py`
+- Create: `pyproject.toml`
+- Create: `src/sphynx/__init__.py`
+- Create: `src/sphynx/exceptions.py`
+- Create: `src/sphynx/logging_setup.py`
+- Create: `.gitignore`
+- Test: `tests/test_smoke.py`
 
 **Interfaces:**
 - Produces: package `sphynx` importable; `sphynx.__version__: str`;
@@ -54,7 +54,7 @@ plan), tomllib (stdlib, read) + tomli-w (write); pytest + ruff; hatchling build.
 
 - [ ] **Step 1: Write the failing test**
 
-`python/tests/test_smoke.py`:
+`tests/test_smoke.py`:
 ```python
 import sphynx
 from sphynx.exceptions import (
@@ -86,12 +86,12 @@ def test_logger_is_singleton_per_name():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd python && python -m pytest tests/test_smoke.py -v`
+Run: `python -m pytest tests/test_smoke.py -v`
 Expected: FAIL / ERROR — `ModuleNotFoundError: No module named 'sphynx'`.
 
 - [ ] **Step 3: Create the scaffold files**
 
-`python/pyproject.toml`:
+`pyproject.toml`:
 ```toml
 [build-system]
 requires = ["hatchling"]
@@ -124,7 +124,7 @@ line-length = 100
 src = ["src"]
 ```
 
-`python/.gitignore`:
+`.gitignore`:
 ```
 __pycache__/
 *.pyc
@@ -135,14 +135,14 @@ build/
 dist/
 ```
 
-`python/src/sphynx/__init__.py`:
+`src/sphynx/__init__.py`:
 ```python
 """Sphynx behavioural-analysis engine (Python port)."""
 
 __version__ = "0.0.1"
 ```
 
-`python/src/sphynx/exceptions.py`:
+`src/sphynx/exceptions.py`:
 ```python
 """Exception hierarchy. No silent fallbacks — engine raises these instead."""
 
@@ -171,7 +171,7 @@ class DegenerateGeometryError(SphynxGeometryError):
     """Points are degenerate (e.g. collinear) for the requested fit."""
 ```
 
-`python/src/sphynx/logging_setup.py`:
+`src/sphynx/logging_setup.py`:
 ```python
 """Central logging. Use get_logger() everywhere instead of print()."""
 
@@ -193,13 +193,13 @@ def get_logger(name: str = "sphynx") -> logging.Logger:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd python && python -m pytest tests/test_smoke.py -v`
+Run: `python -m pytest tests/test_smoke.py -v`
 Expected: PASS (3 passed).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd python && git add pyproject.toml .gitignore src/sphynx/__init__.py \
+git add pyproject.toml .gitignore src/sphynx/__init__.py \
   src/sphynx/exceptions.py src/sphynx/logging_setup.py tests/test_smoke.py
 git commit -m "feat(python): project scaffold — package, exceptions, logging"
 ```
@@ -209,8 +209,8 @@ git commit -m "feat(python): project scaffold — package, exceptions, logging"
 ### Task 1: Typed Config
 
 **Files:**
-- Create: `python/src/sphynx/config.py`
-- Test: `python/tests/test_config.py`
+- Create: `src/sphynx/config.py`
+- Test: `tests/test_config.py`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
@@ -223,7 +223,7 @@ git commit -m "feat(python): project scaffold — package, exceptions, logging"
 
 - [ ] **Step 1: Write the failing test**
 
-`python/tests/test_config.py`:
+`tests/test_config.py`:
 ```python
 from sphynx.config import Config
 
@@ -270,12 +270,12 @@ def test_partial_override_keeps_defaults(tmp_path):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd python && python -m pytest tests/test_config.py -v`
+Run: `python -m pytest tests/test_config.py -v`
 Expected: FAIL / ERROR — `ModuleNotFoundError: No module named 'sphynx.config'`.
 
 - [ ] **Step 3: Write the implementation**
 
-`python/src/sphynx/config.py`:
+`src/sphynx/config.py`:
 ```python
 """Typed configuration. Defaults live here — the single source of truth.
 
@@ -401,13 +401,13 @@ def _overlay(obj: object, data: dict) -> None:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd python && python -m pytest tests/test_config.py -v`
+Run: `python -m pytest tests/test_config.py -v`
 Expected: PASS (3 passed). If `tomli_w` is missing, `pip install tomli-w` first.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd python && git add src/sphynx/config.py tests/test_config.py
+git add src/sphynx/config.py tests/test_config.py
 git commit -m "feat(python): typed Config with TOML round-trip and partial override"
 ```
 
@@ -416,9 +416,9 @@ git commit -m "feat(python): typed Config with TOML round-trip and partial overr
 ### Task 2: util geometry — line utilities
 
 **Files:**
-- Create: `python/src/sphynx/util/__init__.py`
-- Create: `python/src/sphynx/util/geometry.py`
-- Test: `python/tests/unit/test_geometry.py`
+- Create: `src/sphynx/util/__init__.py`
+- Create: `src/sphynx/util/geometry.py`
+- Test: `tests/unit/test_geometry.py`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
@@ -432,7 +432,7 @@ git commit -m "feat(python): typed Config with TOML round-trip and partial overr
 
 - [ ] **Step 1: Write the failing test**
 
-`python/tests/unit/test_geometry.py`:
+`tests/unit/test_geometry.py`:
 ```python
 import math
 
@@ -471,17 +471,17 @@ def test_parallel_returns_nan():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd python && python -m pytest tests/unit/test_geometry.py -v`
+Run: `python -m pytest tests/unit/test_geometry.py -v`
 Expected: FAIL / ERROR — `ModuleNotFoundError: No module named 'sphynx.util'`.
 
 - [ ] **Step 3: Write the implementation**
 
-`python/src/sphynx/util/__init__.py`:
+`src/sphynx/util/__init__.py`:
 ```python
 """Utility functions: pure geometry and small helpers."""
 ```
 
-`python/src/sphynx/util/geometry.py`:
+`src/sphynx/util/geometry.py`:
 ```python
 """Pure geometry helpers ported from +sphynx/+util."""
 
@@ -529,13 +529,13 @@ def lines_intersection(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd python && python -m pytest tests/unit/test_geometry.py -v`
+Run: `python -m pytest tests/unit/test_geometry.py -v`
 Expected: PASS (5 passed).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd python && git add src/sphynx/util/__init__.py src/sphynx/util/geometry.py \
+git add src/sphynx/util/__init__.py src/sphynx/util/geometry.py \
   tests/unit/test_geometry.py
 git commit -m "feat(python): util geometry — line_through_points, lines_intersection"
 ```
@@ -545,8 +545,8 @@ git commit -m "feat(python): util geometry — line_through_points, lines_inters
 ### Task 3: util geometry — circle_fit
 
 **Files:**
-- Modify: `python/src/sphynx/util/geometry.py` (append `circle_fit`)
-- Test: `python/tests/unit/test_geometry.py` (append circle tests)
+- Modify: `src/sphynx/util/geometry.py` (append `circle_fit`)
+- Test: `tests/unit/test_geometry.py` (append circle tests)
 
 **Interfaces:**
 - Consumes: `sphynx.exceptions.TooFewPointsError`, `DegenerateGeometryError`.
@@ -557,7 +557,7 @@ git commit -m "feat(python): util geometry — line_through_points, lines_inters
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `python/tests/unit/test_geometry.py`:
+Append to `tests/unit/test_geometry.py`:
 ```python
 import numpy as np
 import pytest
@@ -609,12 +609,12 @@ def test_rejects_length_mismatch():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd python && python -m pytest tests/unit/test_geometry.py -v`
+Run: `python -m pytest tests/unit/test_geometry.py -v`
 Expected: FAIL / ERROR — `ImportError: cannot import name 'circle_fit'`.
 
 - [ ] **Step 3: Write the implementation**
 
-Add these imports at the top of `python/src/sphynx/util/geometry.py` (below the
+Add these imports at the top of `src/sphynx/util/geometry.py` (below the
 existing imports):
 ```python
 import numpy as np
@@ -626,7 +626,7 @@ from sphynx.exceptions import (
 )
 ```
 
-Append to `python/src/sphynx/util/geometry.py`:
+Append to `src/sphynx/util/geometry.py`:
 ```python
 def circle_fit(x, y) -> tuple[float, float, float]:
     """Least-squares circle fit through (x, y). Returns (xc, yc, r).
@@ -661,13 +661,13 @@ def circle_fit(x, y) -> tuple[float, float, float]:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd python && python -m pytest tests/unit/test_geometry.py -v`
+Run: `python -m pytest tests/unit/test_geometry.py -v`
 Expected: PASS (11 passed — 5 line + 6 circle).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd python && git add src/sphynx/util/geometry.py tests/unit/test_geometry.py
+git add src/sphynx/util/geometry.py tests/unit/test_geometry.py
 git commit -m "feat(python): util geometry — circle_fit with explicit degenerate errors"
 ```
 
@@ -675,7 +675,7 @@ git commit -m "feat(python): util geometry — circle_fit with explicit degenera
 
 ## Done criteria for this plan
 
-- `cd python && python -m pytest -v` is green (smoke + config + geometry).
+- `python -m pytest -v` is green (smoke + config + geometry).
 - Package imports as `sphynx`; `Config.default()` reproduces the MATLAB engine
   defaults; TOML round-trip and partial override work; line + circle fits match
   the ported MATLAB known-answer tests.
