@@ -23,3 +23,7 @@ class TooFewPointsError(SphynxGeometryError):
 
 class DegenerateGeometryError(SphynxGeometryError):
     """Points are degenerate (e.g. collinear) for the requested fit."""
+
+
+class SphynxValueError(SphynxError):
+    """Invalid parameter value passed to a sphynx function."""
