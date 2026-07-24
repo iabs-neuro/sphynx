@@ -105,3 +105,28 @@ def test_fits_circle_as_ellipse():
 def test_ellipse_rejects_too_few_points():
     with pytest.raises(TooFewPointsError):
         ellipse_fit([1, 2, 3, 4], [1, 2, 3, 4])
+
+
+from sphynx.util.geometry import polygon_fit
+
+
+def test_polygon_square_has_four_sides():
+    x = [0, 10, 10, 0]
+    y = [0, 0, 10, 10]
+    px, py, sx, sy = polygon_fit(x, y)
+    assert px.size == py.size
+    assert len(sx) == 4
+    assert len(sy) == 4
+
+
+def test_polygon_sides_are_dense():
+    x = [0, 10, 10, 0]
+    y = [0, 0, 10, 10]
+    _, _, sx, _ = polygon_fit(x, y)
+    for side in sx:
+        assert side.size > 10
+
+
+def test_polygon_rejects_too_few_corners():
+    with pytest.raises(TooFewPointsError):
+        polygon_fit([0, 1], [0, 1])

@@ -178,3 +178,29 @@ def ellipse_fit(x, y) -> EllipseFit:
         long_axis=float(long_axis), short_axis=float(short_axis),
         status="", ar=ar, br=br, cr=cr, dr=dr, er=er,
     )
+
+
+def polygon_fit(
+    x_corners, y_corners, points_per_side: int = 1000
+) -> tuple[np.ndarray, np.ndarray, list[np.ndarray], list[np.ndarray]]:
+    """Closed dense polygon outline + per-side traces. Port of
+    sphynx.util.polygonFit. Raises on length mismatch / < 3 corners.
+    """
+    xc = np.asarray(x_corners, dtype=float).ravel()
+    yc = np.asarray(y_corners, dtype=float).ravel()
+    if xc.size != yc.size:
+        raise SphynxGeometryError("x_corners and y_corners must match in length")
+    if xc.size < 3:
+        raise TooFewPointsError(f"Need at least 3 corners; got {xc.size}")
+
+    n = xc.size
+    sides_x: list[np.ndarray] = []
+    sides_y: list[np.ndarray] = []
+    for i in range(n):
+        j = (i + 1) % n
+        sides_x.append(np.linspace(xc[i], xc[j], points_per_side))
+        sides_y.append(np.linspace(yc[i], yc[j], points_per_side))
+
+    x = np.concatenate(sides_x)
+    y = np.concatenate(sides_y)
+    return x, y, sides_x, sides_y
