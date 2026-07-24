@@ -1,5 +1,13 @@
 # User Log
 
+## 2026-07-24 -- M1c Task 2: read_preset — Python engine port
+
+Requested: Implement Task 2 (M1c) read_preset function and PresetData dataclass for Python engine port via TDD. Delivered: PresetData dataclass + read_preset(mat_path) in src/sphynx/io/preset.py, 2 preset tests in tests/unit/test_io_preset.py, updated src/sphynx/io/__init__.py to export both. TDD flow executed: RED (ImportError) → GREEN (2/2 tests pass, Demo preset loads) → regression (43/43 all tests pass, no regression). Code verbatim from brief. Commit 4260038. M1 milestone complete. Report at .superpowers/sdd/task-2-report.md.
+
+## 2026-07-24 -- M1b Task 1: ellipse_fit — Python engine port
+
+Requested: Implement Task 1 (M1b) ellipse_fit function and EllipseFit dataclass for Python engine port via TDD. Delivered: EllipseFit dataclass + ellipse_fit(x, y) appended to src/sphynx/util/geometry.py, 3 ellipse tests appended to tests/unit/test_geometry.py. All 14 tests pass (11 existing + 3 new), no regression. Code verbatim from brief. Commit 7ef7fd0. Report at .superpowers/sdd/task-1-report.md.
+
 ## 2026-06-04 -- Pass 2 polish round 5 -- 6 UX refinements
 
 Requested: apply 6 refinements -- fix defaults, add Align radii button, remove uniform-radius UI, move Neighborhood row up, add INFO button + help text, stronger focus retention. Received: all applied, 81 methods, 226/0/3 tests, commit c422f37.
@@ -3448,3 +3456,23 @@ fit круга объекта/арены, скорость/дистанция, �
 (fast+golden): 0 failed. Нюансы на вычитку -- в
 docs/superpowers/homework/x-kcorr-normalized-space.md (Circle drag vs points;
 порядок калибровка->разметка->зоны).
+
+========== R32 запушен в sphynx-GUI (только R32) ==========
+Cherry-pick одного R32 на sphynx-GUI (b924f48), R31 и остальное не потянулись
+(проверено + тесты зелёные). Запушено 6a1fe05..b924f48 в origin/sphynx-GUI.
+Вернулся на Sphynx-python.
+
+========== карта спек + раскладка TODO ==========
+4 Python-спеки: S1 движок / S2 парадигмы-акты-метрики / S3 экспорты / S4 Qt-GUI.
+Весь TODO.md разложен по ним + помечено, что умирает само на переезде и что done.
+Главный сдвиг: Barnes-метрики и механизм ролей/композитов/семейств вынесены из
+спеки движка (S1) в S2 -- это рефактор, а не порт. S1 сузил до OF end-to-end +
+фундамент (Events для одиночных актов, generic-метрики). Коммит f14e832.
+
+========== M1-фундамент собран ==========
+Репо: MATLAB -> matlab/, Python + Demo в корне. Пакет sphynx (src/sphynx):
+exceptions, logging, Config (TOML), util.geometry (line utils + circle_fit).
+Исполнено субагентами (TDD, ревью после каждой задачи + финальное ревью всей
+ветки). Финальное ревью поймало реальный баг §10 (Config молча глотал незнакомые
+TOML-ключи) -- починено строгой валидацией с SphynxConfigError. Сьют 22/22 зелёный.
+Коммиты 7b81064..17978e5. Дальше -- план M1b (ellipse/polygon + io), ещё не написан.

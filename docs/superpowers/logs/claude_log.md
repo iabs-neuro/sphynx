@@ -1,5 +1,13 @@
 # Claude Log
 
+## 2026-07-24 -- M1c Task 2: read_preset — Python engine port (commit 4260038)
+
+Implemented sphynx.io.read_preset: loads MATLAB .mat preset files via scipy.io.loadmat with squeeze_me=True, struct_as_record=False. TDD flow: (1) wrote test_io_preset.py verbatim from brief (2 tests: missing file raises SphynxIOError, Demo preset loads successfully); (2) ran pytest to verify RED state (ImportError: cannot import name 'read_preset'); (3) wrote preset.py with PresetData dataclass (options, zones, arena_and_objects) + read_preset(mat_path) function; (4) updated __init__.py to export PresetData, read_preset alongside existing DlcData, read_dlc; (5) ran tests to verify GREEN state (2/2 pass); (6) verified Demo/Preset/NOF_H01_1D_Preset.mat exists and loads with correct attributes (FrameRate, pxl2sm, Zones); (7) ran full suite (python -m pytest -q) to confirm 43/43 pass (41 prior dlc tests + 2 new preset tests); (8) committed cleanly. Code verbatim from brief. No regressions. M1 milestone (data loading) complete: sphynx.io now provides read_dlc + read_preset. Ready for M2 (preprocess pipeline).
+
+## 2026-07-24 -- M1b Task 1: ellipse_fit — Python engine port (commit 7ef7fd0)
+
+Implemented Ohad Gal least-squares ellipse fitting algorithm as Python port of MATLAB ellipseFit. Added EllipseFit dataclass (15 fields: a, b, phi, X0, Y0, X0_in, Y0_in, long_axis, short_axis, status, ar, br, cr, dr, er) + ellipse_fit(x, y) function to src/sphynx/util/geometry.py. Added from dataclasses import dataclass to imports. Appended 3 tests to tests/unit/test_geometry.py: test_fits_axis_aligned_ellipse (validates a=5, b=3, center at (10,20)), test_fits_circle_as_ellipse (validates a=b=4, center at origin), test_ellipse_rejects_too_few_points (validates TooFewPointsError on <5 points). TDD flow: RED (ImportError) → GREEN (3/3 tests pass) → regression check (14/14 all tests pass, no regression). Code verbatim from brief, degenerate conics return status field instead of raising, ellipse parameters computed via rotation transforms. All discipline checkpoints: ONLY appended (no modifications to existing functions), did NOT implement polygon_fit (Task 2), imports placed logically. Commit clean.
+
 ## 2026-06-04 -- Pass 2 polish round 5 -- 6 UX refinements (commit c422f37)
 
 Applied 6 UX fixes: (1) defaults area 1-100 cm^2, radius 2-7 cm; (2) alignDetectedRadii method + Align radii button -- computes mean radius of autoDetectedObjects, inputdlg for confirm/edit, rewrites border/mask/geometry for each object, refreshes preview; (3) removed AutoUniformRadiusChk + AutoUniformRadiusField properties/UI, removed uniformRadius/uniformRadiusPx cfg branches from autoDetectObjects.m (both hough and threshold paths), deleted testUniformRadiusMode test; (4) Neighborhood row moved up to row 4 (after Sensitivity, before MinArea); total grid now 9 rows; (5) INFO button col 3 row 1 + helpAutoDetectText function added; (6) focusManagerIfOpen uses visibility cycle (off/drawnow/on/figure/drawnow) for stronger focus retention on R2020a uifigure. Methods: 81. Tests: 226/0/3 (1 removed as expected). Smoke: App OK. Concern: visibility cycle will briefly flicker the manager window; behavior in live session not directly tested but the pattern is the recommended R2020a workaround.
@@ -4491,3 +4499,88 @@ golden): 0 failed, 3 incomplete (pre-existing readFrameAt). CreatePresetApp
 parses (103 methods). Deferred-for-review nuances documented in
 docs/superpowers/homework/x-kcorr-normalized-space.md (Circle drag-vs-points
 interpretation; calibrate-before-markup ordering; saveSessionPlots display scale).
+
+========== turn: R32 pushed to sphynx-GUI (only R32) ==========
+User asked to push R32 to origin sphynx-GUI. Branches had diverged: Sphynx-python
+was ahead by R32 + Python-spec docs + R31 + drop-R2025; sphynx-GUI had its own
+a375f25 and lacked all of those. User chose "only R32".
+Cherry-picked ca6dbc2 onto sphynx-GUI -> b924f48. Git 3-way merge on the 4
+R31-overlap files (applyAct, analyzeSession, computeVelocity, readObjects) kept
+sphynx-GUI's pre-R31 base and applied only R32's delta -- verified R31 did NOT
+tag along (computeVelocity still shows the pre-R31 single-sample interp path)
+and fast suite is green (0 failed, 3 pre-existing incomplete, 375 total).
+Pushed 6a1fe05..b924f48 to origin/sphynx-GUI (also carried the pre-existing
+unpushed a375f25). Returned to Sphynx-python, restored .idea stash.
+
+========== turn: spec map + TODO triage ==========
+User approved all 3: (1) zone-roles->composites->families mechanism,
+(2) exports as their own spec, (3) the spec map + go read remaining specs
++ triage TODO.
+Read the 2 remaining MATLAB-era specs (preprocess-tab, presentation-video):
+both done GUI-era work. Barnes-features S8 'class' field already exists in
+the preset but unused downstream -- becomes zone_class in S2.
+Wrote 2026-07-24-python-spec-map-and-todo-triage.md: 4 Python specs
+(S1 engine / S2 paradigms+acts+metrics / S3 exports / S4 Qt GUI), status of
+the 4 old specs, and full TODO.md allocation incl DEAD (dissolve on Python
+move: 4-way defaults, bcIdx/pxlPerCm silent fallbacks, implay, dead pickers)
+and DONE.
+KEY SCOPE SHIFT: Barnes metrics + roles/composites/families mechanism moved
+OUT of the engine spec (S1) INTO S2 -- it's a refactor on Events+zone-roles,
+not a line port. Narrowed S1 to OF end-to-end + generic foundation; updated
+S1 milestones M4/M5, boundary note, criteria, ratio_index generalization,
+validation-as-data. Commit f14e832.
+Next decision for user: send S1 to writing-plans (start M1), or brainstorm S2.
+
+========== turn: S2 seed notes + starting S1 writing-plans ==========
+User chose option 1 (S1 -> writing-plans) but asked to preserve the S2
+discussion. Wrote 2026-07-24-S2-paradigms-seed-NOTES.md capturing the full
+roles/composites/families/paradigm-hierarchy/validation/metric-registry
+discussion + open questions (body-part degradation, T/Y). Committed.
+Now invoking writing-plans for S1 (engine port).
+
+========== turn: S1 M1-foundation plan written ==========
+writing-plans skill. S1 too big for one plan -> per-milestone. Wrote
+docs/superpowers/plans/2026-07-24-python-M1-foundation.md: Task 0 scaffold
+(package/exceptions/logging/pyproject, hatchling, src layout), Task 1 typed
+Config (dataclasses mirroring defaultConfig.m engine subset, TOML round-trip +
+partial override; MATLAB 'range' -> 'frames'), Task 2 line geometry, Task 3
+circle_fit -- all TDD with tests ported from MATLAB unit tests.
+Decision flagged: Python project isolated under python/ subdir (MATLAB tests/
++ +sphynx/ stay as reference). Ellipse/polygon + io deferred to M1b.
+Committed. Next: offer execution choice (subagent-driven vs inline).
+
+========== turn: repo restructure + start execution ==========
+User: execution option 1 (subagent-driven); Python project at ROOT, Demo at
+root, MATLAB code+tests into a separate folder. Also asked to confirm the
+3-doc relationship (spec-map = program umbrella; 2026-07-21 = S1 spec;
+M1-foundation = plan implementing first slice of S1) -- confirmed, not confused.
+Did git mv of +sphynx/tests/startup.m/sphynx_defaults.jsonc/downloadDemoVideos.m
+-> matlab/. Updated M1 plan paths to root (dropped python/ prefix + cd python).
+Committed. Now invoking subagent-driven-development to execute M1 task-by-task.
+
+========== turn: M1 foundation executed (subagent-driven) ==========
+Restructure: MATLAB tree -> matlab/, Python + Demo at root (d8cb3c9).
+Executed M1-foundation plan via subagent-driven-development (haiku implementers/
+task-reviewers, opus final review, sonnet fixers):
+  Task 0 scaffold 7b81064; Task 1 Config 64029c1; Task 2 line geom afb3564;
+  Task 3 circle_fit 5459061. Per-task reviews clean.
+Task-3 reviewer Important (silent NaN on neg r^2) -> DISPROVEN by fixer:
+  radicand = mean sq dist to center, >=0; ~700k-config search, unreachable.
+Final whole-branch review (opus) found a REAL Important: Config silently ignored
+unknown TOML keys (SphynxConfigError defined-but-unused) = §10 violation.
+Fixed 17978e5: strict validation (unknown key / type mismatch / file+parse
+errors all raise SphynxConfigError), logging propagate=False, removed stray
+tests/unit/__init__.py, circle_fit ArrayLike hints, py.typed. Re-review: Ready.
+Full suite 22 passed. Package at repo root: src/sphynx/{__init__,exceptions,
+logging_setup,config,py.typed, util/geometry}. M1 foundation DONE.
+Next: M1b plan (ellipse/polygon fit + io read_dlc/read_preset) -- not yet written.
+
+========== turn: M1b geometry done ==========
+User: "делай все милстоуны дальше" -- continuous execution of remaining engine
+milestones. M1b plan (ellipse_fit, polygon_fit) written + executed via SDD
+(haiku implementers+reviewers). Task 1 ellipse_fit 7ef7fd0 (Ohad Gal, EllipseFit
+dataclass, degenerate conics return status not raise); Task 2 polygon_fit 2d8cf7a.
+Both per-task reviews clean, suite 28/28. Deferred the heavy opus whole-branch
+review to a milestone boundary with real logic (after M1c io) -- review effort
+scaled to risk per SDD Model Selection. util.geometry now complete.
+Next: M1c (io: read_dlc single/multi-animal+locale, read_preset via scipy.io mat).
