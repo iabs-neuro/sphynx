@@ -13,6 +13,13 @@ def test_missing_preset_raises(tmp_path):
         read_preset(tmp_path / "nope.mat")
 
 
+def test_corrupt_preset_raises_sphynx_io_error(tmp_path):
+    bad = tmp_path / "corrupt.mat"
+    bad.write_text("this is not a valid .mat file")
+    with pytest.raises(SphynxIOError):
+        read_preset(bad)
+
+
 def test_loads_demo_preset():
     mat = REPO / "Demo" / "Preset" / "NOF_H01_1D_Preset.mat"
     if not mat.is_file():

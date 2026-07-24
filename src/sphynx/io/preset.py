@@ -24,7 +24,10 @@ def read_preset(mat_path) -> PresetData:
     path = Path(mat_path)
     if not path.is_file():
         raise SphynxIOError(f"Preset .mat not found: {path}")
-    mat = scipy.io.loadmat(path, squeeze_me=True, struct_as_record=False)
+    try:
+        mat = scipy.io.loadmat(path, squeeze_me=True, struct_as_record=False)
+    except Exception as e:
+        raise SphynxIOError(f"Failed to load preset {path}: {e}") from e
     return PresetData(
         options=mat.get("Options"),
         zones=mat.get("Zones"),

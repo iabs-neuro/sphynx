@@ -97,6 +97,25 @@ def test_end_frame_negative_raises(tmp_path):
         read_dlc(_write(tmp_path, SINGLE_CSV), end_frame=-1)
 
 
+def test_start_frame_past_end_of_data_raises(tmp_path):
+    # SINGLE_CSV has 5 data rows; start_frame=100 is past end of data.
+    with pytest.raises(SphynxIOError):
+        read_dlc(_write(tmp_path, SINGLE_CSV), start_frame=100)
+
+
+def test_ragged_multi_animal_header_raises(tmp_path):
+    # individuals row has fewer tokens than bodyparts row -> ragged header.
+    text = (
+        "scorer,DLC,DLC,DLC,DLC,DLC,DLC\n"
+        "individuals,animal1,animal1,animal1\n"
+        "bodyparts,nose,nose,nose,tail,tail,tail\n"
+        "coords,x,y,likelihood,x,y,likelihood\n"
+        "0,100.5,200.25,0.987,110.1,210.7,0.93\n"
+    )
+    with pytest.raises(SphynxIOError):
+        read_dlc(_write(tmp_path, text))
+
+
 def test_multi_animal_stfp_selects_true_animal():
     csv = REPO / "Demo" / "DLC" / (
         "Stfp 1 D5 T2 1-14-1DLC_resnet50_STFP_2T_1GJun13shuffle1_100000_el.csv"

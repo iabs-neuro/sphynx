@@ -3,7 +3,9 @@ import math
 import numpy as np
 import pytest
 
-from sphynx.util.geometry import line_through_points, lines_intersection, circle_fit
+from sphynx.util.geometry import (
+    line_through_points, lines_intersection, circle_fit, ellipse_fit, polygon_fit,
+)
 from sphynx.exceptions import (
     SphynxGeometryError, TooFewPointsError, DegenerateGeometryError,
 )
@@ -78,9 +80,6 @@ def test_rejects_length_mismatch():
         circle_fit([0, 1, 2], [0, 1])
 
 
-from sphynx.util.geometry import ellipse_fit, EllipseFit
-
-
 def test_fits_axis_aligned_ellipse():
     th = np.linspace(0, 2 * np.pi, 50)
     x = 10 + 5 * np.cos(th)
@@ -107,9 +106,6 @@ def test_ellipse_rejects_too_few_points():
         ellipse_fit([1, 2, 3, 4], [1, 2, 3, 4])
 
 
-from sphynx.util.geometry import polygon_fit
-
-
 def test_polygon_square_has_four_sides():
     x = [0, 10, 10, 0]
     y = [0, 0, 10, 10]
@@ -130,3 +126,8 @@ def test_polygon_sides_are_dense():
 def test_polygon_rejects_too_few_corners():
     with pytest.raises(TooFewPointsError):
         polygon_fit([0, 1], [0, 1])
+
+
+def test_polygon_rejects_points_per_side_not_greater_than_one():
+    with pytest.raises(SphynxGeometryError):
+        polygon_fit([0, 10, 5], [0, 0, 10], points_per_side=1)

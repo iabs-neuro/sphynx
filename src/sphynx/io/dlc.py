@@ -73,6 +73,10 @@ def read_dlc(
         raise SphynxIOError(f"Failed to parse DLC csv data {path}: {e}") from e
     n_total = data.shape[0]
     end = end_frame if (end_frame != 0 and end_frame <= n_total) else n_total
+    if start_frame > n_total:
+        raise SphynxIOError(
+            f"start_frame {start_frame} past end of data ({n_total} frames)"
+        )
     rows = slice(start_frame - 1, end)  # 1-based inclusive -> 0-based half-open
 
     if is_multi:
@@ -122,6 +126,11 @@ def _pick_multi_animal(
     data: np.ndarray,
     forced: str,
 ) -> tuple[list[int], list[str], str, list[str]]:
+    if len(bodyparts_tokens) != len(individuals_tokens):
+        raise SphynxIOError(
+            "Multi-animal: 'bodyparts' and 'individuals' header rows have "
+            f"different lengths ({len(bodyparts_tokens)} vs {len(individuals_tokens)})"
+        )
     n_data_cols = len(individuals_tokens)
     if n_data_cols % 3 != 0:
         raise SphynxIOError(

@@ -192,6 +192,10 @@ def polygon_fit(
         raise SphynxGeometryError("x_corners and y_corners must match in length")
     if xc.size < 3:
         raise TooFewPointsError(f"Need at least 3 corners; got {xc.size}")
+    if points_per_side <= 1:
+        raise SphynxGeometryError(
+            f"points_per_side must be > 1; got {points_per_side}"
+        )
 
     n = xc.size
     sides_x: list[np.ndarray] = []
