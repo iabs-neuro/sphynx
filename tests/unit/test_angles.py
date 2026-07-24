@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
 
-from sphynx.angles import wrap
+from sphynx.angles import wrap, unwrap_for_smooth, head_direction
+from tests.fixtures.synthetic import make_rotating_mouse_dlc
 
 
 def test_zero_stays_zero():
@@ -31,3 +32,35 @@ def test_vectorized():
 def test_pi_stays_pi():
     assert float(wrap(np.pi)) == pytest.approx(np.pi, abs=1e-12)
     assert float(wrap(1000 * np.pi)) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_unwrap_for_smooth_short_input_returns_wrapped():
+    a = np.array([0.1, 0.2, 0.3])
+    out = unwrap_for_smooth(a, 11)
+    assert out.size == 3
+    assert np.all(out >= -np.pi) and np.all(out <= np.pi)
+
+
+def test_head_direction_no_large_jumps():
+    f = make_rotating_mouse_dlc(720, 4)
+    hd = head_direction(f["head_tip_x"], f["head_tip_y"],
+                        f["head_center_x"], f["head_center_y"], 11)
+    from sphynx.angles import wrap
+    diffs = wrap(np.diff(hd))
+    assert np.max(np.abs(diffs)) < 0.5
+
+
+def test_head_direction_in_range():
+    f = make_rotating_mouse_dlc(720, 4)
+    hd = head_direction(f["head_tip_x"], f["head_tip_y"],
+                        f["head_center_x"], f["head_center_y"], 11)
+    assert np.all(hd >= -np.pi) and np.all(hd <= np.pi)
+
+
+def test_head_direction_total_rotation():
+    f = make_rotating_mouse_dlc(720, 4)
+    hd = head_direction(f["head_tip_x"], f["head_tip_y"],
+                        f["head_center_x"], f["head_center_y"], 11)
+    unwrapped = np.unwrap(hd)
+    actual = unwrapped[-1] - unwrapped[0]
+    assert actual == pytest.approx(f["expected_total_rotation_rad"], abs=0.2)
