@@ -61,3 +61,30 @@ def hampel_filter(X, Y, window_size: int = 7, n_sigma: float = 3):
     xo[bad] = np.nan
     yo[bad] = np.nan
     return xo, yo, bad
+
+
+def velocity_jump_filter(
+    X, Y, frame_rate, pxl_per_cm, max_cm_s: float = 50.0, x_kcorr: float = 1.0
+):
+    """Flag the frame AFTER a between-frame displacement exceeding max_cm_s.
+    NaN-safe; n<2 or non-positive scale/rate -> unchanged. Port of
+    sphynx.preprocess.velocityJumpFilter."""
+    X = np.asarray(X, dtype=float).ravel()
+    Y = np.asarray(Y, dtype=float).ravel()
+    n = X.size
+    bad = np.zeros(n, dtype=bool)
+    if n < 2 or pxl_per_cm <= 0 or frame_rate <= 0:
+        return X.copy(), Y.copy(), bad
+
+    dx = np.diff(X)
+    dy = np.diff(Y)
+    disp_cm = hypot_kcorr(dx, dy, x_kcorr) / pxl_per_cm
+    vel = disp_cm * frame_rate
+    overflow = (vel > max_cm_s) & np.isfinite(vel)
+    bad[1:] = overflow
+
+    xo = X.copy()
+    yo = Y.copy()
+    xo[bad] = np.nan
+    yo[bad] = np.nan
+    return xo, yo, bad
