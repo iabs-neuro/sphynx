@@ -76,3 +76,32 @@ def test_rejects_collinear_points():
 def test_rejects_length_mismatch():
     with pytest.raises(SphynxGeometryError):
         circle_fit([0, 1, 2], [0, 1])
+
+
+from sphynx.util.geometry import ellipse_fit, EllipseFit
+
+
+def test_fits_axis_aligned_ellipse():
+    th = np.linspace(0, 2 * np.pi, 50)
+    x = 10 + 5 * np.cos(th)
+    y = 20 + 3 * np.sin(th)
+    e = ellipse_fit(x, y)
+    assert e.status == ""
+    assert e.X0_in == pytest.approx(10.0, abs=1e-6)
+    assert e.Y0_in == pytest.approx(20.0, abs=1e-6)
+    assert sorted([e.a, e.b]) == pytest.approx([3.0, 5.0], abs=1e-6)
+
+
+def test_fits_circle_as_ellipse():
+    th = np.linspace(0, 2 * np.pi, 50)
+    x = 4 * np.cos(th)
+    y = 4 * np.sin(th)
+    e = ellipse_fit(x, y)
+    assert e.status == ""
+    assert e.a == pytest.approx(4.0, abs=1e-6)
+    assert e.b == pytest.approx(4.0, abs=1e-6)
+
+
+def test_ellipse_rejects_too_few_points():
+    with pytest.raises(TooFewPointsError):
+        ellipse_fit([1, 2, 3, 4], [1, 2, 3, 4])
