@@ -54,3 +54,23 @@ def test_none_strategy_returns_arena_only():
 def test_rejects_unknown_strategy():
     with pytest.raises(SphynxValueError):
         classify_square(np.ones((10, 10), bool), strategy="blah")
+
+
+def test_rejects_invalid_corner_type():
+    xc = [50, 250, 250, 50]
+    yc = [50, 50, 150, 150]
+    m = _rect(200, 300, xc, yc)
+    with pytest.raises(SphynxValueError):
+        classify_square(m, strategy="corners-walls-center", pixels_per_cm=5,
+                        wall_width_cm=3, corner_points=np.column_stack([xc, yc]),
+                        corner_type="diamond")
+
+
+def test_rejects_malformed_corner_points_shape():
+    xc = [50, 250, 250, 50]
+    yc = [50, 50, 150, 150]
+    m = _rect(200, 300, xc, yc)
+    bad_cp = np.column_stack([xc, yc, np.zeros(4)])  # Nx3, not Nx2
+    with pytest.raises(SphynxValueError):
+        classify_square(m, strategy="corners-walls-center", pixels_per_cm=5,
+                        wall_width_cm=3, corner_points=bad_cp)

@@ -33,10 +33,16 @@ def _corners_walls_center(mask, pixels_per_cm, wall_width_cm, corner_points, cor
         raise SphynxValueError("pixels_per_cm required for corners-walls-center")
     if corner_points is None or len(corner_points) == 0:
         raise SphynxValueError("corner_points required for corners-walls-center")
-    if str(corner_type).lower() == "square":
+    ct = str(corner_type).lower()
+    if ct not in ("round", "square"):
+        raise SphynxValueError(
+            f"corner_type must be round|square; got {corner_type}")
+    if ct == "square":
         raise SphynxValueError("square corner_type not yet ported (round only)")
 
     cp = np.asarray(corner_points, dtype=float)
+    if cp.ndim != 2 or cp.shape[1] != 2:
+        raise SphynxValueError(f"corner_points must be Nx2; got shape {cp.shape}")
     wall_w = wall_width_cm * pixels_per_cm
     corner_w = wall_w * np.sqrt(2.0)
     h, w = mask.shape

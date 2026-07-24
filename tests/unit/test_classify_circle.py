@@ -1,6 +1,8 @@
 import numpy as np
+import pytest
 
 from sphynx.zones import classify_circle
+from sphynx.exceptions import SphynxValueError
 
 
 def _circle(h, w, cx, cy, r):
@@ -42,3 +44,15 @@ def test_arena_touching_frame_edge():
     zones = classify_circle(m, 2, wall_width_cm=10, middle_width_cm=20)
     wall = next(z for z in zones if z.name == "wall")
     assert wall.maskfilled.sum() > 0
+
+
+def test_rejects_zero_middle_width():
+    m = _circle(200, 200, 100, 100, 30 * 2)
+    with pytest.raises(SphynxValueError):
+        classify_circle(m, 2, middle_width_cm=0)
+
+
+def test_rejects_negative_wall_width():
+    m = _circle(200, 200, 100, 100, 30 * 2)
+    with pytest.raises(SphynxValueError):
+        classify_circle(m, 2, wall_width_cm=-1)

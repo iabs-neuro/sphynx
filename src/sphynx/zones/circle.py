@@ -16,6 +16,10 @@ def classify_circle(
 ) -> list[Zone]:
     if pixels_per_cm is None or pixels_per_cm <= 0:
         raise SphynxValueError("pixels_per_cm is required")
+    if wall_width_cm < 0:
+        raise SphynxValueError(f"wall_width_cm must be >= 0; got {wall_width_cm}")
+    if middle_width_cm <= 0:
+        raise SphynxValueError(f"middle_width_cm must be > 0; got {middle_width_cm}")
     mask = np.asarray(arena_mask) > 0
     h, w = mask.shape
     wall_w = wall_width_cm * pixels_per_cm
