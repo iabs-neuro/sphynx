@@ -50,7 +50,36 @@ def refine_act(line, min_run_len1, min_run_len0):
     return refined, runs
 
 
-def refine_act_array(lines, min_run_len1, min_run_len0):
-    """Vectorized refine_act over rows. Port of refineActArray.m."""
-    # TODO(polish): implement refine_act_array if needed
-    raise NotImplementedError("refine_act_array stub")
+def _rle(b: np.ndarray):
+    if b.size == 0:
+        return [], []
+    d = np.concatenate([[True], np.diff(b) != 0])
+    starts = np.flatnonzero(d)
+    ends = np.concatenate([starts[1:] - 1, [b.size - 1]])
+    runs = list(zip(starts.tolist(), ends.tolist()))
+    lengths = (ends - starts + 1).tolist()
+    return runs, lengths
+
+
+def refine_act_array(bool_arr, min_run_frames: int = 0, max_bridge_frames: int = 0) -> np.ndarray:
+    """Bridge short holes (pass 1) then drop short runs (pass 2). Leading/trailing
+    zero-runs are never bridged. Port of refineActArray.m."""
+    b = np.asarray(bool_arr).astype(bool).ravel().copy()
+    n = b.size
+    if n == 0:
+        return b
+
+    if max_bridge_frames > 0:
+        runs, lengths = _rle(b)
+        for (s, e), ln in zip(runs, lengths):
+            is_hole = not b[s]
+            if is_hole and s != 0 and e != n - 1 and ln < max_bridge_frames:
+                b[s : e + 1] = True
+
+    if min_run_frames > 0:
+        runs, lengths = _rle(b)
+        for (s, e), ln in zip(runs, lengths):
+            if b[s] and ln < min_run_frames:
+                b[s : e + 1] = False
+
+    return b
