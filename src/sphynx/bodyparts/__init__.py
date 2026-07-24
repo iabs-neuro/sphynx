@@ -1,5 +1,6 @@
 """Body-part identification and geometry."""
 
 from sphynx.bodyparts.identify import Point, identify_parts
+from sphynx.bodyparts.resolve import resolve_part
 
-__all__ = ["Point", "identify_parts"]
+__all__ = ["Point", "identify_parts", "resolve_part"]
