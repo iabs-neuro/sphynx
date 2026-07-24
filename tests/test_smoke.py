@@ -24,3 +24,8 @@ def test_logger_is_singleton_per_name():
     b = get_logger("sphynx.test")
     assert a is b
     assert len(a.handlers) == 1
+
+
+def test_logger_does_not_propagate():
+    logger = get_logger("sphynx.x")
+    assert logger.propagate is False

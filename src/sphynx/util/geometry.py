@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 from sphynx.exceptions import (
     DegenerateGeometryError,
@@ -50,7 +51,7 @@ def lines_intersection(
     return (x, y)
 
 
-def circle_fit(x, y) -> tuple[float, float, float]:
+def circle_fit(x: ArrayLike, y: ArrayLike) -> tuple[float, float, float]:
     """Least-squares circle fit through (x, y). Returns (xc, yc, r).
 
     Solves (x^2+y^2) + a*x + b*y + c = 0, then xc=-a/2, yc=-b/2,

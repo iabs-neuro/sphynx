@@ -1,4 +1,7 @@
+import pytest
+
 from sphynx.config import Config
+from sphynx.exceptions import SphynxConfigError
 
 
 def test_default_values_match_matlab_defaults():
@@ -39,3 +42,29 @@ def test_partial_override_keeps_defaults(tmp_path):
     assert c.acts.rest_threshold_cm_s == 2.0        # overridden
     assert c.acts.loc_threshold_cm_s == 5.0         # default kept
     assert c.preprocess.likelihood_threshold == 0.95  # untouched block kept
+
+
+def test_unknown_key_raises(tmp_path):
+    p = tmp_path / "cfg.toml"
+    p.write_text("[acts]\nrest_threshold_cms = 2.0\n")  # misspelled key
+    with pytest.raises(SphynxConfigError):
+        Config.from_toml(p)
+
+
+def test_missing_file_raises():
+    with pytest.raises(SphynxConfigError):
+        Config.from_toml("this/path/does/not/exist.toml")
+
+
+def test_malformed_toml_raises(tmp_path):
+    p = tmp_path / "cfg.toml"
+    p.write_text("not = = valid\n")
+    with pytest.raises(SphynxConfigError):
+        Config.from_toml(p)
+
+
+def test_scalar_for_dataclass_block_raises(tmp_path):
+    p = tmp_path / "cfg.toml"
+    p.write_text("acts = 5\n")
+    with pytest.raises(SphynxConfigError):
+        Config.from_toml(p)

@@ -13,6 +13,8 @@ import tomllib
 
 import tomli_w
 
+from sphynx.exceptions import SphynxConfigError
+
 
 @dataclass
 class Paths:
@@ -96,8 +98,13 @@ class Config:
 
     @classmethod
     def from_toml(cls, path: str | Path) -> "Config":
-        with open(path, "rb") as fh:
-            data = tomllib.load(fh)
+        try:
+            with open(path, "rb") as fh:
+                data = tomllib.load(fh)
+        except (OSError, FileNotFoundError) as e:
+            raise SphynxConfigError(f"Cannot read config file: {path}") from e
+        except tomllib.TOMLDecodeError as e:
+            raise SphynxConfigError(f"Malformed TOML in config file: {path}") from e
         cfg = cls.default()
         _overlay(cfg, data)
         return cfg
@@ -107,14 +114,33 @@ class Config:
             tomli_w.dump(asdict(self), fh)
 
 
-def _overlay(obj: object, data: dict) -> None:
-    """Recursively set fields present in `data`; absent keys keep defaults."""
+def _overlay(obj: object, data: dict, _path: str = "") -> None:
+    """Recursively set fields present in `data`; absent keys keep defaults.
+
+    Raises SphynxConfigError on unknown keys or type mismatches (§10: no
+    silent fallbacks) instead of ignoring or coercing them.
+    """
+    known_names = {f.name for f in fields(obj)}
+    unknown = set(data) - known_names
+    if unknown:
+        where = f" in [{_path}]" if _path else ""
+        raise SphynxConfigError(f"Unknown config key(s){where}: {sorted(unknown)}")
+
     for f in fields(obj):
         if f.name not in data:
             continue
         current = getattr(obj, f.name)
         value = data[f.name]
-        if is_dataclass(current) and isinstance(value, dict):
-            _overlay(current, value)
+        child_path = f"{_path}.{f.name}" if _path else f.name
+        if is_dataclass(current):
+            if not isinstance(value, dict):
+                raise SphynxConfigError(
+                    f"Config key '{child_path}' must be a table, got {type(value).__name__}"
+                )
+            _overlay(current, value, child_path)
         else:
+            if isinstance(value, dict):
+                raise SphynxConfigError(
+                    f"Config key '{child_path}' must be a scalar, got a table"
+                )
             setattr(obj, f.name, value)

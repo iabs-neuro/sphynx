@@ -13,4 +13,5 @@ def get_logger(name: str = "sphynx") -> logging.Logger:
         handler.setFormatter(logging.Formatter(_FORMAT))
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
+        logger.propagate = False
     return logger
