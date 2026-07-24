@@ -254,11 +254,17 @@ ActSpec(name="nose_at_hole", over_zone_class="hole", body_part="nose", ...)
 
 ```python
 @register_metric("total_distance")                        # из Traces
-@register_metric("discrimination_index",                  # NOR: из ДВУХ актов
-                 requires_acts=["nose_novel", "nose_familiar"])
-@register_metric("primary_errors", paradigm="barnes",     # из Events + геометрии
+@register_metric("ratio_index",                           # параметризованная:
+                 params=["act_a", "act_b"])               # (A-B)/(A+B) между любыми
+                                                          # двумя актами; NOR-дискрими-
+                                                          # нация -- частный случай
+@register_metric("primary_errors", paradigm="barnes",     # из Events + геометрии (S2)
                  requires_events=["nose_at_hole"], requires_geometry=True)
 ```
+
+`ratio_index(act_a, act_b) = (A - B) / (A + B)` -- считается между **любыми двумя
+выбранными актами**, конфигурируется в конструкторе (S2/S4). Хардкода
+`nose_novel/nose_familiar` нет.
 
 Объявленные зависимости дают: (1) понятный порядок вычисления, (2) внятную ошибку
 «метрика X требует акт Y, которого нет в библиотеке» вместо тихого NaN,
@@ -267,6 +273,10 @@ ActSpec(name="nose_at_hole", over_zone_class="hole", body_part="nose", ...)
 Метрики из §3.4-п.1 (`акт x стат`) **в реестре не регистрируются** -- они
 порождаются автоматически для каждого акта.
 
+Полный реестр именованных метрик, семейства, роли зон, композиты и иерархия
+парадигм спроектированы в **S2** (`2026-07-24-python-spec-map-and-todo-triage.md`).
+Здесь -- только generic-метрики и параметризованный `ratio_index` как образец API.
+
 ## 8. Милстоуны (снизу вверх, по зависимостям)
 
 | M | Содержимое |
@@ -274,13 +284,20 @@ ActSpec(name="nose_at_hole", over_zone_class="hole", body_part="nose", ...)
 | M1 | `config`, `util` (геометрия), `io` (read_dlc, read_preset) |
 | M2 | `preprocess` (кроме `make_synthetic_dlc` -- вне охвата), `bodyparts`, `angles` |
 | M3 | `zones` + `preset` (геометрия) |
-| M4 | `acts` (реестр, встроенные, семейства) + `events` |
-| M5 | `metrics` (generic + именованные) + `paradigms` (OF, NOR, Barnes) |
+| M4 | `acts` (реестр, встроенные) + `events` (для одиночных актов) |
+| M5 | `metrics` (generic `act x stat`) + парадигма **OF** (декларативный бандл) |
 | M6 | `pipeline` (analyze_session, run_batch, super-table) + `cli` |
 | M7 | рендер видео-оверлеев и session-плоты |
 
 Милстоуны -- естественные границы реализации: план пишется и исполняется
 по-милстоунно, а не одним монолитом на весь движок.
+
+**Граница с S2 (уточнено 2026-07-24).** Полная парадигменная система -- роли зон,
+композитные зоны, семейства актов, роль-селекторы, реестр именованных метрик,
+иерархия парадигм (EOF/NOR/Barnes/T-Y/New), валидация -- это **рефактор, вынесенный
+в спеку S2** (`2026-07-24-python-spec-map-and-todo-triage.md`). S1 строит фундамент
+(Events для одиночных актов, generic-метрики, OF end-to-end); Barnes-метрики и
+семейства актов относятся к S2, а не к порту.
 
 ## 9. Тестирование
 
@@ -312,6 +329,11 @@ ActSpec(name="nose_at_hole", over_zone_class="hole", body_part="nose", ...)
 **8 фиксов R31 переносим как поведение, а не как код** -- baseline корректности,
 ниже которого опускаться нельзя. См. `docs/audit-r2025-engine-bugs.md`.
 
+**Валидация как данные, а не только лог.** `analyze_session` возвращает структуру
+валидации сессии (какие этапы не пройдены -- например не определён пиксель-на-см).
+GUI (S4) рендерит это как варнинги пользователю. «Непройденный этап» -- это данные,
+а не только строчка в логе.
+
 ## 11. Вне охвата
 
 - Qt-GUI (отдельная спека следом)
@@ -332,7 +354,8 @@ synthetic-уровень тестов. Живут в `tests/fixtures/`, не в 
 1. `analyze_session` проходит Demo `NOF_H01_1D` end-to-end и выдаёт per-session
    таблицу актов со статистикой.
 2. `run_batch` + `build_super_table` собирают мульти-сессионную таблицу.
-3. Все три парадигмы (OF, NOR, Barnes) заданы декларативно; Barnes-метрики
-   считаются из слоя Events.
+3. Парадигма **OF** задана декларативно; слой Events работает для одиночных актов
+   (семейства, роли, Barnes-метрики -- в S2).
 4. Тесты зелёные на всех трёх уровнях; snapshot-регрессия зафиксирована.
 5. Ни одного молчаливого фолбэка в коде (проверяется ревью + тестами).
+6. `analyze_session` отдаёт структуру валидации сессии (§10).
