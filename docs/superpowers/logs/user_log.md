@@ -1,5 +1,21 @@
 # User Log
 
+## 2026-07-25 -- M4a Task 3: acts.events (Event, events_from_act, EventStream) — Python engine port
+
+Requested: Implement Task 3 (M4a, last task) acts.events domain-model layer via TDD. Delivered: Event dataclass + events_from_act function + EventStream dataclass with query helpers in src/sphynx/acts/events.py, 4 tests in tests/unit/test_events.py, updated src/sphynx/acts/__init__.py to export all three. TDD flow: RED (ModuleNotFoundError) → GREEN (4/4 tests pass: two-episode event extraction with 0-based frames, duration_s=3/10, empty mask, all EventStream query methods work correctly, first_empty returns None) → full suite 198/198 pass (194 prior + 4 new, no regression). Code verbatim from brief. Commit 3712e68. M4a milestone complete (acts layer finished: refine_act, Run, Event, events_from_act, EventStream now available). Report at .superpowers/sdd/task-3-report.md.
+
+## 2026-07-25 -- M2 whole-branch review fixes
+
+Requested: apply 3 M2 whole-branch review fixes on Sphynx-python via TDD (hampel flat-window spike miss, spline/pchip Sec 10 raw-exception leak, unused import). Delivered: (1) src/sphynx/preprocess/filters.py `_hampel_mask` now substitutes sigma=eps when windowed MAD==0 so spikes on flat baselines are flagged (matches MATLAB semantics); clean-sine test still 0 flags. (2) src/sphynx/preprocess/interpolation.py `_interp1` now wraps pchip/spline scipy calls and re-raises as SphynxValueError; task's literal repro didn't actually trigger scipy's error (CubicSpline degrades gracefully on 2 points), so used the real reachable case (1 valid point + edge_mode="extrap") instead. (3) removed unused `fields` import from src/sphynx/bodyparts/identify.py. TDD RED->GREEN shown for fixes 1 and 2. Full suite 157/157 passed. Commit 2bb0ce6. Report at .superpowers/sdd/m2-review-fixes-report.md.
+
+## 2026-07-24 -- M2c Task 2: bodyparts.resolve_part — Python engine port
+
+Requested: Implement Task 2 (M2c) bodyparts.resolve_part function for Python engine port via TDD. Delivered: resolve_part(body_parts, query_name) -> int | None in src/sphynx/bodyparts/resolve.py, 10 tests in tests/unit/test_resolve_part.py, updated src/sphynx/bodyparts/__init__.py to export resolve_part. TDD flow: RED (ImportError) → GREEN (10/10 tests pass: exact match wins, case insensitive, superanimal-to-legacy aliases for bodycenter/tailbase/hindlimbs/headcenter, reverse alias, unknown returns None, empty inputs return None, exact preferred over synonym) → regression (98/98 all tests pass, 88 prior + 10 new, no regression). Code verbatim from brief. Commit b4ecd4b. Report at .superpowers/sdd/task-2-report.md.
+
+## 2026-07-24 -- M2b Task 5: velocity_jump_filter — Python engine port
+
+Requested: Implement Task 5 (M2b, final) velocity_jump_filter function for Python engine port via TDD. Delivered: velocity_jump_filter(X, Y, frame_rate, pxl_per_cm, max_cm_s=50.0, x_kcorr=1.0) appended to src/sphynx/preprocess/filters.py, 5 tests in tests/unit/test_velocity_jump_filter.py. TDD flow: RED (ImportError) → GREEN (5/5 tests pass; obvious jump flags frames 49 and 50 with bad.sum()==2, NaN output; no jumps intact; NaN-safe; too short unchanged; flags post-jump index) → regression (92/92 all tests pass, 87 prior + 5 new, no regression). Code verbatim from brief, post-jump index convention correct, hampel_filter untouched. Commit df61e6a. M2b milestone complete. Report at .superpowers/sdd/task-5-report.md.
+
 ## 2026-07-24 -- M1c Task 2: read_preset — Python engine port
 
 Requested: Implement Task 2 (M1c) read_preset function and PresetData dataclass for Python engine port via TDD. Delivered: PresetData dataclass + read_preset(mat_path) in src/sphynx/io/preset.py, 2 preset tests in tests/unit/test_io_preset.py, updated src/sphynx/io/__init__.py to export both. TDD flow executed: RED (ImportError) → GREEN (2/2 tests pass, Demo preset loads) → regression (43/43 all tests pass, no regression). Code verbatim from brief. Commit 4260038. M1 milestone complete. Report at .superpowers/sdd/task-2-report.md.
@@ -3476,3 +3492,100 @@ exceptions, logging, Config (TOML), util.geometry (line utils + circle_fit).
 ветки). Финальное ревью поймало реальный баг §10 (Config молча глотал незнакомые
 TOML-ключи) -- починено строгой валидацией с SphynxConfigError. Сьют 22/22 зелёный.
 Коммиты 7b81064..17978e5. Дальше -- план M1b (ellipse/polygon + io), ещё не написан.
+
+========== милстоун M1 закрыт (io готов) ==========
+read_dlc (single/multi-animal, все 4 Demo-теста на реальных данных зелёные,
+§10-hardened) + read_preset (scipy.io, Demo-пресет грузится). Opus-ревью всей
+пачки подтвердило паритет по сложным портам (ellipse-алгебра, DLC-индексация/
+пикер), 2 §10-лика починены. Сьют 47/47. M1 (фундамент + загрузка данных) готов.
+Дальше M2 (preprocess ~10 файлов + bodyparts + angles) -- самый большой милстоун.
+
+========== M1c + M2a готовы; включён автопродолжатель ==========
+Поставил самоперезапуск (wakeup ~15мин) — иду сквозь M2..M7 сам, без твоих
+подсказок, до конца, потом пушну ветку. Этот заход: io (read_dlc/read_preset) +
+M2a (углы + сглаживание: wrap, smooth_derived, smooth_trace, head_direction с
+исправлением разрыва +-pi). Сам проверяю сьют на каждом шаге (поймал опечатку в
+отчёте субагента). Ревью подтвердило паритет, 1 §10-баг (валидация окна) починен.
+Сьют 70/70. Дальше по wakeup: M2b фильтры, M2c bodyparts, M3..M7.
+
+## 2026-07-24 M2b Task 3: preprocess.compute_velocity — COMPLETE
+
+All 5 tests pass. Full suite: 83 passed (78 + 5).
+
+Command for next task:
+```
+cat .superpowers/sdd/task-4-brief.md
+```
+
+Commit: e964102 feat(python): preprocess.compute_velocity
+Report: .superpowers/sdd/task-3-report.md
+
+========== M2b (препроцесс-ядро) готов ==========
+hypot_kcorr, interpolate_gaps, compute_velocity, hampel_filter, velocity_jump_filter.
+Сьют 92/92. Поймал реальную проблему качества: hampel_filter портировал MATLAB-
+fallback, который ложно флагует чистую синусоиду (78/200); тесты писались под
+встроенный hampel. Переделал на правильный windowed-MAD -> 0 ложных, спайк ловится.
+Дальше по wakeup: M2c (clean_body_part, auto_threshold, kalman, bodyparts).
+
+========== M2c (bodyparts) готов ==========
+identify_parts (+ карта синонимов, superanimal-схема), resolve_part (алиасы),
+compute_center (3 пути), relative_coords (полярные относительно хвоста). Сьют 120/120.
+Индексы переведены на 0-based. Снова поймал опечатку счёта в отчёте субагента
+(98 вместо 109) своим прогоном. Дальше по wakeup: M2d (clean/kalman/threshold/
+per-part), потом ревью границы M2, потом M3 (зоны + геометрия пресетов).
+
+## 2026-07-25: M2d Task 4 delivered
+
+preprocess.arena_exclusion_ring is live. Full suite: 141 passed.
+
+Commit: 2c9800f
+
+Files: src/sphynx/preprocess/arena.py, tests/unit/test_arena_exclusion_ring.py
+
+========== M2d (препроцесс-фильтры) готов ==========
+auto_threshold (свой Otsu, без skimage), kalman_filter_2d, detect_session_start_frame
+(forward-окно, 1-based), arena_exclusion_ring (scipy EDT + cv2). Сьют 141/141.
+Дальше по wakeup: M2e (clean_body_part + apply_per_part оркестратор), потом opus-ревью
+границы M2, потом M3 (зоны + геометрия пресетов).
+
+========== МИЛСТОУН M2 закрыт и отревьюен ==========
+M2e (clean_body_part, per_part_default, apply_per_part_settings оркестратор) готов.
+Opus-ревью всей ветки M2 (27 коммитов): вердикт READY, 0 Critical, паритет
+подтверждён. Нашло 1 Important (hampel глушил реальные спайки на плоском окне) +
+мелочи -> починено. Сьют 157/157. Дальше по wakeup: M3 (зоны + геометрия пресетов).
+
+========== МИЛСТОУН M3 закрыт и отревьюен ==========
+Зоны + геометрия пресетов (mask_from_border, partition_strips, classify_circle,
+classify_square round-mode, pixels_per_cm). Sonnet-ревью: READY, паритет геометрии
+выверен. 2 §10-пробела валидации починены. Сьют 180/180. Тяжёлое (square-corner,
+build_zones) отложено в M3b (создание пресетов, вне критпути). Дальше по wakeup:
+M4 (акты + события) -- критический путь к рабочему analyze_session.
+
+========== M4a (акты: refine + слой Events) готов ==========
+refine_act, refine_act_array + слой Events (Event/events_from_act/EventStream с
+запросными методами) -- ключевая абстракция доменной модели (нужна для Barnes в S2).
+Сьют 198/198. Индексы эпизодов на 0-based. Снова поймал опечатку счёта у субагента
+(183 vs 194). Дальше по wakeup: M4b (speed_acts + act_stats), потом M4c (freezing/
+rear/apply_act/eval), ревью границы M4, потом M5.
+
+========== M4b (speed_acts + act_stats) готов ==========
+Классификация rest/walk/locomotion + per-act статистика (snake_case поля по спеке).
+Сьют 210/210. Дальше по wakeup: M4c (freezing/rear/apply_act/eval) -> ревью границы
+M4 -> M5. Осталось M4c, M5, M6 (pipeline -> рабочий analyze_session), M7.
+
+========== M4c (эвалюатор актов) готов ==========
+apply_act (simple/complex/special) + eval_acts_library + схема Act + auto_rear_threshold.
+Тесты из applyActTest проходят (speed-акт, complex union/exclude, freezing). Сьют 222/222.
+Ядро вычисления актов работает. Дальше по wakeup: M4d (standalone freezing/rear +
+библиотека дефолтов), ревью границы M4, потом M5. Осталось M4d, M5, M6 (pipeline), M7.
+
+========== МИЛСТОУН M4 (акты + события) закрыт и отревьюен ==========
+M4d (standalone freezing/rear + библиотека дефолтов) готов. Opus-ревью всей ветки
+M4 (15 коммитов): READY, 0 Critical, паритет выверен line-for-line против всех
+MATLAB-исходников актов. 1 Important (percentile linear vs MATLAB Hazen -> тихий
+числовой дрейф) починен. Сьют 232/232. Готово 4 из 6 групп милстоунов.
+Дальше по wakeup: M5 (метрики + парадигма OF), потом M6 (pipeline -> рабочий
+analyze_session end-to-end), потом M7. Близко к работающему движку.
+
+## 2026-07-25
+Порт движка на Python завершён (M1-M7). analyze_session гоняется end-to-end на Demo NOF_H01_1D: rest/walk/locomotion/freezing/rear + статы + графики. 255 тестов зелёные. Ветка Sphynx-python запушена.

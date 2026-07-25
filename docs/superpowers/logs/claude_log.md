@@ -1,5 +1,21 @@
 # Claude Log
 
+## 2026-07-25 -- M4a Task 3: acts.events (Event, events_from_act, EventStream) (commit 3712e68)
+
+Implemented acts.events domain-model layer (spec section 3.3) built on refine_act. TDD flow: (1) wrote test_events.py verbatim from brief (4 tests: events_from_act two episodes with 0-based frames [2:5] -> (2,4), [10:12] -> (10,11) and duration_s=3/10.0; empty returns []; EventStream queries first/first_where/labels_before/order_of/unique_labels; first_empty returns None); (2) ran pytest to verify RED state (ModuleNotFoundError: acts.events); (3) created events.py with Event dataclass (act, start_frame, end_frame, duration_s, label=None, index=None) + events_from_act(act_mask, frame_rate, act_name="", label=None, index=None) function using refine_act(mask,0,0) to get runs without refinement + EventStream dataclass wrapping events list with 5 query methods (first returns events[0] if events else None, first_where returns first matching event via next(), labels_before returns preceding event labels, order_of returns event index by label, unique_labels preserves order); (4) updated acts/__init__.py to export Event, EventStream, events_from_act alongside Run/refine_act/refine_act_array; (5) ran tests to verify GREEN state (4/4 pass); (6) ran full suite (python -m pytest -q) to confirm 198/198 pass (194 prior + 4 new); (7) committed cleanly with message `feat(python): acts.events (Event, events_from_act, EventStream)`. Code verbatim from brief, events 0-based indices verified, EventStream query methods return types correct (first/first_where Event|None, labels_before list[str|None], order_of int|None, unique_labels list[str|None]). Report at .superpowers/sdd/task-3-report.md.
+
+## 2026-07-25 -- M2 whole-branch review fixes (commit 2bb0ce6)
+
+Applied 3 review fixes to Sphynx-python. Fix 1 (Important, hampel_filter): _hampel_mask in src/sphynx/preprocess/filters.py suppressed spikes on a locally-flat window because `sigma > 0` short-circuited the mask when windowed MAD was 0. Matched MATLAB's builtin hampel semantics by substituting sigma=eps when MAD==0 instead of never flagging. TDD: added test_flags_spike_on_flat_baseline (flat X=100 with X[100]=9999) to tests/unit/test_hampel_filter.py; RED (1 failed, 4 passed) confirmed bad[100] was False pre-fix; GREEN (5 passed) after `sigma = np.where(sigma == 0, np.finfo(float).eps, sigma)`. Verified test_clean_input_nothing_flagged (pure sine) still asserts bad.sum()==0 and passes -- windowed MAD on a sine is never exactly 0 so the eps substitution never fires there. Fix 2 (Minor, Sec 10): _interp1 in src/sphynx/preprocess/interpolation.py leaked raw scipy ValueError for spline/pchip on too few points. Note: the task's literal repro ([10.0, nan, 40.0], method=spline, default edge_mode=hold) does NOT actually reproduce the leak -- CubicSpline degrades gracefully to linear on exactly 2 points (verified directly against scipy). Found the real reachable leak instead: a single valid sample + edge_mode="extrap" drives CubicSpline/PchipInterpolator down to 1 point, which scipy rejects. TDD: added test_spline_too_few_points_raises_sphynx_error using interpolate_gaps([nan,10.0,nan], method="spline", edge_mode="extrap"); RED (1 failed, 5 passed) showed raw ValueError uncaught; GREEN (6 passed) after wrapping pchip/spline branches in try/except ValueError -> raise SphynxValueError. Fix 3 (nit): removed unused `fields` import from src/sphynx/bodyparts/identify.py (ruff F401), confirmed via `ruff check` (All checks passed on all 3 touched files). Full suite: 157 passed in 2.06s. Commit 2bb0ce6 "fix(python): M2 review -- hampel flat-window spike, spline sec10 guard, unused import". Report at .superpowers/sdd/m2-review-fixes-report.md.
+
+## 2026-07-24 -- M2c Task 2: bodyparts.resolve_part — Python engine port (commit b4ecd4b)
+
+Implemented sphynx.bodyparts.resolve_part: alias-tolerant body-part lookup with exact case-insensitive match first, then canonical name resolution. TDD flow: (1) wrote test_resolve_part.py verbatim from brief (10 tests: exact match wins, case insensitive, superanimal-to-legacy aliases bodycenter/tailbase/hindlimbs/headcenter, reverse direction alias, unknown returns None, empty inputs return None, exact preferred over synonym); (2) ran pytest to verify RED state (ImportError: cannot import name 'resolve_part'); (3) created resolve.py with resolve_part(body_parts, query_name) -> int | None function verbatim from brief (exact lowercased lookup first via index, fallback to identify_parts() dataclass fields for canonical resolution); (4) updated __init__.py to export resolve_part; (5) ran tests to verify GREEN state (10/10 pass); (6) ran full suite (python -m pytest tests/unit/) to confirm 98/98 pass (88 prior + 10 new); (7) committed cleanly with message `feat(python): bodyparts.resolve_part`. Code verbatim from brief, identify_parts integration correct, alias resolution via dataclass fields. All tests pass.
+
+## 2026-07-24 -- M2b Task 5: velocity_jump_filter — Python engine port (commit df61e6a)
+
+Implemented sphynx.preprocess.velocity_jump_filter: flags the frame AFTER a between-frame displacement exceeding max_cm_s. TDD flow: (1) wrote test_velocity_jump_filter.py verbatim from brief (5 tests: obvious jump flags both jump and post-jump frames with bad.sum()==2 and NaN output, no jumps leaves data intact, NaN-safe, too short unchanged, flags post-jump index); (2) ran pytest to verify RED state (ImportError: cannot import name 'velocity_jump_filter'); (3) appended velocity_jump_filter(X, Y, frame_rate, pxl_per_cm, max_cm_s=50.0, x_kcorr=1.0) function verbatim to filters.py after hampel_filter; uses hypot_kcorr for displacement, NaN-safe via isfinite check; (4) ran tests to verify GREEN state (5/5 pass); (5) ran full suite (python -m pytest -q) to confirm 92/92 pass (87 prior + 5 new); (6) committed cleanly with message `feat(python): preprocess.velocity_jump_filter`. Code verbatim from brief, post-jump index convention correct (bad[1:] = overflow), hampel_filter untouched. M2b milestone (preprocess filters) complete: sphynx.preprocess now provides hampel_filter + velocity_jump_filter.
+
 ## 2026-07-24 -- M1c Task 2: read_preset — Python engine port (commit 4260038)
 
 Implemented sphynx.io.read_preset: loads MATLAB .mat preset files via scipy.io.loadmat with squeeze_me=True, struct_as_record=False. TDD flow: (1) wrote test_io_preset.py verbatim from brief (2 tests: missing file raises SphynxIOError, Demo preset loads successfully); (2) ran pytest to verify RED state (ImportError: cannot import name 'read_preset'); (3) wrote preset.py with PresetData dataclass (options, zones, arena_and_objects) + read_preset(mat_path) function; (4) updated __init__.py to export PresetData, read_preset alongside existing DlcData, read_dlc; (5) ran tests to verify GREEN state (2/2 pass); (6) verified Demo/Preset/NOF_H01_1D_Preset.mat exists and loads with correct attributes (FrameRate, pxl2sm, Zones); (7) ran full suite (python -m pytest -q) to confirm 43/43 pass (41 prior dlc tests + 2 new preset tests); (8) committed cleanly. Code verbatim from brief. No regressions. M1 milestone (data loading) complete: sphynx.io now provides read_dlc + read_preset. Ready for M2 (preprocess pipeline).
@@ -4584,3 +4600,175 @@ Both per-task reviews clean, suite 28/28. Deferred the heavy opus whole-branch
 review to a milestone boundary with real logic (after M1c io) -- review effort
 scaled to risk per SDD Model Selection. util.geometry now complete.
 Next: M1c (io: read_dlc single/multi-animal+locale, read_preset via scipy.io mat).
+
+========== turn: M1c io done -> MILESTONE M1 COMPLETE ==========
+M1c plan (read_dlc, read_preset) written + executed via SDD.
+read_dlc fa976af (verbatim port, all 4 real Demo tests pass -- STFP multi-animal,
+BARNES sentinel, forced individual) + §10 hardening 220686b (wrap IO/parse,
+validate individual+frame range). read_preset 4260038 (scipy.io, Demo preset
+loads: FrameRate/pxl2sm/Zones).
+Whole-branch opus review over M1b+M1c: parity CONFIRMED (ellipse conic algebra,
+DLC indexing+multi-animal picker). Found 2 Important §10 leaks (start>end raw
+ValueError; read_preset unwrapped loadmat) + minors -> fixed 30a90e5.
+Full suite 47 passed. MILESTONE M1 (foundation + data loading) COMPLETE.
+Next: M2 (preprocess ~10 files + bodyparts + angles) -- the largest milestone yet.
+
+========== turn: M1c + M2a done; autonomous loop armed ==========
+User: "делай все милстоуны до M7 самостоятельно, не останавливайся". Armed a
+ScheduleWakeup self-continue loop (fires ~15min, prompt = continue M2..M7 via SDD,
+re-schedule each turn until done, then push). Adopted port-from-source style for
+scale on big milestones.
+This turn completed: M1c io (see above) + M2a angles+smoothing.
+M2a: wrap 2bc4f3d, smooth_derived ff57250, smooth_trace ee9596b (edge-aware sgolay,
+scipy replaces toolbox-fallback), unwrap_for_smooth+head_direction+rotating fixture
+9f1fe9f (Bug-2 continuity validated). Verified suite myself each task (caught an
+implementer report miscounting 53 as 42). sonnet whole-branch review: parity
+confirmed side-by-side; 1 Critical §10 (unwrap_for_smooth missing window validation
+that scipy silently accepts) + minor -> fixed f1d02f2. Suite 70/70.
+Next (wakeup continues): M2b (interpolate_gaps, compute_velocity, clean_body_part;
+filters hampel/velocity_jump/kalman/auto_threshold), then M2c bodyparts, M3..M7.
+
+## 2026-07-24 Task 3: preprocess.compute_velocity — DONE
+
+Created `src/sphynx/preprocess/velocity.py` with verbatim implementation of `computeVelocity.m`.
+
+- TDD: test file created, failed (ModuleNotFoundError), implemented, all 5 tests PASSED
+- Suite: 83 passed (78 baseline + 5 new)
+- Commit: e964102 feat(python): preprocess.compute_velocity
+- Critical tests: uniform_motion (30 cm/s ~30.0, within 1.0), outlier_clipped (max 50)
+- Guards: SphynxValueError for non-positive frame_rate/pxl_per_cm, non-odd/< 3 smooth_window
+- Report: .superpowers/sdd/task-3-report.md
+
+No concerns. Ready for next task.
+
+========== turn (wakeup): M2b preprocess-core done ==========
+Wakeup-driven turn. M2b plan (hypot_kcorr, interpolate_gaps, compute_velocity,
+hampel_filter, velocity_jump_filter) written + executed via SDD (haiku).
+Commits: c5ab7df hypot_kcorr, e3cc993 interpolate_gaps, e964102 compute_velocity,
+7d27b00 hampel_filter, df61e6a velocity_jump_filter. Suite 92/92.
+Notable: hampel_filter -- ported the MATLAB *fallback* (movmedian of pointwise
+residuals) which false-flagged 78/200 clean-sine points; the MATLAB tests encode
+the *builtin* hampel semantics. Fixed to proper windowed-MAD Hampel (MAD of window
+values around window median, flat window never flagged) -> clean-sine 0 flags,
+spike still caught. Real port-quality catch. scipy.interpolate replaces interp1;
+no toolbox-absent branches anywhere.
+Per-task suite-verified; heavy opus whole-branch review deferred to the M2 boundary
+(after M2c). Next (wakeup): M2c -- clean_body_part, auto_threshold, kalman_filter_2d,
+arena_exclusion_ring, detect_session_start_frame, apply_per_part_settings + bodyparts
+(identify_parts, compute_center, resolve_part, relative_coords).
+
+========== turn (wakeup): M2c bodyparts done ==========
+M2c plan (identify_parts+Point, resolve_part, compute_center, relative_coords)
+written + executed via SDD (haiku). Commits: 0822d9b identify_parts, b4ecd4b
+resolve_part, 3d64366 compute_center, 4757983 relative_coords. Suite 120/120.
+Indices ported 1-based -> 0-based. superanimal 12-part schema mapping + alias
+resolution + 3 center-resolution paths + tailbase-relative polar geometry all
+validated by ported tests. Caught another implementer suite-count miscount
+(reported 98, actual 109) via my own pytest run -- code was correct.
+Per-task suite-verified; opus whole-branch review deferred to M2 boundary (after M2d).
+Next (wakeup): M2d -- clean_body_part, auto_threshold, kalman_filter_2d,
+arena_exclusion_ring, detect_session_start_frame, apply_per_part_settings; then
+M2 opus review; then M3 (zones + preset geometry).
+
+## 2026-07-25: Task 4 Complete - preprocess.arena_exclusion_ring
+
+**Status:** COMPLETE (M2d last task)
+
+**Commit:** 2c9800f feat(python): preprocess.arena_exclusion_ring
+
+**Summary:** Implemented arena_exclusion_ring port from MATLAB. Full TDD cycle:
+- Created test file with 2 cases (ring detection, zero-width edge case)
+- Implemented verbatim from brief using scipy.ndimage.distance_transform_edt + cv2.findContours
+- Both tests pass, full suite green: 141 passed (139 + 2 new)
+
+**Deliverables:**
+- src/sphynx/preprocess/arena.py (28 LOC)
+- tests/unit/test_arena_exclusion_ring.py (17 LOC)
+
+**Technical notes:**
+- EDT inversion correct: ~mask before distance_transform_edt
+- cv2 contours reshape(-1,2) gives (x,y) format
+- scipy + cv2 dependencies already present
+
+M2d suite now complete with 4 functions: auto_threshold, kalman_filter_2d, detect_session_start_frame, arena_exclusion_ring.
+
+========== turn (wakeup): M2d preprocess-filters done ==========
+M2d plan (auto_threshold, kalman_filter_2d, detect_session_start_frame,
+arena_exclusion_ring) written + executed via SDD (haiku). Commits: 3ffd83d
+auto_threshold (hand-rolled Otsu, no skimage), 2f97981 kalman_filter_2d,
+b6cdbf8 detect_session_start_frame (pandas FixedForwardWindowIndexer, 1-based),
+2c9800f arena_exclusion_ring (scipy EDT + cv2 contours). Suite 141/141.
+Per-task suite-verified. Next (wakeup): M2e -- clean_body_part +
+apply_per_part_settings (per-part orchestrator), then the M2 whole-branch opus
+review, then M3 (zones + preset geometry).
+
+========== turn (wakeup): M2e + M2 opus review -> MILESTONE M2 COMPLETE ==========
+M2e plan (clean_body_part, per_part_default+PartSettings/PartContext,
+apply_per_part_settings orchestrator) executed via SDD. Commits 8b74e54,
+2d466f1, f79f4d9. All 5 smoothing methods + manual regions + pipeline validated.
+M2 whole-branch OPUS review (5d8e53c..f79f4d9, 27 commits): Verdict READY, 0
+Critical. Confirmed parity on compute_velocity, kalman, detect_start, orchestrator
+pipeline order, resolve/identify. Found 1 Important: hampel_filter's (sigma>0)
+guard suppressed genuine spikes on a locally-flat window (MATLAB uses eps and DOES
+flag) -> fixed to eps-substitution (clean-sine stays 0 flags). + spline §10 leak
+guard, unused import. Fixed 2bb0ce6. Suite 157/157.
+MILESTONE M2 COMPLETE. Next (wakeup): M3 -- zones (classify_circle/square,
+partition_strips) + preset geometry (build_zones_*, mask_from_border, pixels_per_cm,
+auto_detect_objects, grid_offsets, rotate, corrected_frame_count...).
+
+========== turn (wakeup): M3 zones+preset-geom -> MILESTONE M3 COMPLETE ==========
+M3 plan (mask_from_border, partition_strips+Zone, classify_circle, classify_square
+round-mode, pixels_per_cm headless) executed via SDD. Commits ae77a69, e17d61e,
+95798a4, 167cb37, caf4121. Deferred to M3b (preset-build, off critical path):
+classify_square square-corner mode, PCA strips, strips _realout, build_zones_*,
+auto_detect_objects, grid_offsets, rotate, corrected_frame_count.
+M3 whole-branch sonnet review: READY, 0 Critical, parity confirmed (bwdist<->EDT
+mappings + corner/ring/strip index math traced numerically). 2 Important §10
+validation gaps + minor -> fixed 4eeeb3e. Suite 180/180.
+MILESTONE M3 COMPLETE. Next (wakeup): M4 -- acts (registry, built-in speed/freezing/
+rear/zone acts, act_stats, refine, apply, eval) + events (single-act episodes). This
+is the analysis critical path toward a working analyze_session.
+
+========== turn (wakeup): M4a acts refine + Events layer done ==========
+M4a plan (refine_act+Run, refine_act_array, Events: Event/events_from_act/
+EventStream) executed via SDD. Commits c781d70, 2d065c3, 3712e68. Suite 198/198.
+Run/episode frame indices ported 1-based->0-based. The Events layer (spec 3.3 domain
+abstraction -- ordered labelled episodes with query helpers first/first_where/
+labels_before/order_of/unique_labels) is now in place, ready for S2 Barnes metrics.
+Caught another impl suite-count miscount (183 vs actual 194) via my own pytest run.
+Next (wakeup): M4b -- speed_acts (rest/walk/locomotion) + act_stats (per-act numeric
+stats). Then M4c: freezing, rear, apply_act, make_act_context, eval_acts_library.
+Then M4 opus review, then M5.
+
+========== turn (wakeup): M4b speed_acts + act_stats done ==========
+M4b plan executed via SDD. Commits b104b71 (speed_acts, SpeedActs; rest/walk/loco
+partition), 983e59f (act_stats, ActStats snake_case per spec section 5; episode
+boundaries 0-based, mad=mean-abs-dev, std ddof=1 guarded). Suite 210/210.
+Next (wakeup): M4c -- freezing, rear, apply_act (special/simple/complex dispatch),
+make_act_context, eval_acts_library. Then M4 opus review, then M5 (metrics + OF paradigm).
+
+========== turn (wakeup): M4c apply_act + act evaluator done ==========
+M4c plan executed via SDD. Commits 99a4c19 (Act schema/build_simple/build_complex/
+ActContext), c8dcf94 (auto_rear_threshold_cm), 3364345 (apply_act dispatch simple/
+complex/special + eval_acts_library two-pass; _points_in_mask 1-based coords, degrade
+to resolvable body parts). applyActTest ported and passing (simple speed act=40,
+complex union=70, complex exclude=30, freezing special=40). Suite 222/222.
+The act-evaluation engine is now functional. Next (wakeup): M4d -- standalone freezing
++ rear (pipeline built-ins) + acts_library_defaults + make_act_context, then M4 opus
+review, then M5 (metrics generic + OF paradigm).
+
+========== turn (wakeup): M4d + M4 opus review -> MILESTONE M4 COMPLETE ==========
+M4d (standalone freezing e5ab832, rear 6c8d83a, acts_library_defaults 9c39ced)
+executed via SDD. Suite 230. M4 whole-branch OPUS review (4eeeb3e..9c39ced, 15
+commits): Verdict READY, 0 Critical, parity confirmed line-for-line vs every MATLAB
+acts source (incl 1-based->0-based run indices, refine 3-step, speed partition,
+episode boundaries, apply_act dispatch, freezing/rear degradation). Found 1 Important:
+np.percentile default (linear) vs MATLAB prctile (Hazen) -> silent numeric drift in
+auto_rear_threshold -> fixed to method="hazen". + freezing 1-D §10 guard. Fixed c7c3cd4.
+Suite 232/232. MILESTONE M4 (acts + events) COMPLETE. 4 of 6 milestone groups done.
+Next (wakeup): M5 -- metrics (generic act x stat) + OF paradigm (declarative bundle).
+Then M6 -- pipeline analyze_session + run_batch + build_super_table + cli -> working
+end-to-end analysis (S1 acceptance criteria). Then M7 render.
+
+## 2026-07-25 -- turn (autonomous marathon)
+M5 (build_super_table + OF paradigm), M6 (analyze_session integrator + run_batch + cli, S1 acceptance on Demo NOF_H01_1D), M7 (save_session_plots) all landed. M5+M6 opus review: 0 Critical/0 Important/6 Minor (one parity fix: x_kcorr guard). S1 engine port M1-M7 COMPLETE, suite 255. Pushing branch.
