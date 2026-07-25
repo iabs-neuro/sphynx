@@ -93,6 +93,8 @@ def build_super_table(
     for b in batch_results:
         mr = by_name.get(b["session_name"], {"mouse": b["session_name"], "session": ""})
         scal[(mr["mouse"], mr["session"])] = (b.get("distance", np.nan), b.get("velocity", np.nan))
+    # TODO(polish): MATLAB rounds distance (cm->int, m->2dp) and velocity->1dp
+    # in the wide table for Prism display. Values here are exact; parity-cosmetic.
     dscale = 0.01 if general_distance_unit.lower() == "m" else 1.0
     for sess in sessions:
         dcol = f"distance_{general_distance_unit}_{sess}"

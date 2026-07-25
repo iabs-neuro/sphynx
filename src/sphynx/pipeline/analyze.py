@@ -152,7 +152,10 @@ def analyze_session(config: Config) -> SessionResult:
     n_parts = len(dlc.body_parts)
     frame_rate = float(_opt(options, "FrameRate", 30))
     pxl_per_cm = float(_opt(options, "pxl2sm", 1.0))
-    x_kcorr = float(_opt(options, "x_kcorr", 1.0)) or 1.0
+    # Parity with analyzeSession.m: only a positive scalar x_kcorr wins;
+    # anything else (missing, zero, negative) falls back to 1 (isotropic).
+    _xk = float(_opt(options, "x_kcorr", 1.0))
+    x_kcorr = _xk if _xk > 0 else 1.0
     width = float(_opt(options, "Width", np.inf))
     height = float(_opt(options, "Height", np.inf))
     _log.info("Loaded %d frames, %d body parts", n_frames, n_parts)
