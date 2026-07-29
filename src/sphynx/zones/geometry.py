@@ -26,10 +26,15 @@ def mask_centroid(mask) -> tuple[float, float]:
 
 def resolve_arena_center(mask, manual=None) -> tuple[float, float]:
     if manual is not None:
-        seq = list(manual)
-        if len(seq) != 2 or not all(np.isreal(v) for v in seq):
+        try:
+            seq = list(manual)
+        except TypeError:
             raise SphynxGeometryError(
-                f"manual arena center must be (x, y); got {manual!r}")
+                f"manual arena center must be a (x, y) pair; got {manual!r}"
+            ) from None
+        if len(seq) != 2 or not all(np.isreal(v) and np.isfinite(v) for v in seq):
+            raise SphynxGeometryError(
+                f"manual arena center must be two finite numbers (x, y); got {manual!r}")
         return float(seq[0]), float(seq[1])
     return arena_centroid(mask)
 

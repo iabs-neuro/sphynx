@@ -38,6 +38,21 @@ def test_resolve_manual_bad_shape_raises():
         resolve_arena_center(m, manual=(1.0,))
 
 
+def test_resolve_manual_noniterable_raises():
+    # M1 review (Important): a non-iterable manual must raise SphynxGeometryError,
+    # not a raw TypeError (section 10).
+    m = _block(5, 15, 5, 15)
+    with pytest.raises(SphynxGeometryError):
+        resolve_arena_center(m, manual=5)
+
+
+def test_resolve_manual_nan_raises():
+    # M1 review (Important): NaN must not pass validation silently.
+    m = _block(5, 15, 5, 15)
+    with pytest.raises(SphynxGeometryError):
+        resolve_arena_center(m, manual=(float("nan"), 4.0))
+
+
 def test_resolve_auto_falls_to_centroid():
     m = _block(5, 15, 5, 15)
     assert resolve_arena_center(m) == pytest.approx((9.5, 9.5))
