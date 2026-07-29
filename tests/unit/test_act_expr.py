@@ -162,3 +162,13 @@ def test_from_flat_unknown_operation_is_none():
 def test_from_flat_no_components_is_none():
     act = build_complex_act(name="empty", components=[], operation="union")
     assert from_flat(act) is None
+
+
+def test_non_finite_sequence_delay_raises():
+    # M3b review (I4): NaN/inf delays would surface as a bare ValueError or
+    # OverflowError from the window arithmetic.
+    import math
+
+    for bad in (float("nan"), math.inf):
+        with pytest.raises(SphynxValueError):
+            _ev(Sequence([Leaf("a"), Leaf("b")], [bad]))

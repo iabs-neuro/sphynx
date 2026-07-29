@@ -26,7 +26,10 @@ def _mark(ctx, act, reason):
     An act that silently returns all-false is indistinguishable from an act
     that genuinely never fired -- the R31#4 defect class. Every degradation
     goes on the record instead (section 10)."""
-    ctx.degraded.setdefault(act.name, []).append(reason)
+    reasons = ctx.degraded.setdefault(act.name, [])
+    if reason in reasons:
+        return          # an act referenced twice degrades once
+    reasons.append(reason)
     _log.warning('Act "%s" degraded: %s', act.name, reason)
 
 
@@ -135,27 +138,33 @@ def _in_any_zone(act, ctx, part, n):
     return masks.any(axis=0)
 
 
-def _resolve_ref(ctx, name):
+def _resolve_ref(ctx, owner, name):
     """Resolve one act reference to a per-frame mask, or None if unknown.
 
     Precomputed results win; otherwise the referenced act is evaluated
     recursively and memoised, so a shared sub-act costs one evaluation. A
-    reference cycle raises rather than recursing forever."""
+    reference cycle raises rather than recursing forever. A degraded referent
+    also degrades the act that references it -- otherwise a composed act comes
+    back empty with a clean record of its own."""
     if name in ctx.results_by_name:
-        return ctx.results_by_name[name]
-    ref = next((a for a in ctx.all_acts if a.name == name), None)
-    if ref is None:
-        return None
-    if name in ctx.evaluating:
-        raise SphynxValueError(
-            f'act reference cycle detected at "{name}" '
-            f"(in flight: {sorted(ctx.evaluating)})")
-    ctx.evaluating.add(name)
-    try:
-        mask = apply_act(ref, ctx)
-    finally:
-        ctx.evaluating.discard(name)
-    ctx.results_by_name[name] = mask
+        mask = ctx.results_by_name[name]
+    else:
+        ref = next((a for a in ctx.all_acts if a.name == name), None)
+        if ref is None:
+            return None
+        if name in ctx.evaluating:
+            raise SphynxValueError(
+                f'act reference cycle detected at "{name}" '
+                f"(in flight: {sorted(ctx.evaluating)})")
+        ctx.evaluating.add(name)
+        try:
+            mask = apply_act(ref, ctx)
+        finally:
+            ctx.evaluating.discard(name)
+        ctx.results_by_name[name] = mask
+
+    if name != owner.name and ctx.degraded.get(name):
+        _mark(ctx, owner, f'referenced act "{name}" is degraded')
     return mask
 
 
@@ -172,7 +181,7 @@ def _apply_complex(act, ctx, n):
             return np.zeros(n, dtype=bool)
     return eval_expr(
         expr, n,
-        lambda nm: _resolve_ref(ctx, nm),
+        lambda nm: _resolve_ref(ctx, act, nm),
         ctx.frame_rate,
         lambda reason: _mark(ctx, act, reason),
     )

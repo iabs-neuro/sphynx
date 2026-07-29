@@ -111,3 +111,57 @@ def test_existing_degradation_messages_preserved():
                 min_duration_sec=0.0, max_gap_sec=0.0)
     apply_act(weird, ctx2)
     assert any("unknown complex operation" in r for r in ctx2.degraded["w"])
+
+
+# --- M3b review regressions (4 Important) ---
+
+def test_degraded_referent_degrades_the_referring_act():
+    # I3: a composed act must not come back empty with a clean record.
+    inner = Act(name="inner", type="simple", body_part="nose",   # absent part
+                min_duration_sec=0.0, max_gap_sec=0.0)
+    outer = Act(name="outer", type="complex", expr=Leaf("inner"),
+                min_duration_sec=0.0, max_gap_sec=0.0)
+    ctx = _ctx(all_acts=[inner, outer])
+    out = apply_act(outer, ctx)
+    assert not out.any()
+    assert "inner" in ctx.degraded
+    assert any("inner" in r for r in ctx.degraded["outer"])
+
+
+def test_wrong_length_reference_is_reported_not_broadcast():
+    # I2: a length-1 mask used to broadcast silently over the whole session.
+    ctx = _ctx(results_by_name={"scalarish": np.ones(1, dtype=bool)})
+    act = Act(name="combo", type="complex", expr=Or([Leaf("scalarish")]),
+              min_duration_sec=0.0, max_gap_sec=0.0)
+    out = apply_act(act, ctx)
+    assert not out.any()
+    assert any("expected" in r for r in ctx.degraded["combo"])
+
+
+def test_exclude_without_subtract_is_reported():
+    # I1: a dropped subtract side yields an over-broad act.
+    ctx = _ctx(results_by_name=_masks())
+    act = Act(name="halfx", type="complex", expr=Exclude(Leaf("a"), None),
+              min_duration_sec=0.0, max_gap_sec=0.0)
+    out = apply_act(act, ctx)
+    assert out.tolist() == _masks()["a"].tolist()      # base passes through
+    assert any("subtract" in r for r in ctx.degraded["halfx"])
+
+
+def test_reason_recorded_once_per_act():
+    # Minor: an act referenced twice degrades once.
+    ctx = _ctx(results_by_name=_masks())
+    act = Act(name="combo", type="complex",
+              expr=Or([Leaf("ghost"), Leaf("ghost")]),
+              min_duration_sec=0.0, max_gap_sec=0.0)
+    apply_act(act, ctx)
+    assert len(ctx.degraded["combo"]) == 1
+
+
+def test_leaf_result_is_not_a_view_of_the_memo():
+    ctx = _ctx(results_by_name=_masks())
+    act = Act(name="passthru", type="complex", expr=Or([Leaf("a")]),
+              min_duration_sec=0.0, max_gap_sec=0.0)
+    out = apply_act(act, ctx)
+    out[:] = False
+    assert ctx.results_by_name["a"].any()   # memo untouched

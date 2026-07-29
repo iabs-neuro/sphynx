@@ -72,6 +72,11 @@ def _eval_sequence(expr, n_frames, resolve_ref, frame_rate, on_error):
         raise SphynxValueError(
             f"SEQUENCE needs {len(steps) - 1} delays for {len(steps)} steps; "
             f"got {len(delays)}")
+    for d in delays:
+        if not np.isfinite(d):
+            # NaN/inf would otherwise surface as a bare ValueError/OverflowError
+            # from the window arithmetic below.
+            raise SphynxValueError(f"SEQUENCE delays must be finite; got {delays}")
 
     active = eval_expr(steps[0], n_frames, resolve_ref, frame_rate, on_error)
     for i in range(1, len(steps)):
@@ -94,7 +99,16 @@ def eval_expr(expr, n_frames, resolve_ref, frame_rate, on_error) -> np.ndarray:
         if mask is None:
             on_error(f'act reference "{expr.act_ref}" could not be resolved')
             return zeros
-        return np.asarray(mask, dtype=bool).ravel()
+        arr = np.asarray(mask, dtype=bool).ravel()
+        if arr.size != n_frames:
+            # A length-1 mask would broadcast silently over the whole session
+            # (OR -> all-true, AND -> all-false); any other length would raise a
+            # bare numpy error two operations away from the cause.
+            on_error(
+                f'act reference "{expr.act_ref}" returned {arr.size} frames, '
+                f"expected {n_frames}")
+            return zeros
+        return arr.copy()      # never hand out a view of a memoised result
 
     if isinstance(expr, Or):
         if not expr.children:
@@ -120,6 +134,8 @@ def eval_expr(expr, n_frames, resolve_ref, frame_rate, on_error) -> np.ndarray:
             return zeros
         base = eval_expr(expr.base, n_frames, resolve_ref, frame_rate, on_error)
         if expr.subtract is None:
+            # A dropped subtract side yields an over-broad act; say so.
+            on_error("EXCLUDE node has no subtract side; nothing was excluded")
             return base
         sub = eval_expr(expr.subtract, n_frames, resolve_ref, frame_rate, on_error)
         return base & ~sub
