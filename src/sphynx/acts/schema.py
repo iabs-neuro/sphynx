@@ -38,6 +38,11 @@ class Act:
     # Expression tree (sphynx.acts.expr). When set it wins over the flat
     # components/operation fields, which are migrated on the fly otherwise.
     expr: object | None = None
+    # Provenance, set when a family expands over the geometry (S2 layer 3).
+    family: str = ""
+    zone_name: str = ""
+    zone_index: int | None = None
+    is_target: bool = False
 
 
 def build_simple_act(
