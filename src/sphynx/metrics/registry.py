@@ -26,6 +26,9 @@ _GEOMETRY_CHECKS = {
         getattr(getattr(z, "roles", None), "is_target", False) for z in ctx.zones),
     "zone_angles": lambda ctx: bool(ctx.zones) and all(
         getattr(z, "angle", None) is not None for z in ctx.zones),
+    "trajectory": lambda ctx: (
+        ctx.trajectory is not None and len(ctx.trajectory) == 2
+        and len(ctx.trajectory[0]) > 0),
 }
 
 
@@ -42,6 +45,9 @@ class MetricContext:
     # degraded act's mask is all-false for a reason that has nothing to do with
     # the animal, so metrics must refuse it rather than report "never happened".
     degraded: dict = field(default_factory=dict)
+    # (x_cm, y_cm) of the animal's reference body part, for path-length style
+    # metrics. Absent by default so a metric that needs it must declare it.
+    trajectory: tuple | None = None
     # No default: an assumed frame rate silently rescales every time metric.
     frame_rate: float | None = None
 

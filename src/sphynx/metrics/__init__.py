@@ -18,3 +18,4 @@ __all__ = [
 ]
 
 from sphynx.metrics import builtins as builtins  # noqa: F401  (registers built-ins)
+from sphynx.metrics import barnes as barnes  # noqa: F401  (registers Barnes metrics)

@@ -79,8 +79,10 @@ def test_builtin_round_trips_too(tmp_path):
     save_paradigm(barnes_maze(), path)
     back = load_paradigm(path)
     assert back.name == "Barnes"
-    assert [m.name for m in back.metrics] == [
-        "visit_order", "latency_to_target", "primary_errors", "time_to_completion"]
+    names = [m.name for m in back.metrics]
+    for expected in ("visit_order", "latency_to_target", "primary_errors",
+                     "time_to_completion", "search_strategy", "path_length"):
+        assert expected in names
     assert back.families[0].selector.zone_class == "hole"
 
 

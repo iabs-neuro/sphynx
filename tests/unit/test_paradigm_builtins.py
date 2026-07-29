@@ -76,12 +76,16 @@ def test_nor_narrows_the_eof_object_rule():
 
 def test_barnes_declares_family_and_generic_metrics():
     barnes = resolve_paradigm("Barnes")
-    assert [f.name for f in barnes.families] == ["nose_at_hole"]
+    assert "nose_at_hole" in [f.name for f in barnes.families]
     names = [m.name for m in barnes.metrics]
     for expected in ("visit_order", "latency_to_target", "primary_errors",
                      "time_to_completion"):
         assert expected in names
-    assert all(m.params.get("family") == "nose_at_hole" for m in barnes.metrics)
+    # every family-scoped ref names a family that the paradigm declares
+    declared = {f.name for f in barnes.families}
+    for ref in barnes.metrics:
+        family = ref.params.get("family")
+        assert family is None or family in declared
 
 
 def test_barnes_family_binds_a_class_not_a_zone_name():
@@ -179,3 +183,44 @@ def test_eof_documents_what_it_deliberately_omits():
     doc = enriched_open_field.__doc__.lower()
     assert "ring" in doc
     assert "ratio_index" in doc
+
+
+# --- M7: the Barnes paradigm declares its metric set ---
+
+def test_barnes_declares_the_entry_family():
+    barnes = resolve_paradigm("Barnes")
+    assert [f.name for f in barnes.families] == ["nose_at_hole", "inside_hole"]
+    # total latency is measured against an entry, not a nose check
+    entry = next(f for f in barnes.families if f.name == "inside_hole")
+    assert entry.template.body_part == "bodycenter"
+
+
+def test_barnes_declares_the_m7_metrics():
+    barnes = resolve_paradigm("Barnes")
+    names = {m.name for m in barnes.metrics}
+    for expected in ("total_latency", "total_errors", "target_checks",
+                     "non_target_checks", "time_near_target", "target_ordinal",
+                     "angular_distance_first", "mean_angular_distance",
+                     "path_length", "path_length_to_target", "search_strategy"):
+        assert expected in names
+
+
+def test_every_barnes_metric_ref_is_registered():
+    import sphynx.metrics.barnes  # noqa: F401
+    from sphynx.metrics.registry import REGISTRY
+
+    for ref in resolve_paradigm("Barnes").metrics:
+        assert ref.name in REGISTRY, f"{ref.name} is referenced but not registered"
+
+
+def test_barnes_metric_refs_carry_their_family():
+    barnes = resolve_paradigm("Barnes")
+    by_key = {m.key: m for m in barnes.metrics}
+    assert by_key["total_latency"].params["family"] == "inside_hole"
+    assert by_key["total_errors"].params["family"] == "nose_at_hole"
+    assert by_key["path_length"].params == {}          # trajectory-only metric
+
+
+def test_primary_latency_is_the_generic_metric_under_a_barnes_alias():
+    by_key = {m.key: m for m in resolve_paradigm("Barnes").metrics}
+    assert by_key["primary_latency"].name == "latency_to_target"

@@ -118,6 +118,7 @@ def barnes_maze() -> Paradigm:
     family expands over the holes that actually exist, and the order/error
     metrics are generic queries over its merged event stream."""
     family = "nose_at_hole"
+    entry = "inside_hole"
     return Paradigm(
         name="Barnes", parent="OF",
         composites=[
@@ -125,16 +126,41 @@ def barnes_maze() -> Paradigm:
             CompositeSpec("neutral_holes",
                           ZoneSelector(zone_class="hole", is_target=False)),
         ],
-        families=[ActFamily(
-            name=family,
-            selector=ZoneSelector(zone_class="hole"),
-            template=_nose_template(family),
-        )],
+        families=[
+            ActFamily(
+                name=family,
+                selector=ZoneSelector(zone_class="hole"),
+                template=_nose_template(family),
+            ),
+            # The entry family: the animal itself inside the hole, which is what
+            # total latency is measured against (a nose check is not an entry).
+            ActFamily(
+                name=entry,
+                selector=ZoneSelector(zone_class="hole"),
+                template=Act(name=entry, type="simple", body_part="bodycenter",
+                             required_parts=["bodycenter"],
+                             min_duration_sec=0.25, max_gap_sec=0.25),
+            ),
+        ],
         metrics=[
+            # generic (M5)
             MetricRef("visit_order", {"family": family}),
-            MetricRef("latency_to_target", {"family": family}),
+            MetricRef("latency_to_target", {"family": family},
+                      as_="primary_latency"),
             MetricRef("primary_errors", {"family": family}),
             MetricRef("time_to_completion", {"family": family}),
+            # Barnes-specific (M7)
+            MetricRef("total_latency", {"family": entry}),
+            MetricRef("total_errors", {"family": family}),
+            MetricRef("target_checks", {"family": family}),
+            MetricRef("non_target_checks", {"family": family}),
+            MetricRef("time_near_target", {"family": family}),
+            MetricRef("target_ordinal", {"family": family}),
+            MetricRef("angular_distance_first", {"family": family}),
+            MetricRef("mean_angular_distance", {"family": family}),
+            MetricRef("path_length", {}),
+            MetricRef("path_length_to_target", {"family": family}),
+            MetricRef("search_strategy", {"family": family}),
         ],
         validation=[
             ValidationRule(
