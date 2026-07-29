@@ -4775,3 +4775,6 @@ M5 (build_super_table + OF paradigm), M6 (analyze_session integrator + run_batch
 
 ## 2026-07-25 -- S2 marathon: M1 done
 S2 spec written+committed (8-layer, M1..M7). M1 (zone roles + arena center + angle) executed via SDD: ZoneRoles + extended Zone (backward-compat), arena_centroid/resolve_arena_center/zone_angle geometry, assign_zone_angles/indices. Boundary review 0C/2I: fixed resolve_arena_center section-10 guards (non-iterable + NaN manual). Suite 271. Proceeding to M2 (selectors/composites).
+
+## 2026-07-25 -- S2 marathon: M2 done
+M2 (zone selectors + composites): ZoneSelector (class/is_target/index/tags, serializable data), select, union_mask, make_composite, target_zone/neutral_composite/class_composite (composites are drop-in Zones with .members). Boundary review 0C/1I/3Minor; added index predicate + tag guards. Suite 289. Next M3a (act model v2 pt1: part-resolution + post-filters + freezing/rear as library props).
