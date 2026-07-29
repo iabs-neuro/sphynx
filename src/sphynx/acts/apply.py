@@ -4,6 +4,7 @@ evalActsLibrary."""
 from __future__ import annotations
 
 import numpy as np
+from scipy.ndimage import median_filter
 
 from sphynx.acts.rear_threshold import auto_rear_threshold_cm
 from sphynx.acts.refine import refine_act_array
@@ -44,6 +45,12 @@ def apply_act(act: Act, ctx: ActContext) -> np.ndarray:
         b = _apply_special(act, ctx, n_frames)
     else:
         b = np.zeros(n_frames, dtype=bool)
+
+    win = int(round(act.median_window_sec * ctx.frame_rate))
+    if win >= 3:
+        if win % 2 == 0:
+            win += 1
+        b = median_filter(b.astype(np.uint8), size=win, mode="nearest") > 0
 
     dur_sec = max(0.0, act.min_duration_sec)
     gap_sec = max(0.0, act.max_gap_sec)

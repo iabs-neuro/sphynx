@@ -31,6 +31,10 @@ class Act:
     rear_auto_threshold: bool = True
     min_duration_sec: float = 0.25
     max_gap_sec: float = 0.25
+    required_parts: list[str] = field(default_factory=list)
+    fallback: dict = field(default_factory=dict)
+    median_window_sec: float = 0.0
+    freezing_mode: str = ""
 
 
 def build_simple_act(
@@ -56,6 +60,25 @@ def build_complex_act(
     return Act(
         name=name, type="complex", components=list(components or []),
         operation=operation.lower(), seq_delay_sec=seq_delay_sec,
+        min_duration_sec=min_duration_sec, max_gap_sec=max_gap_sec,
+    )
+
+
+def build_special_act(
+    name: str = "", special_kind: str = "", body_parts=None, zones=None,
+    freezing_mode: str = "", rear_mode: str = "",
+    threshold_cm: float = _NAN, threshold_pxl: float = _NAN,
+    rear_auto_threshold: bool = True, speed_max: float = _INF,
+    min_duration_sec: float = 0.25, max_gap_sec: float = 0.25,
+) -> Act:
+    """Build a special act (freezing / rears / allinzone). Freezing and rear
+    modes are act properties, not analysis-level config (S2 layer 4d)."""
+    return Act(
+        name=name, type="special", special_kind=special_kind.lower(),
+        body_parts=list(body_parts or []), zones=list(zones or []),
+        freezing_mode=freezing_mode, rear_mode=rear_mode,
+        threshold_cm=threshold_cm, threshold_pxl=threshold_pxl,
+        rear_auto_threshold=rear_auto_threshold, speed_max=speed_max,
         min_duration_sec=min_duration_sec, max_gap_sec=max_gap_sec,
     )
 
