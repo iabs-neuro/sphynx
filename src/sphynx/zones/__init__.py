@@ -9,7 +9,15 @@ from sphynx.zones.geometry import (
     resolve_arena_center,
     zone_angle,
 )
-from sphynx.zones.select import ZoneSelector, select
+from sphynx.zones.select import (
+    ZoneSelector,
+    select,
+    union_mask,
+    make_composite,
+    target_zone,
+    neutral_composite,
+    class_composite,
+)
 from sphynx.zones.square import classify_square
 from sphynx.zones.strips import Zone, ZoneRoles, partition_strips
 
@@ -19,6 +27,11 @@ __all__ = [
     "ZoneSelector",
     "partition_strips",
     "select",
+    "union_mask",
+    "make_composite",
+    "target_zone",
+    "neutral_composite",
+    "class_composite",
     "classify_circle",
     "classify_square",
     "arena_centroid",
