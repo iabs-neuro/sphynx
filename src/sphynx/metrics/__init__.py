@@ -14,5 +14,7 @@ from sphynx.metrics.registry import (
 __all__ = [
     "REGISTRY", "MetricContext", "MetricResults", "MetricSpec",
     "compute_metric", "compute_metrics", "missing_requirements",
-    "register_metric",
+    "register_metric", "builtins",
 ]
+
+from sphynx.metrics import builtins as builtins  # noqa: F401  (registers built-ins)
