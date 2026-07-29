@@ -27,6 +27,7 @@ class Zone:
     roles: ZoneRoles = field(default_factory=ZoneRoles)
     index: int | None = None          # 1-based position within its zone_class
     angle: float | None = None        # centroid angle rel. arena center, radians
+    members: list = field(default_factory=list)  # composite provenance (zone names)
 
 
 def partition_strips(arena_mask, n, direction: str) -> list[Zone]:

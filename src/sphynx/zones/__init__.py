@@ -9,13 +9,16 @@ from sphynx.zones.geometry import (
     resolve_arena_center,
     zone_angle,
 )
+from sphynx.zones.select import ZoneSelector, select
 from sphynx.zones.square import classify_square
 from sphynx.zones.strips import Zone, ZoneRoles, partition_strips
 
 __all__ = [
     "Zone",
     "ZoneRoles",
+    "ZoneSelector",
     "partition_strips",
+    "select",
     "classify_circle",
     "classify_square",
     "arena_centroid",
