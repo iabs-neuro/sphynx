@@ -6,11 +6,13 @@ from __future__ import annotations
 import numpy as np
 from scipy.ndimage import median_filter
 
+from sphynx.acts.expr import eval_expr, from_flat
 from sphynx.acts.part_resolution import resolve_act_parts
 from sphynx.acts.rear_threshold import auto_rear_threshold_cm
 from sphynx.acts.refine import refine_act_array
 from sphynx.acts.schema import Act, ActContext
 from sphynx.bodyparts import resolve_part
+from sphynx.exceptions import SphynxValueError
 from sphynx.geom import hypot_kcorr
 from sphynx.logging_setup import get_logger
 from sphynx.util.smoothing import smooth_derived
@@ -133,43 +135,47 @@ def _in_any_zone(act, ctx, part, n):
     return masks.any(axis=0)
 
 
+def _resolve_ref(ctx, name):
+    """Resolve one act reference to a per-frame mask, or None if unknown.
+
+    Precomputed results win; otherwise the referenced act is evaluated
+    recursively and memoised, so a shared sub-act costs one evaluation. A
+    reference cycle raises rather than recursing forever."""
+    if name in ctx.results_by_name:
+        return ctx.results_by_name[name]
+    ref = next((a for a in ctx.all_acts if a.name == name), None)
+    if ref is None:
+        return None
+    if name in ctx.evaluating:
+        raise SphynxValueError(
+            f'act reference cycle detected at "{name}" '
+            f"(in flight: {sorted(ctx.evaluating)})")
+    ctx.evaluating.add(name)
+    try:
+        mask = apply_act(ref, ctx)
+    finally:
+        ctx.evaluating.discard(name)
+    ctx.results_by_name[name] = mask
+    return mask
+
+
 def _apply_complex(act, ctx, n):
-    comps = act.components
-    if not comps:
-        _mark(ctx, act, "complex act declares no components")
-        return np.zeros(n, dtype=bool)
-    cmasks = np.zeros((len(comps), n), dtype=bool)
-    for k, name in enumerate(comps):
-        if name in ctx.results_by_name:
-            cmasks[k, :] = ctx.results_by_name[name]
-        else:
-            j = next((i for i, a in enumerate(ctx.all_acts) if a.name == name), None)
-            if j is not None:
-                cmasks[k, :] = apply_act(ctx.all_acts[j], ctx)
-            else:
-                _mark(ctx, act, f'component act "{name}" not found')
-    op = act.operation.lower()
-    if op == "intersect":
-        return cmasks.all(axis=0)
-    if op == "union":
-        return cmasks.any(axis=0)
-    if op == "exclude":
-        return cmasks[0, :] & ~cmasks[1:, :].any(axis=0)
-    if op == "sequence":
-        if cmasks.shape[0] < 2:
-            return cmasks[0] if cmasks.shape[0] else np.zeros(n, dtype=bool)
-        delay = max(1, round(act.seq_delay_sec * ctx.frame_rate))
-        a = cmasks[0, :]
-        window = np.zeros(n, dtype=bool)
-        for k in range(n):
-            if a[k]:
-                window[k + 1 : min(n, k + delay + 1)] = True
-        b = window & cmasks[1, :]
-        for j in range(2, cmasks.shape[0]):
-            b = b & cmasks[j, :]
-        return b
-    _mark(ctx, act, f'unknown complex operation "{act.operation}"')
-    return np.zeros(n, dtype=bool)
+    # One evaluation path: an explicit tree wins, a flat act is migrated.
+    expr = act.expr
+    if expr is None:
+        if not act.components:
+            _mark(ctx, act, "complex act declares no components")
+            return np.zeros(n, dtype=bool)
+        expr = from_flat(act)
+        if expr is None:
+            _mark(ctx, act, f'unknown complex operation "{act.operation}"')
+            return np.zeros(n, dtype=bool)
+    return eval_expr(
+        expr, n,
+        lambda nm: _resolve_ref(ctx, nm),
+        ctx.frame_rate,
+        lambda reason: _mark(ctx, act, reason),
+    )
 
 
 def _apply_special(act, ctx, n):

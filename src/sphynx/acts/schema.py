@@ -35,6 +35,9 @@ class Act:
     fallback: dict = field(default_factory=dict)
     median_window_sec: float = 0.0
     freezing_mode: str = ""
+    # Expression tree (sphynx.acts.expr). When set it wins over the flat
+    # components/operation fields, which are migrated on the fly otherwise.
+    expr: object | None = None
 
 
 def build_simple_act(
@@ -98,3 +101,6 @@ class ActContext:
     # act name -> list of degradation reasons recorded while evaluating it.
     # Populated by apply_act; never silently empty when something was missing.
     degraded: dict = field(default_factory=dict)
+    # Act names currently being evaluated, so a reference cycle raises instead
+    # of recursing forever.
+    evaluating: set = field(default_factory=set)
