@@ -4772,3 +4772,6 @@ end-to-end analysis (S1 acceptance criteria). Then M7 render.
 
 ## 2026-07-25 -- turn (autonomous marathon)
 M5 (build_super_table + OF paradigm), M6 (analyze_session integrator + run_batch + cli, S1 acceptance on Demo NOF_H01_1D), M7 (save_session_plots) all landed. M5+M6 opus review: 0 Critical/0 Important/6 Minor (one parity fix: x_kcorr guard). S1 engine port M1-M7 COMPLETE, suite 255. Pushing branch.
+
+## 2026-07-25 -- S2 marathon: M1 done
+S2 spec written+committed (8-layer, M1..M7). M1 (zone roles + arena center + angle) executed via SDD: ZoneRoles + extended Zone (backward-compat), arena_centroid/resolve_arena_center/zone_angle geometry, assign_zone_angles/indices. Boundary review 0C/2I: fixed resolve_arena_center section-10 guards (non-iterable + NaN manual). Suite 271. Proceeding to M2 (selectors/composites).
