@@ -44,5 +44,31 @@ def test_selector_dontcare_matches_all():
     assert len(got) == 4
 
 
+def test_select_by_index():
+    # M2 review (Important): index is a selection dimension.
+    zs = _zones()
+    zs[0].index = 1
+    zs[1].index = 2
+    zs[2].index = 3
+    got = select(zs, ZoneSelector(zone_class="hole", index=2))
+    assert [z.name for z in got] == ["h2"]
+
+
+def test_empty_tags_any_is_dontcare():
+    # M2 review (Minor): empty tag lists are don't-care on both sides.
+    assert len(select(_zones(), ZoneSelector(tags_any=[]))) == 4
+    assert len(select(_zones(), ZoneSelector(tags_all=[]))) == 4
+
+
+def test_str_tags_raises():
+    # M2 review (Minor): a bare string must not silently decompose to chars.
+    import pytest
+
+    from sphynx.exceptions import SphynxValueError
+
+    with pytest.raises(SphynxValueError):
+        select(_zones(), ZoneSelector(tags_any="primary"))
+
+
 def test_zone_members_defaults_empty():
     assert Zone("x", "area", _m()).members == []

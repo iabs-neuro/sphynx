@@ -15,6 +15,7 @@ from sphynx.zones.strips import Zone
 class ZoneSelector:
     zone_class: str | None = None
     is_target: bool | None = None
+    index: int | None = None
     tags_all: list | None = None
     tags_any: list | None = None
 
@@ -23,10 +24,17 @@ class ZoneSelector:
             return False
         if self.is_target is not None and bool(zone.roles.is_target) != self.is_target:
             return False
-        tags = set(zone.roles.tags)
-        if self.tags_all is not None and not set(self.tags_all).issubset(tags):
+        if self.index is not None and zone.index != self.index:
             return False
-        if self.tags_any is not None and tags.isdisjoint(set(self.tags_any)):
+        tags = set(zone.roles.tags)
+        # A bare string would silently decompose into characters via set();
+        # that is a wrong-result trap, so reject it (section 10).
+        if isinstance(self.tags_all, str) or isinstance(self.tags_any, str):
+            raise SphynxValueError("tags_all/tags_any must be lists of tags, not a str")
+        # Empty tag lists are don't-care on BOTH sides (symmetric).
+        if self.tags_all and not set(self.tags_all).issubset(tags):
+            return False
+        if self.tags_any and tags.isdisjoint(set(self.tags_any)):
             return False
         return True
 
