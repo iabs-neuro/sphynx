@@ -4778,3 +4778,6 @@ S2 spec written+committed (8-layer, M1..M7). M1 (zone roles + arena center + ang
 
 ## 2026-07-25 -- S2 marathon: M2 done
 M2 (zone selectors + composites): ZoneSelector (class/is_target/index/tags, serializable data), select, union_mask, make_composite, target_zone/neutral_composite/class_composite (composites are drop-in Zones with .members). Boundary review 0C/1I/3Minor; added index predicate + tag guards. Suite 289. Next M3a (act model v2 pt1: part-resolution + post-filters + freezing/rear as library props).
+
+## 2026-07-25 -- S2 marathon: M3a done
+M3a (act model v2 pt1): fallback chains (bodyparts/fallbacks.py + acts/part_resolution.py), Act v2 fields (required_parts/fallback/median_window_sec/freezing_mode), build_special_act, median post-filter, and degradation wiring across apply.py's six silent-return sites (ActContext.degraded + warnings). Opus boundary review found 2 Critical + 5 Important -- all fixed: NaN rear thresholds, five unmarked dispatch fallthroughs (incl. rear_mode typo drifting to AllBodyParts and returning all-true), freezing_mode ignored, inf speed_max, inert required_parts, and DEFAULT_FALLBACKS shipping indefensible chains (now empty + opt-in, matching the approved "explicit chain per act" model). Suite 324. Next M3b (AST evaluator).
