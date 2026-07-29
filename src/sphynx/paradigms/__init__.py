@@ -24,6 +24,7 @@ from sphynx.paradigms.model import CompositeSpec, MetricRef, Paradigm
 from sphynx.paradigms.registry import (
     PARADIGMS,
     get_paradigm,
+    lineage,
     register_paradigm,
     resolve_paradigm,
 )
@@ -36,7 +37,7 @@ from sphynx.paradigms.validate import (
 
 __all__ = [
     "Paradigm", "MetricRef", "CompositeSpec",
-    "PARADIGMS", "register_paradigm", "get_paradigm", "resolve_paradigm",
+    "PARADIGMS", "register_paradigm", "get_paradigm", "resolve_paradigm", "lineage",
     "ValidationRule", "ValidationIssue", "ValidationReport", "validate_paradigm",
     "open_field", "enriched_open_field", "novel_object_recognition",
     "barnes_maze", "ty_maze", "register_builtin_paradigms", "BUILTIN_FACTORIES",

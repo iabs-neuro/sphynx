@@ -66,14 +66,17 @@ def _zone_angles(ctx, family) -> dict:
         label = act.zone_name or act.name
         zone = by_name.get(label)
         angle = getattr(zone, "angle", None) if zone is not None else None
-        if angle is None:
+        # A NaN angle is as unusable as a missing one, and would sort into an
+        # arbitrary ring position -- fabricating a rotational order.
+        if angle is None or not math.isfinite(float(angle)):
             missing.append(label)
         else:
             angles[label] = float(angle)
     if missing:
         raise SphynxMetricError(
-            f"holes {sorted(missing)} have no angle; run assign_zone_angles "
-            "against the arena centre before computing angular metrics")
+            f"holes {sorted(missing)} have no usable angle; run "
+            "assign_zone_angles against the arena centre before computing "
+            "angular metrics")
     return angles
 
 
@@ -187,21 +190,27 @@ def mean_angular_distance(ctx, family):
 # --- path length ----------------------------------------------------------
 
 def _path_length_cm(x, y, upto=None) -> float:
+    """Trajectory length in cm.
+
+    Gaps are BRIDGED, not dropped: measuring between the finite samples either
+    side of a dropout keeps the traversal in the total. Dropping the step
+    instead (which is what filtering the diffs does) silently understates the
+    path by the whole distance covered while tracking was lost."""
     x = np.asarray(x, dtype=float).ravel()
     y = np.asarray(y, dtype=float).ravel()
     if upto is not None:
         x, y = x[: upto + 1], y[: upto + 1]
+    good = np.isfinite(x) & np.isfinite(y)
+    x, y = x[good], y[good]
     if x.size < 2:
         return _NAN
-    steps = np.hypot(np.diff(x), np.diff(y))
-    steps = steps[np.isfinite(steps)]
-    return float(steps.sum()) if steps.size else _NAN
+    return float(np.hypot(np.diff(x), np.diff(y)).sum())
 
 
 @register_metric("path_length", requires_geometry=("trajectory",), paradigm=_BARNES)
 def path_length(ctx):
     """Distance travelled over the whole trial, in cm."""
-    return _path_length_cm(*ctx.trajectory)
+    return _path_length_cm(*ctx.trajectory_cm)
 
 
 @register_metric("path_length_to_target", requires_events=("$family",),
@@ -213,7 +222,7 @@ def path_length_to_target(ctx, family):
     event = ctx.events[family].first_where(lambda e: e.is_target)
     if event is None:
         return _NAN
-    return _path_length_cm(*ctx.trajectory, upto=event.start_frame)
+    return _path_length_cm(*ctx.trajectory_cm, upto=event.start_frame)
 
 
 # --- search strategy ------------------------------------------------------
@@ -239,17 +248,35 @@ def search_strategy(ctx, family, max_direct_errors: int = 3,
     target = _target_label(ctx, family)
     angles = _zone_angles(ctx, family)
     stream = ctx.events[family]
-    checked = _checked_labels(stream, target)
-    if not checked:
+    events = stream.events
+
+    # Only the SEARCH PHASE counts: everything up to and including the first
+    # target check. On a probe trial there is no escape box, so the animal keeps
+    # searching afterwards; scoring that tail would make "direct" almost
+    # unreachable for an animal that went straight to the target.
+    first_target = next((i for i, e in enumerate(events) if e.is_target), None)
+    found = first_target is not None
+    phase = events[: first_target + 1] if found else list(events)
+
+    # Ordered labels with immediate repeats collapsed: re-checking one hole
+    # twice in a row is one step, but leaving and coming back is not, so a
+    # perseverative h3,h4,h3,h5 must not compress into a serial sweep.
+    sequence = []
+    for event in phase:
+        if event.label is None:
+            continue
+        if not sequence or event.label != sequence[-1]:
+            sequence.append(event.label)
+    if not sequence:
         return "none"
+
+    checked = list(dict.fromkeys(sequence))
 
     ring = _ring_order(angles)
     position = {label: i for i, label in enumerate(ring)}
     n_holes = len(ring)
 
-    found = stream.first_where(lambda e: e.is_target) is not None
-    wrong_before = (len(stream.distinct_labels_before(
-        stream.first_where(lambda e: e.is_target))) if found else len(checked))
+    wrong_before = len([c for c in checked if c != target])
 
     within_arc = all(
         _angular_distance_deg(angles[c], angles[target]) <= direct_arc_deg
@@ -260,7 +287,7 @@ def search_strategy(ctx, family, max_direct_errors: int = 3,
     # Serial: a run of adjacent holes stepped in one direction around the ring.
     run, best = 1, 1
     previous_step = None
-    for a, b in zip(checked, checked[1:]):
+    for a, b in zip(sequence, sequence[1:]):
         step = (position[b] - position[a]) % n_holes
         step = step if step <= n_holes // 2 else step - n_holes   # signed
         if abs(step) == 1 and (previous_step is None or step == previous_step):

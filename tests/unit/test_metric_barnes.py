@@ -56,18 +56,18 @@ def _results(visits, family="nose_at_hole"):
     return out
 
 
-def _ctx(visits, zones=None, trajectory="default", family="nose_at_hole"):
+def _ctx(visits, zones=None, trajectory_cm="default", family="nose_at_hole"):
     acts = _acts(family)
     results = _results(visits, family)
     stream = family_event_stream(acts, results, FPS, family=family)
-    if trajectory == "default":
+    if trajectory_cm == "default":
         # a 1 cm step per frame -> path length is a round number
-        trajectory = (np.arange(N_FRAMES, dtype=float),
-                      np.zeros(N_FRAMES, dtype=float))
+        trajectory_cm = (np.arange(N_FRAMES, dtype=float),
+                         np.zeros(N_FRAMES, dtype=float))
     return MetricContext(
         acts=dict(results), stats={}, events={family: stream}, act_defs=acts,
         zones=_ring() if zones is None else zones,
-        trajectory=trajectory, frame_rate=FPS,
+        trajectory_cm=trajectory_cm, frame_rate=FPS,
     )
 
 
@@ -190,19 +190,19 @@ def test_path_length_to_target_nan_when_never_found():
 
 
 def test_missing_trajectory_raises():
-    ctx = _ctx([(0, 10)], trajectory=None)
+    ctx = _ctx([(0, 10)], trajectory_cm=None)
     with pytest.raises(SphynxMetricError):
         compute_metric("path_length", ctx)
 
 
-def test_path_length_ignores_nan_gaps():
+def test_path_length_bridges_tracking_gaps():
+    # M7 review (I1): dropping the step across a dropout understates the path
+    # by the whole distance covered while tracking was lost.
     x = np.arange(N_FRAMES, dtype=float)
     y = np.zeros(N_FRAMES, dtype=float)
-    x[50] = np.nan
-    ctx = _ctx([(0, 10)], trajectory=(x, y))
-    got = compute_metric("path_length", ctx)
-    assert math.isfinite(got)
-    assert got < N_FRAMES - 1
+    x[50:60] = np.nan
+    ctx = _ctx([(0, 10)], trajectory_cm=(x, y))
+    assert compute_metric("path_length", ctx) == pytest.approx(N_FRAMES - 1)
 
 
 # --- search strategy -------------------------------------------------------
@@ -265,3 +265,40 @@ def test_barnes_metrics_are_paradigm_scoped():
     for name in ("total_errors", "target_ordinal", "search_strategy",
                  "path_length", "mean_angular_distance"):
         assert REGISTRY[name].paradigm == ("Barnes",)
+
+
+# --- M7 review regressions (2 Critical, 6 Important) ---
+
+def test_degraded_family_member_blocks_the_metric():
+    # C1: a session with the nose part missing used to report total_errors=0.0
+    # and search_strategy="none" with a clean errors dict (R31#4 again).
+    ctx = _ctx([(3, 10), (0, 50)])
+    ctx.degraded = {"nose_at_hole4": ['body part "nose" not found']}
+    for metric in ("total_errors", "target_checks", "search_strategy"):
+        with pytest.raises(SphynxMetricError) as exc:
+            compute_metric(metric, ctx, family="nose_at_hole")
+        assert "degraded" in str(exc.value)
+
+
+def test_strategy_scores_the_search_phase_only():
+    # C2: an animal that went straight to the target and then kept searching
+    # (as it must on a probe trial, where there is no escape box) was scored
+    # "serial" on the post-target tail.
+    ctx = _ctx([(0, 10), (3, 40), (4, 60), (5, 80), (6, 100)])
+    assert compute_metric("search_strategy", ctx, family="nose_at_hole") == "direct"
+
+
+def test_perseveration_is_not_a_serial_sweep():
+    # I6: h3,h4,h3,h5,h3,h6 compressed to a clean sweep once repeats were
+    # dropped by distinct-first-visit ordering.
+    ctx = _ctx([(3, 10), (4, 25), (3, 40), (5, 55), (3, 70), (6, 85)])
+    assert compute_metric("search_strategy", ctx, family="nose_at_hole") != "serial"
+
+
+def test_nan_zone_angle_raises_rather_than_fabricating_a_ring():
+    # I2: a NaN angle passed the `is None` guard and sorted arbitrarily.
+    zones = _ring()
+    zones[4].angle = float("nan")
+    ctx = _ctx([(2, 10)], zones=zones)
+    with pytest.raises(SphynxMetricError):
+        compute_metric("search_strategy", ctx, family="nose_at_hole")

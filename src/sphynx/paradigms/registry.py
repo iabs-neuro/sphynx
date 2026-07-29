@@ -109,3 +109,14 @@ def resolve_paradigm(name_or_paradigm, registry=None) -> Paradigm:
         merged.config_defaults = {**merged.config_defaults,
                                   **copy.deepcopy(link.config_defaults)}
     return merged
+
+
+def lineage(name_or_paradigm, registry=None) -> tuple:
+    """The paradigm's own name followed by its ancestors, child first.
+
+    Pass this to metrics.compute_metrics / compute_metric_refs so a paradigm
+    INHERITS its parent's metrics: matching on the child's name alone would
+    silently drop every metric registered against the parent."""
+    paradigm = (name_or_paradigm if isinstance(name_or_paradigm, Paradigm)
+                else get_paradigm(name_or_paradigm))
+    return tuple(link.name for link in reversed(_chain(paradigm, registry)))

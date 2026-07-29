@@ -236,3 +236,33 @@ def test_unexpected_metric_error_is_recorded_not_fatal():
     res = compute_metrics(["boom", "fine"], _ctx(), paradigm=None)
     assert res.values == {"fine": 5.0}
     assert "unexpected ZeroDivisionError" in res.errors["boom"]
+
+
+def test_paradigm_lineage_inherits_metrics():
+    # M7 review (I3): a child paradigm declares no metrics of its own, so
+    # matching on its name alone dropped every inherited one.
+    @register_metric("barnes_only2", paradigm=("Barnes",))
+    def _m(ctx):
+        return 1.0
+
+    assert compute_metrics(["barnes_only2"], _ctx(),
+                           paradigm="BarnesVariant").values == {}
+    got = compute_metrics(["barnes_only2"], _ctx(),
+                          paradigm=("BarnesVariant", "Barnes", "OF"))
+    assert got.values == {"barnes_only2": 1.0}
+
+
+def test_compute_metric_refs_keys_by_alias():
+    # M7 review (I4): MetricRef.as_ was inert, so primary_latency could not be
+    # emitted and two refs of one metric collapsed.
+    from sphynx.metrics.registry import compute_metric_refs
+    from sphynx.paradigms.model import MetricRef
+
+    @register_metric("echo")
+    def _echo(ctx, value=0.0):
+        return value
+
+    refs = [MetricRef("echo", {"value": 1.0}, as_="first"),
+            MetricRef("echo", {"value": 2.0}, as_="second")]
+    got = compute_metric_refs(refs, _ctx(), paradigm=None)
+    assert got.values == {"first": 1.0, "second": 2.0}

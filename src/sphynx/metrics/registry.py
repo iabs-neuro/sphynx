@@ -27,8 +27,8 @@ _GEOMETRY_CHECKS = {
     "zone_angles": lambda ctx: bool(ctx.zones) and all(
         getattr(z, "angle", None) is not None for z in ctx.zones),
     "trajectory": lambda ctx: (
-        ctx.trajectory is not None and len(ctx.trajectory) == 2
-        and len(ctx.trajectory[0]) > 0),
+        ctx.trajectory_cm is not None and len(ctx.trajectory_cm) == 2
+        and len(ctx.trajectory_cm[0]) > 0),
 }
 
 
@@ -45,9 +45,11 @@ class MetricContext:
     # degraded act's mask is all-false for a reason that has nothing to do with
     # the animal, so metrics must refuse it rather than report "never happened".
     degraded: dict = field(default_factory=dict)
-    # (x_cm, y_cm) of the animal's reference body part, for path-length style
+    # (x, y) of the animal in CENTIMETRES. The name carries the unit on purpose:
+    # body-part traces are stored in PIXELS everywhere else, and feeding those in
+    # would scale every path length by the calibration factor, silently.
     # metrics. Absent by default so a metric that needs it must declare it.
-    trajectory: tuple | None = None
+    trajectory_cm: tuple | None = None
     # No default: an assumed frame rate silently rescales every time metric.
     frame_rate: float | None = None
 
@@ -144,6 +146,15 @@ def missing_requirements(spec: MetricSpec, ctx: MetricContext, params) -> list:
         name = _resolve(dep, params, spec.name)
         if name not in ctx.events:
             missing.append(f'event stream "{name}"')
+            continue
+        # A stream is only as trustworthy as the acts it was built from: if a
+        # member act degraded, its episodes are missing for a reason that has
+        # nothing to do with the animal (M3a / R31#4).
+        bad = sorted(a.name for a in ctx.act_defs
+                     if getattr(a, "family", "") == name and ctx.degraded.get(a.name))
+        if bad:
+            missing.append(
+                f'event stream "{name}" has degraded member act(s) {bad}')
     for key in spec.requires_geometry:
         if not _GEOMETRY_CHECKS[key](ctx):
             missing.append(f"geometry: {key}")
@@ -154,11 +165,18 @@ _ANY_PARADIGM = object()
 
 
 def applies_to(spec: MetricSpec, paradigm) -> bool:
+    """Whether a metric applies to the paradigm being computed.
+
+    `paradigm` may be a single name or the whole lineage (child first, then its
+    ancestors). Passing the lineage is what lets a paradigm INHERIT another's
+    metrics: a child of Barnes declares no metrics of its own, so matching only
+    its own name would silently drop every inherited Barnes metric."""
     if not spec.paradigm:
         return True
     if paradigm is _ANY_PARADIGM or paradigm is None:
         return True
-    return paradigm in spec.paradigm
+    names = (paradigm,) if isinstance(paradigm, str) else tuple(paradigm)
+    return any(name in spec.paradigm for name in names)
 
 
 def compute_metric(name, ctx: MetricContext, **params):
@@ -198,4 +216,25 @@ def compute_metrics(names, ctx: MetricContext, *, paradigm,
             # but do not disguise a real bug as a dependency problem either.
             out.errors[name] = f"unexpected {type(e).__name__}: {e}"
             _log.error('metric "%s" raised %s: %s', name, type(e).__name__, e)
+    return out
+
+
+def compute_metric_refs(refs, ctx: MetricContext, *, paradigm) -> MetricResults:
+    """Compute a paradigm's MetricRef list, keying results by `ref.key`.
+
+    This is what makes an alias live: a paradigm may call one metric several
+    times with different parameters (`ratio_index` over two object pairs) and
+    name each result, which computing by bare metric name cannot express."""
+    out = MetricResults()
+    for ref in refs:
+        spec = REGISTRY.get(ref.name)
+        if spec is not None and not applies_to(spec, paradigm):
+            continue
+        try:
+            out.values[ref.key] = compute_metric(ref.name, ctx, **dict(ref.params))
+        except SphynxMetricError as e:
+            out.errors[ref.key] = str(e)
+        except Exception as e:            # noqa: BLE001 - a bug in a metric fn
+            out.errors[ref.key] = f"unexpected {type(e).__name__}: {e}"
+            _log.error('metric "%s" raised %s: %s', ref.name, type(e).__name__, e)
     return out

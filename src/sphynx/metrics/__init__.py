@@ -6,6 +6,7 @@ from sphynx.metrics.registry import (
     MetricResults,
     MetricSpec,
     compute_metric,
+    compute_metric_refs,
     compute_metrics,
     missing_requirements,
     register_metric,
@@ -13,7 +14,7 @@ from sphynx.metrics.registry import (
 
 __all__ = [
     "REGISTRY", "MetricContext", "MetricResults", "MetricSpec",
-    "compute_metric", "compute_metrics", "missing_requirements",
+    "compute_metric", "compute_metrics", "compute_metric_refs", "missing_requirements",
     "register_metric", "builtins",
 ]
 
