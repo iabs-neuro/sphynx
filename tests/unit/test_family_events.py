@@ -88,3 +88,52 @@ def test_no_events_when_no_member_fires():
     results = {k: np.zeros(20, dtype=bool) for k in _results()}
     st = family_event_stream(_acts(), results, FPS)
     assert st.events == []
+
+
+# --- M4 review regressions ---
+
+def test_several_families_without_a_name_raises():
+    # I1: merging every family into one stream would interleave wall events
+    # into the hole stream and shift every visit ordinal.
+    acts = _acts() + [Act(name="other", type="simple", family="rear_at_wall",
+                          zone_name="wall_a", zone_index=1)]
+    results = dict(_results())
+    results["other"] = np.ones(20, dtype=bool)
+    with pytest.raises(SphynxValueError):
+        family_event_stream(acts, results, FPS)
+
+
+def test_single_family_is_inferred():
+    st = family_event_stream(_acts(), _results(), FPS)
+    assert len(st.events) == 3
+
+
+def test_empty_family_name_raises():
+    # I2: "" is falsy but not None -- it used to yield a silent empty stream.
+    with pytest.raises(SphynxValueError):
+        family_event_stream(_acts(), _results(), FPS, family="")
+
+
+def test_unknown_family_raises():
+    with pytest.raises(SphynxValueError):
+        family_event_stream(_acts(), _results(), FPS, family="ghost_family")
+
+
+def test_visit_ordinal_survives_revisits():
+    # I6: order_of used to count episodes, so a revisit of an earlier hole
+    # inflated every later ordinal -- corrupting the Barnes target ordinal.
+    results = _results()
+    results["nose_at_hole3"][15:17] = True        # hole_c revisited last
+    st = family_event_stream(_acts(), results, FPS)
+    assert st.unique_labels() == ["hole_c", "hole_b", "hole_a"]
+    assert st.order_of("hole_b") == 1             # still the 2nd hole visited
+    assert st.order_of("hole_a") == 2
+
+
+def test_distinct_labels_before_counts_a_revisit_once():
+    results = _results()
+    results["nose_at_hole3"][4:5] = True   # hole_c re-checked (gap at frame 3)
+    st = family_event_stream(_acts(), results, FPS)
+    target = st.first_where(lambda e: e.is_target)
+    assert st.labels_before(target) == ["hole_c", "hole_c"]
+    assert st.distinct_labels_before(target) == ["hole_c"]

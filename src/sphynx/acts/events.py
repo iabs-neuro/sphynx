@@ -46,12 +46,32 @@ class EventStream:
         return next((e for e in self.events if pred(e)), None)
 
     def labels_before(self, event: Event) -> list[str | None]:
+        """Every episode label strictly before `event`, repeats included."""
         return [e.label for e in self.events if e.start_frame < event.start_frame]
 
+    def distinct_labels_before(self, event: Event) -> list[str | None]:
+        """Labels first visited before `event`, in visit order, each once.
+
+        This -- not `labels_before` -- is what an error count wants: re-checking
+        the same hole twice is one error, not two."""
+        seen: list[str | None] = []
+        for e in self.events:
+            if e.start_frame >= event.start_frame:
+                break
+            if e.label not in seen:
+                seen.append(e.label)
+        return seen
+
     def order_of(self, label: str) -> int | None:
-        for i, e in enumerate(self.events):
+        """0-based VISIT ordinal of `label`: how many other labels were visited
+        before it. Episode position would count revisits of an earlier label as
+        extra places and inflate every ordinal after the first repeat."""
+        seen: list[str | None] = []
+        for e in self.events:
+            if e.label not in seen:
+                seen.append(e.label)
             if e.label == label:
-                return i
+                return len(seen) - 1
         return None
 
     def unique_labels(self) -> list[str | None]:

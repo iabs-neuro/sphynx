@@ -105,3 +105,48 @@ def test_missing_zone_index_falls_back_to_position():
           Zone("h2", "area", _m(), zone_class="hole")]      # indices never assigned
     acts = expand_family(_family(), zs)
     assert [a.zone_index for a in acts] == [1, 2]
+
+
+# --- M4 review regressions (1 Critical, 6 Important) ---
+
+def test_name_collision_raises():
+    # C1: two members rendering the same act name would make results (keyed by
+    # name) drop one mask and read the other twice under two zone labels.
+    zs = [Zone("hole_x", "area", _m(), zone_class="hole"),
+          Zone("obj_x", "area", _m(), zone_class="object")]
+    assign_zone_indices(zs)                      # per-class -> both get index 1
+    fam = _family(selector=ZoneSelector())       # spans both classes
+    with pytest.raises(SphynxValueError):
+        expand_family(fam, zs)
+
+
+def test_name_pattern_with_zone_avoids_collision():
+    zs = [Zone("hole_x", "area", _m(), zone_class="hole"),
+          Zone("obj_x", "area", _m(), zone_class="object")]
+    assign_zone_indices(zs)
+    fam = _family(selector=ZoneSelector(), name_pattern="{family}_{zone}")
+    acts = expand_family(fam, zs)
+    assert [a.name for a in acts] == ["nose_at_hole_hole_x", "nose_at_hole_obj_x"]
+
+
+def test_unnamed_family_raises():
+    with pytest.raises(SphynxValueError):
+        expand_family(_family(name=""), _zones())
+
+
+def test_duplicate_zone_names_raise():
+    zs = [Zone("dup", "area", _m(), zone_class="hole"),
+          Zone("dup", "area", _m(), zone_class="hole")]
+    assign_zone_indices(zs)
+    with pytest.raises(SphynxValueError):
+        expand_family(_family(), zs)
+
+
+def test_complex_template_raises():
+    # I4: a complex/expr template ignores its zone binding, so every member
+    # would be identical under a different label.
+    from sphynx.acts.expr import Leaf
+
+    tmpl = Act(name="t", type="complex", expr=Leaf("other"))
+    with pytest.raises(SphynxValueError):
+        expand_family(_family(template=tmpl), _zones())
