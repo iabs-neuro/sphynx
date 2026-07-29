@@ -4784,3 +4784,6 @@ M3a (act model v2 pt1): fallback chains (bodyparts/fallbacks.py + acts/part_reso
 
 ## 2026-07-25 -- S2 marathon: M3b done
 M3b (act AST): acts/expr.py with Leaf/Or/And/Exclude/Sequence + a PURE evaluator (resolve_ref/on_error closures, no circular import with apply.py) + from_flat migration. _apply_complex now has one evaluation path; references resolve as a memoised DAG with cycle detection (SphynxValueError). Opus review 0C/4I: fixed unrecorded Exclude-without-subtract, unvalidated reference length (length-1 broadcast hazard), degradation not propagating to the referring act, non-finite sequence delays. Suite 359. Next M4 (act families).
+
+## 2026-07-25 -- S2 marathon: M4 done
+M4 (act families): ActFamily binds a template to a ZoneSelector; expand_family produces one concrete act per matching zone (deep-copied, carrying zone name/index/is_target as provenance); family_event_stream merges members into ONE time-ordered labelled EventStream. Opus review 1C/6I -- all fixed: act-name collisions (would drop one member's mask and double-read another), family=None interleaving unrelated streams, empty/unknown family names, complex templates expanding to identical members, duplicate zone names, and order_of counting episodes instead of visits (revisits corrupted the Barnes target ordinal). Added distinct_labels_before. Suite 389. Next M5 (metric registry).
