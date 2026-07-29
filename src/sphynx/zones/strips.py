@@ -3,7 +3,7 @@ sphynx.zones.partitionStrips (axis-aligned path)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -11,10 +11,22 @@ from sphynx.exceptions import SphynxValueError
 
 
 @dataclass
+class ZoneRoles:
+    """Declarative role tags set once at mask-draw time (S2 layer 1)."""
+
+    is_target: bool = False
+    tags: list = field(default_factory=list)
+
+
+@dataclass
 class Zone:
     name: str
     type: str
     maskfilled: np.ndarray
+    zone_class: str = "unknown"       # hole|object|wall|corner|arena|composite|unknown
+    roles: ZoneRoles = field(default_factory=ZoneRoles)
+    index: int | None = None          # 1-based position within its zone_class
+    angle: float | None = None        # centroid angle rel. arena center, radians
 
 
 def partition_strips(arena_mask, n, direction: str) -> list[Zone]:
