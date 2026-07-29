@@ -78,16 +78,26 @@ def _issue(rule, message, where="") -> ValidationIssue:
 def validate_paradigm(paradigm, zones, options=None) -> ValidationReport:
     """Check a preset against a paradigm's declared rules."""
     report = ValidationReport(paradigm=paradigm.name)
-    zones = list(zones or [])
+    # `zones` may be the numpy object array scipy hands back from a preset .mat,
+    # whose truthiness is ambiguous -- test for None explicitly.
+    zones = [] if zones is None else list(zones)
 
     for rule in paradigm.validation:
         if rule.kind not in _KINDS:
             raise SphynxValueError(
                 f'validation rule "{rule.code}": unknown kind "{rule.kind}"; '
                 f"known: {list(_KINDS)}")
+        if rule.kind in ("zone_count", "target_count") \
+                and rule.min is None and rule.max is None:
+            # A count rule with no bounds can never fire; that is an authoring
+            # bug, and reporting "ok" would hide it.
+            raise SphynxValueError(
+                f'validation rule "{rule.code}": a {rule.kind} rule needs a '
+                "min and/or a max")
 
         if rule.kind == "zone_count":
-            n = sum(1 for z in zones if z.zone_class == rule.zone_class)
+            n = sum(1 for z in zones
+                    if getattr(z, "zone_class", None) == rule.zone_class)
             if not _count_in_range(n, rule):
                 report.issues.append(_issue(
                     rule,

@@ -119,3 +119,42 @@ def test_resolving_does_not_mutate_the_registered_paradigms():
     resolve_paradigm("Child")
     assert [m.name for m in get_paradigm("Base").metrics] == ["a"]
     assert [m.name for m in get_paradigm("Child").metrics] == ["b"]
+
+
+# --- M6 review regressions ---
+
+def test_same_metric_twice_with_different_params_is_allowed_via_alias():
+    # C4: a paradigm may legitimately call one metric several times.
+    from sphynx.paradigms.model import MetricRef as MR
+
+    register_paradigm(Paradigm(name="Pairs", metrics=[
+        MR("ratio_index", {"act_a": "a1", "act_b": "b1"}, as_="di_pair1"),
+        MR("ratio_index", {"act_a": "a2", "act_b": "b2"}, as_="di_pair2"),
+    ]))
+    r = resolve_paradigm("Pairs")
+    assert [m.key for m in r.metrics] == ["di_pair1", "di_pair2"]
+    assert [m.name for m in r.metrics] == ["ratio_index", "ratio_index"]
+
+
+def test_duplicate_key_within_one_paradigm_raises():
+    register_paradigm(Paradigm(name="Dupes", metrics=[
+        MetricRef("visit_order", {"family": "a"}),
+        MetricRef("visit_order", {"family": "b"}),
+    ]))
+    with pytest.raises(SphynxValueError):
+        resolve_paradigm("Dupes")
+
+
+def test_self_parent_raises():
+    register_paradigm(Paradigm(name="Loop", parent="Loop"))
+    with pytest.raises(SphynxValueError):
+        resolve_paradigm("Loop")
+
+
+def test_registry_argument_is_honoured():
+    # I1: the kwarg was accepted and silently ignored.
+    private = {"Base": Paradigm(name="Base", metrics=[MetricRef("distance")])}
+    child = Paradigm(name="Child", parent="Base")
+    assert "Base" not in PARADIGMS
+    r = resolve_paradigm(child, registry=private)
+    assert [m.name for m in r.metrics] == ["distance"]

@@ -61,14 +61,14 @@ def test_of_has_speed_defaults_and_calibration_rule():
 def test_eof_inherits_of_defaults():
     eof = resolve_paradigm("EOF")
     assert eof.config_defaults["velocity_rest"] == 1.0
-    assert [f.name for f in eof.families] == ["nose_at_object"]
+    assert [f.name for f in eof.families] == ["nose_at_object", "inside_object"]
     assert {r.code for r in eof.validation} == {"needs_calibration", "needs_object"}
 
 
 def test_nor_narrows_the_eof_object_rule():
     nor = resolve_paradigm("NOR")
-    # inherits the EOF family...
-    assert [f.name for f in nor.families] == ["nose_at_object"]
+    # inherits the EOF families...
+    assert [f.name for f in nor.families] == ["nose_at_object", "inside_object"]
     # ...and overrides the same-coded rule with an exact count
     rule = next(r for r in nor.validation if r.code == "needs_object")
     assert (rule.min, rule.max) == (2, 2)
@@ -154,3 +154,28 @@ def test_registering_builtins_twice_raises_without_replace():
     with pytest.raises(SphynxValueError):
         register_builtin_paradigms()
     register_builtin_paradigms(replace=True)     # explicit is fine
+
+
+# --- M6 review regressions ---
+
+def test_validation_survives_a_preset_zone_array():
+    # C1: scipy hands back a numpy object array, whose truthiness is ambiguous;
+    # `list(zones or [])` crashed even for OF.
+    zones = np.array(_preset(n_objects=1), dtype=object)
+    assert validate_paradigm(resolve_paradigm("EOF"), zones, _Options()).ok
+
+
+def test_validation_tolerates_legacy_zones_without_zone_class():
+    class _Legacy:
+        name = "old"
+
+    report = validate_paradigm(resolve_paradigm("EOF"), [_Legacy()], _Options())
+    assert [i.code for i in report.errors] == ["needs_object"]
+
+
+def test_eof_documents_what_it_deliberately_omits():
+    # I7: the ring-exploration act and the discrimination pair are per-preset /
+    # per-session decisions; they must be documented, not silently missing.
+    doc = enriched_open_field.__doc__.lower()
+    assert "ring" in doc
+    assert "ratio_index" in doc

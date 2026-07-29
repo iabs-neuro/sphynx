@@ -119,3 +119,12 @@ def test_default_message_is_informative_when_none_given():
 
 def test_paradigm_without_rules_is_ok():
     assert validate_paradigm(Paradigm(name="Free"), _zones()).ok
+
+
+# --- M6 review regressions ---
+
+def test_count_rule_without_bounds_raises():
+    # I3: such a rule can never fire, and reporting "ok" would hide it.
+    bad = ValidationRule(code="toothless", kind="zone_count", zone_class="object")
+    with pytest.raises(SphynxValueError):
+        validate_paradigm(_paradigm(bad), _zones())

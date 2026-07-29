@@ -119,3 +119,72 @@ def test_unknown_field_is_rejected_loudly():
 def test_non_object_data_raises():
     with pytest.raises(SphynxValueError):
         paradigm_from_dict(["not", "a", "paradigm"])
+
+
+# --- M6 review regressions ---
+
+def test_expression_tree_cannot_be_silently_saved():
+    # C2: asdict flattens a tree into anonymous dicts that reload as unknown
+    # nodes, and the act would evaluate to all-false after a round trip.
+    from sphynx.acts.expr import Leaf
+
+    p = Paradigm(name="WithExpr",
+                 acts=[Act(name="combo", type="complex", expr=Leaf("other"))])
+    with pytest.raises(SphynxValueError):
+        paradigm_to_dict(p)
+
+
+def test_unknown_top_level_field_is_rejected():
+    # C3: a "validaton" typo used to load fine with every rule gone.
+    data = paradigm_to_dict(_user_paradigm())
+    data["validaton"] = data.pop("validation")
+    with pytest.raises(SphynxValueError):
+        paradigm_from_dict(data)
+
+
+def test_missing_schema_version_is_rejected():
+    data = paradigm_to_dict(_user_paradigm())
+    del data["schema_version"]
+    with pytest.raises(SphynxValueError):
+        paradigm_from_dict(data)
+
+
+def test_unknown_nested_field_is_rejected():
+    data = paradigm_to_dict(_user_paradigm())
+    data["families"][0]["templat"] = data["families"][0].pop("template")
+    with pytest.raises(SphynxValueError):
+        paradigm_from_dict(data)
+
+
+def test_non_finite_act_defaults_round_trip_as_portable_json(tmp_path):
+    # I4: Python's json writes bare Infinity/NaN, which other readers reject.
+    import math
+
+    path = tmp_path / "p.json"
+    save_paradigm(_user_paradigm(), path)
+    raw = path.read_text(encoding="utf-8")
+    assert "Infinity" not in raw and "NaN" not in raw
+    back = load_paradigm(path)
+    assert math.isinf(back.families[0].template.speed_max)
+    assert math.isnan(back.families[0].template.threshold_cm)
+
+
+def test_failed_save_does_not_destroy_an_existing_file(tmp_path):
+    # I5: a serialisation failure used to leave a truncated file behind.
+    path = tmp_path / "p.json"
+    save_paradigm(_user_paradigm(), path)
+    good = path.read_text(encoding="utf-8")
+
+    doomed = _user_paradigm()
+    doomed.config_defaults["bad"] = {1, 2, 3}      # a set is not JSON
+    with pytest.raises(SphynxIOError):
+        save_paradigm(doomed, path)
+    assert path.read_text(encoding="utf-8") == good
+
+
+def test_metric_alias_round_trips():
+    p = Paradigm(name="Aliased", metrics=[
+        MetricRef("ratio_index", {"act_a": "a", "act_b": "b"}, as_="di")])
+    back = paradigm_from_dict(paradigm_to_dict(p))
+    assert back.metrics[0].as_ == "di"
+    assert back.metrics[0].key == "di"

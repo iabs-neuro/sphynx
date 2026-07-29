@@ -29,9 +29,22 @@ def get_paradigm(name) -> Paradigm:
     return p
 
 
-def _merge_by_name(base, child, key=lambda item: item.name):
-    """Child entries override same-named parent entries; order is parent-first,
-    then any genuinely new child entries."""
+def _merge_by_name(base, child, key=lambda item: item.name, what="entry",
+                   owner=""):
+    """Child entries override same-keyed parent entries; order is parent-first,
+    then any genuinely new child entries.
+
+    Duplicates WITHIN one paradigm's own list are an authoring error: silently
+    collapsing them would drop a metric or an act the author declared."""
+    seen = set()
+    for item in child:
+        k = key(item)
+        if k in seen:
+            raise SphynxValueError(
+                f'paradigm "{owner}" declares {what} "{k}" twice; '
+                "give them distinct names")
+        seen.add(k)
+
     out = [copy.deepcopy(item) for item in base]
     index = {key(item): i for i, item in enumerate(out)}
     for item in child:
@@ -44,13 +57,17 @@ def _merge_by_name(base, child, key=lambda item: item.name):
     return out
 
 
-def _chain(paradigm: Paradigm) -> list:
+def _chain(paradigm: Paradigm, registry=None) -> list:
     """Ancestors root-first, ending with `paradigm` itself."""
+    registry = PARADIGMS if registry is None else registry
     chain = [paradigm]
     seen = {paradigm.name}
     current = paradigm
     while current.parent is not None:
-        parent = PARADIGMS.get(current.parent)
+        if current.parent == current.name:
+            raise SphynxValueError(
+                f'paradigm "{current.name}" is its own parent')
+        parent = registry.get(current.parent)
         if parent is None:
             raise SphynxValueError(
                 f'paradigm "{current.name}" has unknown parent '
@@ -69,18 +86,26 @@ def _chain(paradigm: Paradigm) -> list:
 def resolve_paradigm(name_or_paradigm, registry=None) -> Paradigm:
     """Flatten a paradigm against its ancestors. Returns a NEW Paradigm; the
     registered ones are never mutated."""
+    if registry is None:
+        registry = PARADIGMS
     paradigm = (name_or_paradigm if isinstance(name_or_paradigm, Paradigm)
-                else get_paradigm(name_or_paradigm))
-    chain = _chain(paradigm)
+                else (registry.get(name_or_paradigm) or get_paradigm(name_or_paradigm)))
+    chain = _chain(paradigm, registry)
 
     merged = Paradigm(name=paradigm.name, doc=paradigm.doc)
     for link in chain:
-        merged.composites = _merge_by_name(merged.composites, link.composites)
-        merged.families = _merge_by_name(merged.families, link.families)
-        merged.acts = _merge_by_name(merged.acts, link.acts)
-        merged.metrics = _merge_by_name(merged.metrics, link.metrics)
+        merged.composites = _merge_by_name(
+            merged.composites, link.composites, what="composite", owner=link.name)
+        merged.families = _merge_by_name(
+            merged.families, link.families, what="family", owner=link.name)
+        merged.acts = _merge_by_name(
+            merged.acts, link.acts, what="act", owner=link.name)
+        merged.metrics = _merge_by_name(
+            merged.metrics, link.metrics, key=lambda m: m.key,
+            what="metric", owner=link.name)
         merged.validation = _merge_by_name(
-            merged.validation, link.validation, key=lambda r: r.code)
+            merged.validation, link.validation, key=lambda r: r.code,
+            what="validation rule", owner=link.name)
         merged.config_defaults = {**merged.config_defaults,
                                   **copy.deepcopy(link.config_defaults)}
     return merged

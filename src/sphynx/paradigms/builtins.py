@@ -53,17 +53,43 @@ def open_field() -> Paradigm:
 # --- EOF ------------------------------------------------------------------
 
 def enriched_open_field() -> Paradigm:
-    """Enriched Open Field: OF plus at least one object. Adds the nose-at-object
-    family; a discrimination index is `ratio_index` called with the two object
-    acts of interest, so it is not fixed here."""
+    """Enriched Open Field: OF plus at least one object.
+
+    Declares two object families: nose exploration and the animal being inside
+    the object footprint.
+
+    Two EOF items from the design are deliberately NOT declared here, rather
+    than declared wrongly:
+
+    * ring exploration ("nose in the ring EXCLUDING time inside the object")
+      needs ring zones, which the preset builder derives from each object
+      (MATLAB buildObjectZones.m). Once a preset carries `object_ring` zones a
+      family over that class plus an Exclude expression expresses it -- but a
+      family template may not be a complex act (see acts.families), so this
+      waits for the composite-act binding pass.
+    * a discrimination index is `ratio_index` over the TWO object acts the
+      experimenter chose as novel and familiar. Which two is a per-session
+      decision, so a paradigm cannot fix it; the GUI supplies the pair. Adding
+      MetricRef("ratio_index", {...}) with guessed act names here would be a
+      plausible wrong answer.
+    """
     return Paradigm(
         name="EOF", parent="OF",
         composites=[CompositeSpec("all_objects", ZoneSelector(zone_class="object"))],
-        families=[ActFamily(
-            name="nose_at_object",
-            selector=ZoneSelector(zone_class="object"),
-            template=_nose_template("nose_at_object"),
-        )],
+        families=[
+            ActFamily(
+                name="nose_at_object",
+                selector=ZoneSelector(zone_class="object"),
+                template=_nose_template("nose_at_object"),
+            ),
+            ActFamily(
+                name="inside_object",
+                selector=ZoneSelector(zone_class="object"),
+                template=Act(name="inside_object", type="simple",
+                             body_part="bodycenter", required_parts=["bodycenter"],
+                             min_duration_sec=0.25, max_gap_sec=0.25),
+            ),
+        ],
         validation=[ValidationRule(
             code="needs_object", kind="zone_count", zone_class="object", min=1,
             message="an enriched open field needs at least one object")],
