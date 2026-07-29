@@ -95,3 +95,6 @@ class ActContext:
     x_kcorr: float = 1.0
     all_acts: list = field(default_factory=list)
     results_by_name: dict = field(default_factory=dict)
+    # act name -> list of degradation reasons recorded while evaluating it.
+    # Populated by apply_act; never silently empty when something was missing.
+    degraded: dict = field(default_factory=dict)

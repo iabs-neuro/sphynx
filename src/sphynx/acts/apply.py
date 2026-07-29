@@ -6,12 +6,39 @@ from __future__ import annotations
 import numpy as np
 from scipy.ndimage import median_filter
 
+from sphynx.acts.part_resolution import resolve_act_parts
 from sphynx.acts.rear_threshold import auto_rear_threshold_cm
 from sphynx.acts.refine import refine_act_array
 from sphynx.acts.schema import Act, ActContext
 from sphynx.bodyparts import resolve_part
 from sphynx.geom import hypot_kcorr
+from sphynx.logging_setup import get_logger
 from sphynx.util.smoothing import smooth_derived
+
+_log = get_logger()
+
+
+def _mark(ctx, act, reason):
+    """Record (and log) why an act could not be evaluated as declared.
+
+    An act that silently returns all-false is indistinguishable from an act
+    that genuinely never fired -- the R31#4 defect class. Every degradation
+    goes on the record instead (section 10)."""
+    ctx.degraded.setdefault(act.name, []).append(reason)
+    _log.warning('Act "%s" degraded: %s', act.name, reason)
+
+
+def _resolve_act_part(act, ctx, name):
+    """Resolve one body part through the act's declared fallback chain,
+    recording any substitution or miss on the context. Returns an index or None."""
+    res = resolve_act_parts([name], ctx.body_parts, fallback=act.fallback)
+    if name in res.missing:
+        _mark(ctx, act, f'body part "{name}" not found and no fallback resolved')
+        return None
+    if name in res.substitutions:
+        _mark(ctx, act,
+              f'body part "{name}" substituted by "{res.substitutions[name]}"')
+    return res.indices.get(name)
 
 
 def _find_zone(zones, name):
@@ -62,7 +89,7 @@ def apply_act(act: Act, ctx: ActContext) -> np.ndarray:
 
 
 def _apply_simple(act, ctx, n):
-    part = resolve_part(ctx.body_parts, act.body_part)
+    part = _resolve_act_part(act, ctx, act.body_part)
     if part is None:
         return np.zeros(n, dtype=bool)
     v = ctx.velocity_cm_s[part, :]
@@ -77,6 +104,7 @@ def _in_any_zone(act, ctx, part, n):
     for k, zname in enumerate(act.zones):
         zi = _find_zone(ctx.zones, zname)
         if zi is None:
+            _mark(ctx, act, f'zone "{zname}" not found in the preset')
             continue
         zm = ctx.zones[zi].maskfilled
         zm = zm if zm.dtype == bool else (zm > 0)
@@ -101,6 +129,8 @@ def _apply_complex(act, ctx, n):
             j = next((i for i, a in enumerate(ctx.all_acts) if a.name == name), None)
             if j is not None:
                 cmasks[k, :] = apply_act(ctx.all_acts[j], ctx)
+            else:
+                _mark(ctx, act, f'component act "{name}" not found')
     op = act.operation.lower()
     if op == "intersect":
         return cmasks.all(axis=0)
@@ -137,19 +167,22 @@ def _apply_special(act, ctx, n):
 
 def _apply_all_in_zone(act, ctx, n):
     if not act.zones or not act.body_parts:
+        _mark(ctx, act, "allinzone act declares no zone or no body parts")
         return np.zeros(n, dtype=bool)
     zi = _find_zone(ctx.zones, act.zones[0])
     if zi is None:
+        _mark(ctx, act, f'zone "{act.zones[0]}" not found in the preset')
         return np.zeros(n, dtype=bool)
     zm = ctx.zones[zi].maskfilled
     zm = zm if zm.dtype == bool else (zm > 0)
     rows = []
     for name in act.body_parts:
-        part = resolve_part(ctx.body_parts, name)
+        part = _resolve_act_part(act, ctx, name)
         if part is None:
             continue
         rows.append(_points_in_mask(ctx.X[part, :], ctx.Y[part, :], zm))
     if not rows:
+        _mark(ctx, act, "no declared body part could be resolved")
         return np.zeros(n, dtype=bool)
     return np.vstack(rows).all(axis=0)
 
@@ -158,11 +191,12 @@ def _apply_freezing(act, ctx, n):
     parts = act.body_parts or ["headcenter", "bodycenter"]
     rows = []
     for name in parts:
-        idx = resolve_part(ctx.body_parts, name)
+        idx = _resolve_act_part(act, ctx, name)
         if idx is None:
             continue
         rows.append(ctx.velocity_cm_s[idx, :] < act.speed_max)
     if not rows:
+        _mark(ctx, act, "no declared body part could be resolved for freezing")
         return np.zeros(n, dtype=bool)
     return np.vstack(rows).all(axis=0)
 
@@ -170,10 +204,11 @@ def _apply_freezing(act, ctx, n):
 def _apply_rears(act, ctx, n):
     mode = act.rear_mode
     if mode.lower() == "tailbasepaws" or mode == "":
-        t = resolve_part(ctx.body_parts, "tailbase")
-        left = resolve_part(ctx.body_parts, "lefthindlimb")
-        right = resolve_part(ctx.body_parts, "righthindlimb")
+        t = _resolve_act_part(act, ctx, "tailbase")
+        left = _resolve_act_part(act, ctx, "lefthindlimb")
+        right = _resolve_act_part(act, ctx, "righthindlimb")
         if t is None or left is None or right is None:
+            _mark(ctx, act, "TailbasePaws rear needs tailbase + both hind limbs")
             return np.zeros(n, dtype=bool)
         xk = ctx.x_kcorr
         d_l = hypot_kcorr(ctx.X[t, :] - ctx.X[left, :], ctx.Y[t, :] - ctx.Y[left, :], xk)
@@ -190,8 +225,9 @@ def _apply_rears(act, ctx, n):
         else:
             thr_cm = act.threshold_cm
         return sum_cm < thr_cm
-    idx = resolve_part(ctx.body_parts, "bodycenter")
+    idx = _resolve_act_part(act, ctx, "bodycenter")
     if idx is None:
+        _mark(ctx, act, "AllBodyParts rear needs a resolvable body center")
         return np.zeros(n, dtype=bool)
     return ctx.Y[idx, :] < act.threshold_pxl
 
