@@ -27,3 +27,8 @@ class DegenerateGeometryError(SphynxGeometryError):
 
 class SphynxValueError(SphynxError):
     """Invalid parameter value passed to a sphynx function."""
+
+
+class SphynxMetricError(SphynxError):
+    """A metric could not be computed: an unknown metric, a missing dependency,
+    or a malformed parameter. Never raised for a legitimate empty result."""
