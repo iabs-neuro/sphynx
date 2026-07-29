@@ -42,11 +42,50 @@ def test_missing_without_fallback_is_reported_not_substituted():
     assert "lefthindlimb" not in r.indices
 
 
-def test_defaults_apply_when_no_explicit_chain():
+def test_no_implicit_substitution_without_declared_chain():
+    # M3a review (I5 / approved S2 model): without an act-declared chain a
+    # missing part is REPORTED, never stood in for. Every substitution shifts
+    # the measurement, so none happens implicitly.
     bp = ["headcenter", "bodycenter"]            # no nose
-    r = resolve_act_parts(["nose"], bp)          # use_defaults=True
-    assert r.ok is True
-    assert r.substitutions["nose"] == "head_center"
+    r = resolve_act_parts(["nose"], bp)
+    assert r.ok is False
+    assert r.missing == ["nose"]
+    assert r.substitutions == {}
+
+
+def test_suggestion_registry_is_opt_in_and_alias_tolerant():
+    # M3a review (I1): the registry is keyed by canonical names but a request
+    # may use any alias; consulted only when explicitly asked.
+    import sphynx.acts.part_resolution as pr
+
+    bp = ["headcenter"]
+    r = resolve_act_parts(["nose"], bp, use_defaults=True)
+    assert r.missing == ["nose"]                 # registry ships empty
+
+    original = dict(pr.DEFAULT_FALLBACKS)
+    pr.DEFAULT_FALLBACKS["nose"] = ["head_center"]
+    try:
+        r = resolve_act_parts(["nose"], bp, use_defaults=True)
+        assert r.substitutions["nose"] == "head_center"
+        assert r.degraded is True
+    finally:
+        pr.DEFAULT_FALLBACKS.clear()
+        pr.DEFAULT_FALLBACKS.update(original)
+
+
+def test_geometry_critical_never_proxied_even_if_registered():
+    # M3a review: a suggestion must not be able to proxy rear geometry.
+    import sphynx.acts.part_resolution as pr
+
+    original = dict(pr.DEFAULT_FALLBACKS)
+    pr.DEFAULT_FALLBACKS["left_hind_limb"] = ["tailbase"]
+    try:
+        r = resolve_act_parts(["lefthindlimb"], ["tailbase"], use_defaults=True)
+        assert r.missing == ["lefthindlimb"]
+        assert r.substitutions == {}
+    finally:
+        pr.DEFAULT_FALLBACKS.clear()
+        pr.DEFAULT_FALLBACKS.update(original)
 
 
 def test_explicit_fallback_overrides_defaults():

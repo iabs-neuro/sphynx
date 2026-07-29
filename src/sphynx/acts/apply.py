@@ -61,8 +61,23 @@ def _points_in_mask(xs, ys, mask):
     return out
 
 
+def _check_required_parts(act, ctx) -> bool:
+    """Resolve the act's declared required_parts up front. Returns False when a
+    requirement cannot be met, so the caller yields an honestly-empty act."""
+    if not act.required_parts:
+        return True
+    res = resolve_act_parts(act.required_parts, ctx.body_parts, fallback=act.fallback)
+    for nm, sub in res.substitutions.items():
+        _mark(ctx, act, f'required part "{nm}" substituted by "{sub}"')
+    for nm in res.missing:
+        _mark(ctx, act, f'required part "{nm}" not found and no fallback resolved')
+    return res.ok
+
+
 def apply_act(act: Act, ctx: ActContext) -> np.ndarray:
     n_frames = ctx.X.shape[1]
+    if not _check_required_parts(act, ctx):
+        return np.zeros(n_frames, dtype=bool)
     t = act.type.lower()
     if t == "simple":
         b = _apply_simple(act, ctx, n_frames)
@@ -71,6 +86,7 @@ def apply_act(act: Act, ctx: ActContext) -> np.ndarray:
     elif t == "special":
         b = _apply_special(act, ctx, n_frames)
     else:
+        _mark(ctx, act, f'unknown act type "{act.type}"')
         b = np.zeros(n_frames, dtype=bool)
 
     win = int(round(act.median_window_sec * ctx.frame_rate))
@@ -120,6 +136,7 @@ def _in_any_zone(act, ctx, part, n):
 def _apply_complex(act, ctx, n):
     comps = act.components
     if not comps:
+        _mark(ctx, act, "complex act declares no components")
         return np.zeros(n, dtype=bool)
     cmasks = np.zeros((len(comps), n), dtype=bool)
     for k, name in enumerate(comps):
@@ -151,6 +168,7 @@ def _apply_complex(act, ctx, n):
         for j in range(2, cmasks.shape[0]):
             b = b & cmasks[j, :]
         return b
+    _mark(ctx, act, f'unknown complex operation "{act.operation}"')
     return np.zeros(n, dtype=bool)
 
 
@@ -162,6 +180,7 @@ def _apply_special(act, ctx, n):
         return _apply_rears(act, ctx, n)
     if kind == "allinzone":
         return _apply_all_in_zone(act, ctx, n)
+    _mark(ctx, act, f'unknown special kind "{act.special_kind}"')
     return np.zeros(n, dtype=bool)
 
 
@@ -188,13 +207,47 @@ def _apply_all_in_zone(act, ctx, n):
 
 
 def _apply_freezing(act, ctx, n):
+    # speed_max carries the rest threshold. Left at its +inf default every frame
+    # would qualify as freezing -- an all-true act, so refuse instead.
+    thr = act.speed_max
+    if not np.isfinite(thr):
+        _mark(ctx, act, "freezing act declares no finite speed threshold (speed_max)")
+        return np.zeros(n, dtype=bool)
+
+    mode = (act.freezing_mode or "").strip().lower()
+    if mode and mode not in ("allbodyparts", "noseandcenter", "headandcenter"):
+        _mark(ctx, act, f'unknown freezing mode "{act.freezing_mode}"')
+        return np.zeros(n, dtype=bool)
+
+    # Modes mirror sphynx.acts.builtins.freezing so a library act and the
+    # built-in path agree (S2 layer 4d).
+    if mode == "allbodyparts":
+        bpv = np.asarray(ctx.velocity_cm_s, dtype=float)
+        parts = bpv.shape[0]
+        if parts == 0:
+            _mark(ctx, act, "no body parts available for AllBodyParts freezing")
+            return np.zeros(n, dtype=bool)
+        return np.nansum(bpv, axis=0) < thr * parts
+
+    if mode in ("noseandcenter", "headandcenter"):
+        lead = "nose" if mode == "noseandcenter" else "headcenter"
+        lead_idx = _resolve_act_part(act, ctx, lead)
+        center_idx = _resolve_act_part(act, ctx, "bodycenter")
+        if lead_idx is None or center_idx is None:
+            _mark(ctx, act, f'freezing mode "{act.freezing_mode}" needs {lead} + body center')
+            return np.zeros(n, dtype=bool)
+        lead_thr = thr * 2 if mode == "noseandcenter" else thr
+        return (ctx.velocity_cm_s[lead_idx, :] < lead_thr) & (
+            ctx.velocity_cm_s[center_idx, :] < thr)
+
+    # No mode declared: conjunction over the act's own declared parts.
     parts = act.body_parts or ["headcenter", "bodycenter"]
     rows = []
     for name in parts:
         idx = _resolve_act_part(act, ctx, name)
         if idx is None:
             continue
-        rows.append(ctx.velocity_cm_s[idx, :] < act.speed_max)
+        rows.append(ctx.velocity_cm_s[idx, :] < thr)
     if not rows:
         _mark(ctx, act, "no declared body part could be resolved for freezing")
         return np.zeros(n, dtype=bool)
@@ -202,8 +255,13 @@ def _apply_freezing(act, ctx, n):
 
 
 def _apply_rears(act, ctx, n):
-    mode = act.rear_mode
-    if mode.lower() == "tailbasepaws" or mode == "":
+    mode = (act.rear_mode or "").strip().lower()
+    if mode not in ("", "tailbasepaws", "allbodyparts"):
+        # Never let an unrecognised mode drift into another branch: a typo used
+        # to land in AllBodyParts and could return an all-true act unmarked.
+        _mark(ctx, act, f'unknown rear mode "{act.rear_mode}"')
+        return np.zeros(n, dtype=bool)
+    if mode in ("", "tailbasepaws"):
         t = _resolve_act_part(act, ctx, "tailbase")
         left = _resolve_act_part(act, ctx, "lefthindlimb")
         right = _resolve_act_part(act, ctx, "righthindlimb")
@@ -221,13 +279,22 @@ def _apply_rears(act, ctx, n):
         if act.rear_auto_threshold:
             thr_cm = auto_rear_threshold_cm(sum_cm)
             if not np.isfinite(thr_cm):
+                _mark(ctx, act,
+                      "auto rear threshold did not converge; using declared threshold_cm")
                 thr_cm = act.threshold_cm
         else:
             thr_cm = act.threshold_cm
+        if not np.isfinite(thr_cm):
+            # `x < NaN` is False everywhere: an all-false act that looks real.
+            _mark(ctx, act, "rear act has no finite threshold_cm")
+            return np.zeros(n, dtype=bool)
         return sum_cm < thr_cm
     idx = _resolve_act_part(act, ctx, "bodycenter")
     if idx is None:
         _mark(ctx, act, "AllBodyParts rear needs a resolvable body center")
+        return np.zeros(n, dtype=bool)
+    if not np.isfinite(act.threshold_pxl):
+        _mark(ctx, act, "rear act has no finite threshold_pxl")
         return np.zeros(n, dtype=bool)
     return ctx.Y[idx, :] < act.threshold_pxl
 

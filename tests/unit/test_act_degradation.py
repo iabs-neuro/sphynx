@@ -100,3 +100,107 @@ def test_all_in_zone_unknown_zone_marks_degraded():
                             min_duration_sec=0.0, max_gap_sec=0.0)
     apply_act(act, ctx)
     assert "allin" in ctx.degraded
+
+
+# --- M3a review regressions (2 Critical, 5 Important) ---
+
+def test_rear_nan_threshold_marks_degraded():
+    # C1: `x < NaN` is False everywhere -- an all-false act that looks real.
+    ctx = _ctx(["tailbase", "lefthindlimb", "righthindlimb"])
+    act = build_special_act("rear", "rears", rear_mode="TailbasePaws",
+                            rear_auto_threshold=False,
+                            min_duration_sec=0.0, max_gap_sec=0.0)
+    out = apply_act(act, ctx)
+    assert not out.any()
+    assert "rear" in ctx.degraded
+    assert any("threshold" in r for r in ctx.degraded["rear"])
+
+
+def test_unknown_rear_mode_does_not_drift_into_another_branch():
+    # C2 (worst case): a typo used to land in AllBodyParts and could return
+    # an all-true act with nothing recorded.
+    ctx = _ctx(["bodycenter"])
+    act = build_special_act("rear", "rears", rear_mode="TailBasePaws typo",
+                            threshold_pxl=1000.0,
+                            min_duration_sec=0.0, max_gap_sec=0.0)
+    out = apply_act(act, ctx)
+    assert not out.any()
+    assert any("unknown rear mode" in r for r in ctx.degraded["rear"])
+
+
+def test_unknown_act_type_marks_degraded():
+    ctx = _ctx(["bodycenter"])
+    act = Act(name="weird", type="nonsense", min_duration_sec=0.0, max_gap_sec=0.0)
+    apply_act(act, ctx)
+    assert any("unknown act type" in r for r in ctx.degraded["weird"])
+
+
+def test_unknown_special_kind_marks_degraded():
+    ctx = _ctx(["bodycenter"])
+    act = build_special_act("odd", "teleporting", min_duration_sec=0.0, max_gap_sec=0.0)
+    apply_act(act, ctx)
+    assert any("unknown special kind" in r for r in ctx.degraded["odd"])
+
+
+def test_unknown_complex_operation_marks_degraded():
+    ctx = _ctx(["bodycenter"])
+    ctx.results_by_name = {"a": np.ones(20, dtype=bool)}
+    act = Act(name="combo", type="complex", components=["a"], operation="frobnicate",
+              min_duration_sec=0.0, max_gap_sec=0.0)
+    apply_act(act, ctx)
+    assert any("unknown complex operation" in r for r in ctx.degraded["combo"])
+
+
+def test_empty_components_marks_degraded():
+    ctx = _ctx(["bodycenter"])
+    act = Act(name="combo", type="complex", components=[], operation="union",
+              min_duration_sec=0.0, max_gap_sec=0.0)
+    apply_act(act, ctx)
+    assert any("no components" in r for r in ctx.degraded["combo"])
+
+
+def test_freezing_without_finite_threshold_marks_degraded():
+    # I3: speed_max left at +inf would qualify every frame as freezing.
+    ctx = _ctx(["headcenter", "bodycenter"])
+    act = build_special_act("freeze", "freezing", min_duration_sec=0.0, max_gap_sec=0.0)
+    out = apply_act(act, ctx)
+    assert not out.any()
+    assert any("speed_max" in r for r in ctx.degraded["freeze"])
+
+
+def test_freezing_mode_is_honoured():
+    # I2: a declared mode must drive the maths, not be ignored.
+    ctx = _ctx(["nose", "bodycenter"])
+    ctx.velocity_cm_s = np.vstack([np.full(20, 1.5), np.full(20, 0.4)])
+    strict = build_special_act("fz_head", "freezing", freezing_mode="HeadAndCenter",
+                               speed_max=1.0, min_duration_sec=0.0, max_gap_sec=0.0)
+    apply_act(strict, ctx)
+    assert "fz_head" in ctx.degraded          # needs headcenter, absent here
+
+    ctx2 = _ctx(["nose", "bodycenter"])
+    ctx2.velocity_cm_s = np.vstack([np.full(20, 1.5), np.full(20, 0.4)])
+    lenient = build_special_act("fz_nose", "freezing", freezing_mode="NoseAndCenter",
+                                speed_max=1.0, min_duration_sec=0.0, max_gap_sec=0.0)
+    out = apply_act(lenient, ctx2)
+    assert out.all()          # nose 1.5 < 2*1.0 and center 0.4 < 1.0
+    assert "fz_nose" not in ctx2.degraded
+
+
+def test_unknown_freezing_mode_marks_degraded():
+    ctx = _ctx(["headcenter", "bodycenter"])
+    act = build_special_act("fz", "freezing", freezing_mode="Telepathy",
+                            speed_max=1.0, min_duration_sec=0.0, max_gap_sec=0.0)
+    out = apply_act(act, ctx)
+    assert not out.any()
+    assert any("unknown freezing mode" in r for r in ctx.degraded["fz"])
+
+
+def test_required_parts_are_enforced():
+    # I4: required_parts was inert -- nothing read it.
+    ctx = _ctx(["bodycenter"])
+    act = Act(name="needs", type="simple", body_part="bodycenter",
+              required_parts=["nose"], speed_min=-1.0, speed_max=1.0,
+              min_duration_sec=0.0, max_gap_sec=0.0)
+    out = apply_act(act, ctx)
+    assert not out.any()
+    assert any("required part" in r for r in ctx.degraded["needs"])
