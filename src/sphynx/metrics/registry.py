@@ -15,6 +15,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from sphynx.exceptions import SphynxMetricError, SphynxValueError
+from sphynx.logging_setup import get_logger
+
+_log = get_logger()
 
 # geometry requirement -> predicate over the context
 _GEOMETRY_CHECKS = {
@@ -35,7 +38,17 @@ class MetricContext:
     events: dict = field(default_factory=dict)     # family name -> EventStream
     act_defs: list = field(default_factory=list)   # Act objects (provenance)
     zones: list = field(default_factory=list)
-    frame_rate: float = 30.0
+    # Carried over from ActContext.degraded (M3a): act name -> reasons. A
+    # degraded act's mask is all-false for a reason that has nothing to do with
+    # the animal, so metrics must refuse it rather than report "never happened".
+    degraded: dict = field(default_factory=dict)
+    # No default: an assumed frame rate silently rescales every time metric.
+    frame_rate: float | None = None
+
+    def __post_init__(self):
+        if self.frame_rate is None or not self.frame_rate > 0:
+            raise SphynxValueError(
+                f"MetricContext needs a positive frame_rate; got {self.frame_rate}")
 
 
 @dataclass
@@ -58,9 +71,22 @@ class MetricResults:
 REGISTRY: dict = {}
 
 
+def _as_tuple(value) -> tuple:
+    """A bare string would decompose into characters, so wrap it."""
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return (value,)
+    return tuple(value)
+
+
 def register_metric(name, requires_acts=(), requires_events=(),
-                    requires_geometry=(), paradigm=(), doc=""):
+                    requires_geometry=(), paradigm=(), doc="", replace=False):
     """Register a named metric with its explicit dependencies."""
+    requires_acts = _as_tuple(requires_acts)
+    requires_events = _as_tuple(requires_events)
+    requires_geometry = _as_tuple(requires_geometry)
+    paradigm = _as_tuple(paradigm)
     for key in requires_geometry:
         if key not in _GEOMETRY_CHECKS:
             raise SphynxValueError(
@@ -68,11 +94,16 @@ def register_metric(name, requires_acts=(), requires_events=(),
                 f"known: {sorted(_GEOMETRY_CHECKS)}")
 
     def decorator(fn):
+        if name in REGISTRY and not replace:
+            # Silent overwrite would let import order decide which metric wins.
+            raise SphynxValueError(
+                f'metric "{name}" is already registered; pass replace=True to '
+                "override it deliberately")
         REGISTRY[name] = MetricSpec(
-            name=name, fn=fn, requires_acts=tuple(requires_acts),
-            requires_events=tuple(requires_events),
-            requires_geometry=tuple(requires_geometry),
-            paradigm=tuple(paradigm), doc=doc or (fn.__doc__ or ""),
+            name=name, fn=fn, requires_acts=requires_acts,
+            requires_events=requires_events,
+            requires_geometry=requires_geometry,
+            paradigm=paradigm, doc=doc or (fn.__doc__ or ""),
         )
         return fn
 
@@ -98,6 +129,11 @@ def missing_requirements(spec: MetricSpec, ctx: MetricContext, params) -> list:
         name = _resolve(dep, params, spec.name)
         if name not in ctx.acts and name not in ctx.stats:
             missing.append(f'act "{name}"')
+        elif ctx.degraded.get(name):
+            # An all-false mask produced by a missing body part is not evidence
+            # that the behaviour never happened (M3a / R31#4).
+            reasons = "; ".join(ctx.degraded[name])
+            missing.append(f'act "{name}" is degraded ({reasons})')
     for dep in spec.requires_events:
         name = _resolve(dep, params, spec.name)
         if name not in ctx.events:
@@ -108,8 +144,15 @@ def missing_requirements(spec: MetricSpec, ctx: MetricContext, params) -> list:
     return missing
 
 
+_ANY_PARADIGM = object()
+
+
 def applies_to(spec: MetricSpec, paradigm) -> bool:
-    return not spec.paradigm or paradigm is None or paradigm in spec.paradigm
+    if not spec.paradigm:
+        return True
+    if paradigm is _ANY_PARADIGM or paradigm is None:
+        return True
+    return paradigm in spec.paradigm
 
 
 def compute_metric(name, ctx: MetricContext, **params):
@@ -125,10 +168,14 @@ def compute_metric(name, ctx: MetricContext, **params):
     return spec.fn(ctx, **params)
 
 
-def compute_metrics(names, ctx: MetricContext, params_by_name=None,
-                    paradigm=None) -> MetricResults:
+def compute_metrics(names, ctx: MetricContext, *, paradigm,
+                    params_by_name=None) -> MetricResults:
     """Compute several metrics. Failures are RECORDED in `errors`, never dropped;
-    metrics that do not apply to `paradigm` are skipped without an error."""
+    metrics that do not apply to `paradigm` are skipped without an error.
+
+    `paradigm` is required rather than defaulted: a forgotten argument would run
+    a Barnes-only metric on an Open Field session. Pass `ANY_PARADIGM` to opt out
+    of filtering deliberately."""
     params_by_name = params_by_name or {}
     out = MetricResults()
     for name in names:
@@ -140,4 +187,9 @@ def compute_metrics(names, ctx: MetricContext, params_by_name=None,
                 name, ctx, **params_by_name.get(name, {}))
         except SphynxMetricError as e:
             out.errors[name] = str(e)
+        except Exception as e:            # noqa: BLE001 - a bug in a metric fn
+            # Do not abort the batch and discard the metrics already computed,
+            # but do not disguise a real bug as a dependency problem either.
+            out.errors[name] = f"unexpected {type(e).__name__}: {e}"
+            _log.error('metric "%s" raised %s: %s', name, type(e).__name__, e)
     return out

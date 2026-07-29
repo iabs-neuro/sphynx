@@ -94,8 +94,17 @@ def test_time_to_first_labelled():
     assert got == pytest.approx(2.0)
 
 
-def test_time_to_first_unvisited_label_is_nan():
-    got = compute_metric("time_to_first", _ctx(), family="holes", label="ghost")
+def test_time_to_first_unknown_label_raises():
+    # M5 review (C4): "never visited" and "no such zone" are different answers.
+    with pytest.raises(SphynxMetricError):
+        compute_metric("time_to_first", _ctx(), family="holes", label="ghost")
+
+
+def test_time_to_first_known_but_unvisited_label_is_nan():
+    r = _results()
+    r["h1"][:] = False                        # hole_a exists but never visited
+    got = compute_metric("time_to_first", _ctx(results=r), family="holes",
+                         label="hole_a")
     assert math.isnan(got)
 
 
@@ -144,3 +153,35 @@ def test_ratio_index_unknown_stat_raises():
 def test_missing_family_stream_raises():
     with pytest.raises(SphynxMetricError):
         compute_metric("visit_order", _ctx(), family="ghost_family")
+
+
+# --- M5 review regressions ---
+
+def test_target_zone_not_covered_by_the_family_raises():
+    # C2: geometry declares a target but no member act carries it -- the family
+    # was expanded over the wrong selector. That is a setup error, not "never
+    # visited".
+    acts = [_member("h1", "hole_a", 1), _member("h3", "hole_c", 3)]  # no target
+    r = {"h1": np.zeros(30, dtype=bool), "h3": np.zeros(30, dtype=bool)}
+    r["h3"][2:4] = True
+    ctx = _ctx(results=r, acts=acts)          # zones still declare hole_b target
+    with pytest.raises(SphynxMetricError):
+        compute_metric("latency_to_target", ctx, family="holes")
+    with pytest.raises(SphynxMetricError):
+        compute_metric("primary_errors", ctx, family="holes")
+
+
+def test_time_to_completion_ignores_foreign_labels():
+    # I1: a foreign event used to finish the family early.
+    from sphynx.acts.events import Event
+
+    ctx = _ctx()
+    stream = ctx.events["holes"]
+    stream.events.insert(0, Event("intruder", 0, 1, 0.1, label="wall_a", index=9))
+    stream.events.sort(key=lambda e: (e.start_frame, e.end_frame))
+    assert compute_metric("time_to_completion", ctx, family="holes") == pytest.approx(2.0)
+
+
+def test_metrics_over_an_unknown_family_raise():
+    with pytest.raises(SphynxMetricError):
+        compute_metric("time_to_completion", _ctx(), family="ghost")
