@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass, field
 
+from sphynx.acts.events import EventStream, events_from_act
 from sphynx.acts.schema import Act
 from sphynx.exceptions import SphynxValueError
 from sphynx.logging_setup import get_logger
@@ -53,3 +54,26 @@ def expand_family(family: ActFamily, zones) -> list[Act]:
         act.is_target = bool(z.roles.is_target)
         acts.append(act)
     return acts
+
+
+def family_event_stream(acts, results, frame_rate, family=None) -> EventStream:
+    """Merge a family's per-member episodes into ONE time-ordered stream.
+
+    Every event is labelled with the zone it came from, so order-of-visit and
+    errors-before-target become generic queries over the stream instead of
+    bespoke per-paradigm code (S2 layer 3 -> layer 5)."""
+    members = [
+        a for a in acts
+        if (a.family if family is None else a.family == family) and a.family
+    ]
+    events = []
+    for act in members:
+        if act.name not in results:
+            raise SphynxValueError(
+                f'family member "{act.name}" has no computed result')
+        events.extend(events_from_act(
+            results[act.name], frame_rate, act_name=act.name,
+            label=act.zone_name or act.name, index=act.zone_index,
+            is_target=act.is_target))
+    events.sort(key=lambda e: (e.start_frame, e.end_frame))
+    return EventStream(events)

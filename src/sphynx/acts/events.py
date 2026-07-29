@@ -17,16 +17,18 @@ class Event:
     duration_s: float
     label: str | None = None
     index: int | None = None
+    is_target: bool = False
 
 
 def events_from_act(
     act_mask, frame_rate: float, act_name: str = "", label: str | None = None,
-    index: int | None = None,
+    index: int | None = None, is_target: bool = False,
 ) -> list[Event]:
     """Derive episodes from a binary act trace (no refinement applied here)."""
     _, runs = refine_act(act_mask, 0, 0)
     return [
-        Event(act_name, r.frame_in, r.frame_out, r.duration / frame_rate, label, index)
+        Event(act_name, r.frame_in, r.frame_out, r.duration / frame_rate, label,
+              index, is_target)
         for r in runs
     ]
 
