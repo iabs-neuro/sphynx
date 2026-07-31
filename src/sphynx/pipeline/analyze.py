@@ -75,6 +75,13 @@ class SessionResult:
     config: Config
     selected_individual: str = ""
     all_individuals: list = field(default_factory=list)
+    # --- filled in by the paradigm bridge (S4a); None when no paradigm ran ---
+    validation: object | None = None      # ValidationReport
+    metrics: object | None = None         # MetricResults
+    event_streams: dict = field(default_factory=dict)   # family -> EventStream
+    degraded: dict = field(default_factory=dict)        # act name -> reasons
+    paradigm: str = ""
+    paradigm_defaults: dict = field(default_factory=dict)
 
 
 def _opt(options, name, default):
@@ -114,10 +121,12 @@ def _enforce_bucket_exclusivity(acts, priority_names):
     return acts
 
 
-def analyze_session(config: Config) -> SessionResult:
+def analyze_session(config: Config, paradigm=None) -> SessionResult:
     """Run the full single-session pipeline and return a SessionResult.
 
-    Required: config.paths.dlc, config.paths.preset.
+    Required: config.paths.dlc, config.paths.preset. When `paradigm` is given
+    (a name or a Paradigm), its validation, composites, act families and named
+    metrics are computed onto the result as well.
     """
     if not config.paths.dlc:
         raise SphynxError("config.paths.dlc is required")
@@ -297,10 +306,15 @@ def analyze_session(config: Config) -> SessionResult:
         a.stats = act_stats(a.array, frame_rate, velocity=center_velocity)
 
     # --- 11. Result ---
-    return SessionResult(
+    result = SessionResult(
         body_parts_names=kept_names, body_parts_traces=traces, point=point,
         acts=acts, options=options, zones=zones, arena_and_objects=arena,
         n_frames=n_frames, config=config,
         selected_individual=dlc.selected_individual or "",
         all_individuals=list(dlc.individuals) if dlc.individuals else [],
     )
+    if paradigm is not None:
+        from sphynx.pipeline.paradigm_bridge import apply_paradigm
+
+        apply_paradigm(result, paradigm)
+    return result

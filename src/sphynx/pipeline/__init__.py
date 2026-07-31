@@ -7,10 +7,12 @@ from sphynx.pipeline.analyze import (
     analyze_session,
 )
 from sphynx.pipeline.batch import BatchResult, run_batch
+from sphynx.pipeline.paradigm_bridge import apply_paradigm
 from sphynx.pipeline.super_table import SuperTable, build_super_table
 
 __all__ = [
     "analyze_session",
+    "apply_paradigm",
     "SessionResult",
     "SessionAct",
     "BodyPartTrace",
