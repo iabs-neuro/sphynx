@@ -1,0 +1,141 @@
+"""Application-wide state (S4a).
+
+One object holds the paths, the chosen paradigm and the last result, and every
+tab subscribes to it. In the MATLAB app each tab loaded its own paths, which is
+the "app-wide state" complaint in docs/TODO.md.
+"""
+
+from __future__ import annotations
+
+import copy
+import tomllib
+from pathlib import Path
+
+import tomli_w
+from PySide6.QtCore import QObject, Signal
+
+from sphynx.config import Config
+from sphynx.exceptions import SphynxIOError
+
+
+class AppState(QObject):
+    paths_changed = Signal()
+    paradigm_changed = Signal()
+    result_changed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._dlc_path = ""
+        self._preset_path = ""
+        self._out_dir = ""
+        self._paradigm = "OF"
+        self._result = None
+        self._config = Config.default()
+        self.end_frame = 0
+        self.heatmap_bin_cm = 4.0
+
+    # --- paths ---
+    @property
+    def dlc_path(self) -> str:
+        return self._dlc_path
+
+    @dlc_path.setter
+    def dlc_path(self, value: str) -> None:
+        value = str(value or "")
+        if value != self._dlc_path:
+            self._dlc_path = value
+            self.paths_changed.emit()
+
+    @property
+    def preset_path(self) -> str:
+        return self._preset_path
+
+    @preset_path.setter
+    def preset_path(self, value: str) -> None:
+        value = str(value or "")
+        if value != self._preset_path:
+            self._preset_path = value
+            self.paths_changed.emit()
+
+    @property
+    def out_dir(self) -> str:
+        return self._out_dir
+
+    @out_dir.setter
+    def out_dir(self, value: str) -> None:
+        value = str(value or "")
+        if value != self._out_dir:
+            self._out_dir = value
+            self.paths_changed.emit()
+
+    # --- paradigm ---
+    @property
+    def paradigm(self) -> str:
+        return self._paradigm
+
+    @paradigm.setter
+    def paradigm(self, value: str) -> None:
+        value = str(value or "")
+        if value != self._paradigm:
+            self._paradigm = value
+            self.paradigm_changed.emit()
+
+    # --- result ---
+    @property
+    def result(self):
+        return self._result
+
+    @result.setter
+    def result(self, value) -> None:
+        self._result = value
+        self.result_changed.emit()
+
+    def build_config(self) -> Config:
+        """A fresh Config for one run; the state's own config is never handed out."""
+        config = copy.deepcopy(self._config)
+        config.paths.dlc = self._dlc_path
+        config.paths.preset = self._preset_path
+        config.paths.out_dir = self._out_dir
+        config.frames.end_frame = int(self.end_frame or 0)
+        config.io.save_workspace = False
+        return config
+
+    # --- settings ---
+    def save_settings(self, path) -> str:
+        """Write paths, paradigm and view options to one TOML file."""
+        data = {
+            "paths": {"dlc": self._dlc_path, "preset": self._preset_path,
+                      "out_dir": self._out_dir},
+            "analysis": {"paradigm": self._paradigm,
+                         "end_frame": int(self.end_frame or 0),
+                         "heatmap_bin_cm": float(self.heatmap_bin_cm)},
+        }
+        target = Path(path)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with open(target, "wb") as handle:
+                tomli_w.dump(data, handle)
+        except OSError as e:
+            raise SphynxIOError(f"cannot write settings to {target}: {e}") from e
+        return str(target)
+
+    def load_settings(self, path) -> None:
+        source = Path(path)
+        if not source.is_file():
+            raise SphynxIOError(f"settings file not found: {source}")
+        try:
+            with open(source, "rb") as handle:
+                data = tomllib.load(handle)
+        except tomllib.TOMLDecodeError as e:
+            raise SphynxIOError(f"malformed settings TOML in {source}: {e}") from e
+        except OSError as e:
+            raise SphynxIOError(f"cannot read settings from {source}: {e}") from e
+
+        paths = data.get("paths", {})
+        analysis = data.get("analysis", {})
+        self.dlc_path = paths.get("dlc", "")
+        self.preset_path = paths.get("preset", "")
+        self.out_dir = paths.get("out_dir", "")
+        self.paradigm = analysis.get("paradigm", "OF")
+        self.end_frame = int(analysis.get("end_frame", 0))
+        self.heatmap_bin_cm = float(analysis.get("heatmap_bin_cm", 4.0))
