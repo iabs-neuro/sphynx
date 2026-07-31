@@ -80,11 +80,19 @@ class AnalyzeTab(QWidget):
         self.acts_table.setHorizontalHeaderLabels(list(_ACT_COLUMNS))
         self.metrics_table = QTableWidget(0, 2)
         self.metrics_table.setHorizontalHeaderLabels(["Metric", "Value"])
+        self.metrics_note = QLabel("")
+        self.metrics_note.setWordWrap(True)
+
+        metrics_side = QWidget()
+        metrics_layout = QVBoxLayout(metrics_side)
+        metrics_layout.setContentsMargins(0, 0, 0, 0)
+        metrics_layout.addWidget(self.metrics_table)
+        metrics_layout.addWidget(self.metrics_note)
 
         tables = QWidget()
         tables_layout = QHBoxLayout(tables)
         tables_layout.addWidget(self.acts_table, 2)
-        tables_layout.addWidget(self.metrics_table, 1)
+        tables_layout.addWidget(metrics_side, 1)
 
         right = QSplitter(Qt.Vertical)
         right.addWidget(self.plots)
@@ -154,6 +162,14 @@ class AnalyzeTab(QWidget):
         self._fill_acts(result)
         self._fill_metrics(result)
 
+    def clear_result(self) -> None:
+        """Drop everything the previous run put on screen."""
+        self.warnings.clear()
+        self.plots.clear()
+        self.acts_table.setRowCount(0)
+        self.metrics_table.setRowCount(0)
+        self.metrics_note.setText("")
+
     def _fill_acts(self, result) -> None:
         acts = [a for a in (getattr(result, "acts", []) or []) if a.stats is not None]
         self.acts_table.setRowCount(len(acts))
@@ -178,3 +194,14 @@ class AnalyzeTab(QWidget):
         for row, (name, value) in enumerate(rows):
             self.metrics_table.setItem(row, 0, QTableWidgetItem(name))
             self.metrics_table.setItem(row, 1, QTableWidgetItem(value))
+
+        # An empty table must not read as "computed nothing wrong": say why.
+        if rows:
+            self.metrics_note.setText("")
+        elif metrics is None:
+            self.metrics_note.setText("No paradigm was applied to this run.")
+        else:
+            paradigm = getattr(result, "paradigm", "") or "this paradigm"
+            self.metrics_note.setText(
+                f"{paradigm} declares no named metrics; the act table above is "
+                "the whole result.")

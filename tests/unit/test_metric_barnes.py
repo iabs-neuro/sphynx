@@ -263,8 +263,10 @@ def test_barnes_metrics_are_paradigm_scoped():
     from sphynx.metrics.registry import REGISTRY
 
     for name in ("total_errors", "target_ordinal", "search_strategy",
-                 "path_length", "mean_angular_distance"):
+                 "mean_angular_distance"):
         assert REGISTRY[name].paradigm == ("Barnes",)
+    # path_length is generic: every paradigm wants distance travelled.
+    assert REGISTRY["path_length"].paradigm == ()
 
 
 # --- M7 review regressions (2 Critical, 6 Important) ---

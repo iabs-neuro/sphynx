@@ -170,3 +170,51 @@ def test_unknown_paradigm_raises():
 
     with pytest.raises(SphynxValueError):
         apply_paradigm(_result(_zones()), "NoSuchParadigm")
+
+
+# --- S4a review regressions ---
+
+def test_apply_paradigm_twice_does_not_duplicate_acts():
+    # I3: the second application used to append every family act again.
+    result = _result(_zones())
+    apply_paradigm(result, "Barnes")
+    first = [a.name for a in result.acts]
+    apply_paradigm(result, "Barnes")
+    assert [a.name for a in result.acts] == first
+
+
+def test_zone_angles_are_assigned_so_angular_metrics_can_run():
+    # I6: nothing in the pipeline called assign_zone_angles, so three Barnes
+    # metrics could never compute.
+    zones = _zones()
+    assert all(z.angle == 0.0 for z in zones)      # the fixture starts flat
+    result = _result(zones)
+    apply_paradigm(result, "Barnes")
+    angles = {z.name: z.angle for z in result.validation and zones}
+    assert len({round(a, 6) for a in angles.values()}) > 1   # a real ring now
+    assert "angular_distance_first" in result.metrics.values
+
+
+def test_lineage_failure_is_reported_not_silent():
+    # I2: a custom registry made lineage() raise, and every inherited metric
+    # vanished from both values and errors with no trace.
+    from sphynx.paradigms import Paradigm as _P
+    from sphynx.paradigms.builtins import barnes_maze, open_field
+
+    private = {"OF": open_field(), "Barnes": barnes_maze()}
+    result = _result(_zones())
+    apply_paradigm(result, "Barnes", registry=private)
+    codes = [i.code for i in result.validation.issues]
+    assert "lineage_failed" not in codes           # it resolves now
+    assert result.metrics.values or result.metrics.errors
+
+
+def test_paradigm_defaults_sit_between_the_preset_and_the_config(tmp_path):
+    # I7: paradigm_defaults were recorded and never read.
+    from sphynx.pipeline.analyze import _paradigm_defaults
+
+    register_paradigm(Paradigm(name="Slow", parent="OF",
+                               config_defaults={"velocity_rest": 3.0}))
+    assert _paradigm_defaults("Slow")["velocity_rest"] == 3.0
+    assert _paradigm_defaults("OF")["velocity_rest"] == 1.0
+    assert _paradigm_defaults(None) == {}

@@ -45,6 +45,10 @@ def open_field() -> Paradigm:
             "velocity_locomotion": 5.0,
             "min_run_seconds": 0.25,
         },
+        metrics=[
+            MetricRef("path_length"),
+            MetricRef("mean_speed"),
+        ],
         validation=[CALIBRATION_RULE],
         doc="Open Field: empty arena, no objects.",
     )

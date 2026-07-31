@@ -207,9 +207,12 @@ def _path_length_cm(x, y, upto=None) -> float:
     return float(np.hypot(np.diff(x), np.diff(y)).sum())
 
 
-@register_metric("path_length", requires_geometry=("trajectory",), paradigm=_BARNES)
+@register_metric("path_length", requires_geometry=("trajectory",))
 def path_length(ctx):
-    """Distance travelled over the whole trial, in cm."""
+    """Distance travelled over the whole trial, in cm.
+
+    Not Barnes-specific: every paradigm wants it, so it carries no paradigm
+    restriction."""
     return _path_length_cm(*ctx.trajectory_cm)
 
 

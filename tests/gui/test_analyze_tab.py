@@ -117,3 +117,60 @@ def test_on_failed_shows_the_message_and_reenables_run(qtbot):
     tab.controller.on_failed("DLC csv not found: nowhere.csv")
     assert "nowhere.csv" in tab.status_label.text()
     assert tab.run_button.isEnabled()
+
+
+# --- S4a review regressions ---
+
+def test_second_run_while_busy_is_refused(qtbot, monkeypatch):
+    # C1: starting a second run dropped the only reference to the first worker
+    # and killed it mid-analysis.
+    tab = AnalyzeTab(AppState())
+    qtbot.addWidget(tab)
+    tab.state.dlc_path = "d.csv"
+    tab.state.preset_path = "p.mat"
+
+    class _Thread:
+        def isRunning(self):
+            return True
+
+    tab.controller._thread = _Thread()
+    tab.controller.run()
+    assert "already running" in tab.status_label.text()
+
+
+def test_failed_run_clears_the_previous_result(qtbot):
+    # I4: a failure used to leave the old tables and plots under the new paths.
+    state = AppState()
+    tab = AnalyzeTab(state)
+    qtbot.addWidget(tab)
+    tab.controller.on_finished(_result())
+    assert tab.acts_table.rowCount() == 1
+
+    tab.controller.on_failed("DLC csv not found: nowhere.csv")
+    assert tab.acts_table.rowCount() == 0
+    assert tab.metrics_table.rowCount() == 0
+    assert tab.warnings.rows == []
+    assert state.result is None
+
+
+def test_empty_metrics_table_explains_itself(qtbot):
+    # I5: zero rows must not read as "nothing went wrong".
+    from sphynx.metrics.registry import MetricResults
+
+    tab = AnalyzeTab(AppState())
+    qtbot.addWidget(tab)
+    result = _result()
+    result.metrics = MetricResults()
+    result.paradigm = "OF"
+    tab.controller.on_finished(result)
+    assert tab.metrics_table.rowCount() == 0
+    assert "no named metrics" in tab.metrics_note.text()
+
+
+def test_no_paradigm_is_stated_rather_than_blank(qtbot):
+    tab = AnalyzeTab(AppState())
+    qtbot.addWidget(tab)
+    result = _result()
+    result.metrics = None
+    tab.controller.on_finished(result)
+    assert "No paradigm" in tab.metrics_note.text()

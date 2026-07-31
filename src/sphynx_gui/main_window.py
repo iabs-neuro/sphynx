@@ -41,3 +41,11 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentIndex(self.tabs.indexOf(self.analyze_tab))
         self.setCentralWidget(self.tabs)
         self.resize(1280, 860)
+
+    def closeEvent(self, event):        # noqa: N802 - Qt naming
+        """Let a running analysis finish before the window is destroyed.
+
+        Qt aborts the whole process if a QThread is still running when it is
+        destroyed, so closing mid-analysis would look like a crash."""
+        self.analyze_tab.controller.shutdown()
+        super().closeEvent(event)

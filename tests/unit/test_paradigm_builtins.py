@@ -103,7 +103,9 @@ def test_barnes_inherits_of_calibration_rule():
 def test_ty_maze_is_a_scaffold_without_choice_metrics():
     ty = resolve_paradigm("TYMaze")
     assert [f.name for f in ty.families] == ["in_arm"]
-    assert ty.metrics == []                    # deferred by design
+    # It inherits OF's generic metrics but declares no choice/decision metrics
+    # of its own -- those are deferred by design.
+    assert {m.name for m in ty.metrics} == {"path_length", "mean_speed"}
     assert "deferred" in ty.doc.lower()
 
 

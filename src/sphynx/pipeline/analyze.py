@@ -121,6 +121,19 @@ def _enforce_bucket_exclusivity(acts, priority_names):
     return acts
 
 
+def _paradigm_defaults(paradigm) -> dict:
+    """A paradigm's config defaults, resolved through its ancestors.
+
+    These sit BETWEEN the preset and the Config: a paradigm supplies sensible
+    values for an experiment type, and the preset that was actually drawn still
+    overrides them."""
+    if paradigm is None:
+        return {}
+    from sphynx.paradigms.registry import resolve_paradigm
+
+    return dict(resolve_paradigm(paradigm).config_defaults)
+
+
 def analyze_session(config: Config, paradigm=None) -> SessionResult:
     """Run the full single-session pipeline and return a SessionResult.
 
@@ -169,9 +182,16 @@ def analyze_session(config: Config, paradigm=None) -> SessionResult:
     height = float(_opt(options, "Height", np.inf))
     _log.info("Loaded %d frames, %d body parts", n_frames, n_parts)
 
+    # Precedence: preset Options > paradigm config_defaults > Config.
+    defaults = _paradigm_defaults(paradigm)
+    rest_threshold = defaults.get("velocity_rest", config.acts.rest_threshold_cm_s)
+    loc_threshold = defaults.get("velocity_locomotion",
+                                 config.acts.loc_threshold_cm_s)
+    min_run_seconds = defaults.get("min_run_seconds", config.acts.min_run_seconds)
+
     small_win = _make_odd(frame_rate * config.preprocess.smooth_window_small_sec)
     big_win = _make_odd(frame_rate * config.preprocess.smooth_window_big_sec)
-    min_run_frames = int(round(frame_rate * config.acts.min_run_seconds))
+    min_run_frames = int(round(frame_rate * min_run_seconds))
 
     # --- 3. Clean each body-part trace ---
     traces: list = []
@@ -251,8 +271,8 @@ def analyze_session(config: Config, paradigm=None) -> SessionResult:
     # --- 6. Speed acts ---
     sa = speed_acts(
         velocity,
-        _opt(options, "velocity_rest", config.acts.rest_threshold_cm_s),
-        _opt(options, "velocity_locomotion", config.acts.loc_threshold_cm_s),
+        _opt(options, "velocity_rest", rest_threshold),
+        _opt(options, "velocity_locomotion", loc_threshold),
         min_run_frames,
     )
     acts: list = [
@@ -265,7 +285,7 @@ def analyze_session(config: Config, paradigm=None) -> SessionResult:
     bpv = np.array([t.velocity for t in traces], dtype=float)
     fz = freezing(
         bpv, point, config.acts.freezing_mode,
-        _opt(options, "velocity_rest", config.acts.rest_threshold_cm_s),
+        _opt(options, "velocity_rest", rest_threshold),
         min_run_frames,
     )
     acts.append(SessionAct("freezing", fz.astype(float), "builtin"))

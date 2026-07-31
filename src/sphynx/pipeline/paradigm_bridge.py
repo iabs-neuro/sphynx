@@ -20,7 +20,12 @@ from sphynx.logging_setup import get_logger
 from sphynx.metrics.registry import MetricContext, compute_metric_refs
 from sphynx.paradigms.registry import lineage, resolve_paradigm
 from sphynx.paradigms.validate import ValidationIssue, validate_paradigm
-from sphynx.zones.select import make_composite
+from sphynx.zones.geometry import (
+    assign_zone_angles,
+    assign_zone_indices,
+    resolve_arena_center,
+)
+from sphynx.zones.select import make_composite, union_mask
 
 _log = get_logger()
 
@@ -33,6 +38,38 @@ def _issue(report, code, message, where=""):
 def _opt(options, name, default):
     value = getattr(options, name, None) if options is not None else None
     return default if value is None else value
+
+
+def _assign_ring_geometry(zones, report):
+    """Give every zone its per-class index and its angle about the arena centre.
+
+    Angular metrics need `Zone.angle`, which nothing else in the pipeline sets.
+    The centre comes from the arena zone when the preset marks one, otherwise
+    from the union of all zone masks -- and if neither is available the angles
+    stay None, which the angular metrics report rather than guess around."""
+    usable = [z for z in zones
+              if getattr(getattr(z, "maskfilled", None), "ndim", 0) == 2]
+    if not usable:
+        return
+    assign_zone_indices(zones)
+
+    arena = next((z for z in usable if getattr(z, "zone_class", "") == "arena"), None)
+    try:
+        if arena is not None:
+            centre = resolve_arena_center(arena.maskfilled)
+        else:
+            centre = resolve_arena_center(union_mask(usable))
+    except SphynxError as e:
+        # Only the angular metrics need angles, and they raise a clear error of
+        # their own when asked without one. So this is a note, not a failure of
+        # the paradigm: a plain Open Field does not care where the centre is.
+        report.issues.append(ValidationIssue(
+            code="zone_angles_unset", level="warning",
+            message=f"zone angles were not computed ({e}); angular metrics "
+                    "will report that they cannot run",
+            where="arena"))
+        return
+    assign_zone_angles(usable, centre)
 
 
 def _build_composites(resolved, zones, report):
@@ -98,8 +135,15 @@ def apply_paradigm(result, paradigm, registry=None) -> None:
     report = validate_paradigm(resolved, zones, result.options)
     result.validation = report
 
+    # Applying a paradigm twice must not double the acts: drop whatever a
+    # previous application of this bridge added before adding it again.
+    result.acts = [a for a in result.acts if a.category != "family"]
+    result.event_streams = {}
+    result.degraded = {}
+
     frame_rate = float(_opt(result.options, "FrameRate", 30.0))
 
+    _assign_ring_geometry(zones, report)
     _build_composites(resolved, zones, report)
     concrete = _expand_families(resolved, zones, report)
 
@@ -140,7 +184,13 @@ def apply_paradigm(result, paradigm, registry=None) -> None:
         )
         try:
             para_lineage = lineage(paradigm, registry)
-        except SphynxError:
+        except SphynxError as e:
+            # Falling back to the child's own name would silently drop every
+            # metric registered against an ancestor, so say what happened.
+            _issue(report, "lineage_failed",
+                   f"could not resolve the paradigm ancestry ({e}); metrics "
+                   "registered against a parent paradigm were skipped",
+                   where=resolved.name)
             para_lineage = (resolved.name,)
         result.metrics = compute_metric_refs(
             resolved.metrics, metric_ctx, paradigm=para_lineage)

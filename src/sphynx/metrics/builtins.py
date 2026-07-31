@@ -134,3 +134,20 @@ def ratio_index(ctx, act_a, act_b, stat="duration_s"):
     if total == 0:
         return _NAN
     return (a - b) / total
+
+
+@register_metric("mean_speed", requires_geometry=("trajectory",))
+def mean_speed(ctx):
+    """Average speed over the trial in cm/s: path length divided by duration.
+
+    Derived from the trajectory rather than from a velocity trace so it means
+    the same thing in every paradigm. NaN when the trace is too short to have
+    a length."""
+    from sphynx.metrics.barnes import _path_length_cm
+
+    x, y = ctx.trajectory_cm
+    length = _path_length_cm(x, y)
+    frames = len(x)
+    if not (frames > 1) or length != length:      # length is NaN
+        return _NAN
+    return length / ((frames - 1) / ctx.frame_rate)

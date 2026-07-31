@@ -117,6 +117,14 @@ def lineage(name_or_paradigm, registry=None) -> tuple:
     Pass this to metrics.compute_metrics / compute_metric_refs so a paradigm
     INHERITS its parent's metrics: matching on the child's name alone would
     silently drop every metric registered against the parent."""
-    paradigm = (name_or_paradigm if isinstance(name_or_paradigm, Paradigm)
-                else get_paradigm(name_or_paradigm))
+    if isinstance(name_or_paradigm, Paradigm):
+        paradigm = name_or_paradigm
+    else:
+        # Honour a caller-supplied registry: looking the name up in the global
+        # one would raise for a private registry and cost every inherited metric.
+        source = PARADIGMS if registry is None else registry
+        paradigm = source.get(name_or_paradigm)
+        if paradigm is None:
+            raise SphynxValueError(
+                f'unknown paradigm "{name_or_paradigm}"; known: {sorted(source)}')
     return tuple(link.name for link in reversed(_chain(paradigm, registry)))
