@@ -12,15 +12,18 @@ from matplotlib.figure import Figure
 from PySide6.QtWidgets import QGridLayout, QWidget
 from scipy.ndimage import gaussian_filter
 
-PLOT_NAMES = ("trajectory", "heatmap", "speed_histogram", "speed_vs_time")
+from sphynx.plot.etogram import draw_etogram
+
+PLOT_NAMES = ("trajectory", "heatmap", "speed_histogram", "speed_vs_time", "etogram")
 _TITLES = {
     "trajectory": "Trajectory",
     "heatmap": "Occupancy",
     "speed_histogram": "Speed histogram",
     "speed_vs_time": "Speed vs time",
+    "etogram": "Etogram",
 }
 _POSITIONS = {"trajectory": (0, 0), "heatmap": (0, 1),
-              "speed_histogram": (1, 0), "speed_vs_time": (1, 1)}
+              "speed_histogram": (1, 0), "speed_vs_time": (1, 1), "etogram": (2, 0)}
 
 
 class _ClickableCanvas(FigureCanvas):
@@ -60,7 +63,8 @@ class PlotGrid(QWidget):
                                       self.toggle_maximise)
             self.canvases[name] = canvas
             row, column = _POSITIONS[name]
-            self._layout.addWidget(canvas, row, column)
+            span = 2 if name == "etogram" else 1
+            self._layout.addWidget(canvas, row, column, 1, span)
 
     def clear(self) -> None:
         for canvas in self.canvases.values():
@@ -92,6 +96,7 @@ class PlotGrid(QWidget):
                            heatmap_bin_cm, frame_rate)
         self._draw_speed_histogram(velocity)
         self._draw_speed_trace(velocity, frame_rate)
+        self._draw_etogram(getattr(result, "acts", None), frame_rate)
         for canvas in self.canvases.values():
             canvas.draw_idle()
 
@@ -148,3 +153,8 @@ class PlotGrid(QWidget):
                       color=(0.30, 0.55, 0.85), linewidth=0.8)
         axes.set_xlabel("time, s")
         axes.set_ylabel("speed, cm/s")
+
+    def _draw_etogram(self, acts, frame_rate):
+        axes = self._axes("etogram")
+        draw_etogram(axes, [a for a in (acts or []) if a.array is not None],
+                     frame_rate, max_acts=12)

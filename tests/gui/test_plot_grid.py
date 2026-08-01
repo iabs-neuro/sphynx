@@ -28,7 +28,7 @@ def test_four_named_canvases(qtbot):
     grid = PlotGrid()
     qtbot.addWidget(grid)
     assert set(grid.canvases) == {
-        "trajectory", "heatmap", "speed_histogram", "speed_vs_time"}
+        "trajectory", "heatmap", "speed_histogram", "speed_vs_time", "etogram"}
 
 
 def test_show_result_draws_every_panel(qtbot):
@@ -75,3 +75,34 @@ def test_missing_trace_does_not_crash(qtbot):
     qtbot.addWidget(grid)
     grid.show_result(_Empty())               # must not raise
     assert grid.canvases
+
+
+def test_etogram_is_the_fifth_panel(qtbot):
+    grid = PlotGrid()
+    qtbot.addWidget(grid)
+    assert "etogram" in grid.canvases
+
+
+def test_etogram_is_drawn_from_the_acts(qtbot):
+    import numpy as np
+
+    from sphynx.pipeline.analyze import SessionAct
+
+    class _R(_Result):
+        def __init__(self):
+            super().__init__()
+            mask = np.zeros(100)
+            mask[10:30] = 1
+            self.acts = [SessionAct("rest", mask, "builtin")]
+
+    grid = PlotGrid()
+    qtbot.addWidget(grid)
+    grid.show_result(_R())
+    assert grid.canvases["etogram"].figure.axes
+
+
+def test_etogram_survives_a_result_without_acts(qtbot):
+    grid = PlotGrid()
+    qtbot.addWidget(grid)
+    grid.show_result(_Result())          # no `acts` attribute at all
+    assert grid.canvases["etogram"].figure.axes
