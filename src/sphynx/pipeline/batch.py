@@ -81,10 +81,11 @@ def _tidy_to_wide(tidy: pd.DataFrame) -> pd.DataFrame:
     mouse_idx = {m: i for i, m in enumerate(mice)}
     for r in t.itertuples():
         data[r.col_key][mouse_idx[r.mouse]] = r.value
-    wide = pd.DataFrame({"mouse": mice})
-    for c in cols:
-        wide[c] = data[c]
-    return wide
+    # Built in one go: adding a column at a time fragments the frame, which
+    # pandas warns about once per column on a real batch.
+    return pd.concat(
+        [pd.DataFrame({"mouse": mice}), pd.DataFrame(data, columns=list(cols))],
+        axis=1)
 
 
 def run_batch(specs, config: Config | None = None, out_dir: str = "", preloaded=None,

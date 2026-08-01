@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QMainWindow, QTabWidget
 
 from sphynx_gui.acts_tab import ActsTab
 from sphynx_gui.analyze_tab import AnalyzeTab
+from sphynx_gui.batch_tab import BatchTab
 from sphynx_gui.placeholder_tab import PlaceholderTab
 from sphynx_gui.state import AppState
 
@@ -17,7 +18,6 @@ TAB_TITLES = (
 _PLACEHOLDERS = {
     "Create Preset": ("S4d", "Draw zones, mark roles, calibrate, set the arena centre."),
     "Preprocess Tracking": ("S4e", "Per-body-part cleaning, interpolation and smoothing."),
-    "Batch Analysis": ("S4c", "Run many sessions and aggregate them."),
     "Make Output": ("S4c", "Build the wide and tidy export tables."),
 }
 
@@ -31,12 +31,15 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.analyze_tab = AnalyzeTab(self.state)
         self.acts_tab = ActsTab(self.state)
+        self.batch_tab = BatchTab(self.state)
 
         for title in TAB_TITLES:
             if title == "Analyze Session":
                 self.tabs.addTab(self.analyze_tab, title)
             elif title == "Define Acts":
                 self.tabs.addTab(self.acts_tab, title)
+            elif title == "Batch Analysis":
+                self.tabs.addTab(self.batch_tab, title)
             else:
                 slice_name, detail = _PLACEHOLDERS[title]
                 self.tabs.addTab(PlaceholderTab(title, slice_name, detail), title)
@@ -51,4 +54,5 @@ class MainWindow(QMainWindow):
         Qt aborts the whole process if a QThread is still running when it is
         destroyed, so closing mid-analysis would look like a crash."""
         self.analyze_tab.controller.shutdown()
+        self.batch_tab.controller.shutdown()
         super().closeEvent(event)

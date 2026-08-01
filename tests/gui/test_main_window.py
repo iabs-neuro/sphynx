@@ -18,7 +18,7 @@ def test_four_tabs_are_placeholders_naming_their_slice(qtbot):
     qtbot.addWidget(window)
     placeholders = [window.tabs.widget(i) for i in range(window.tabs.count())
                     if isinstance(window.tabs.widget(i), PlaceholderTab)]
-    assert len(placeholders) == 4
+    assert len(placeholders) == 3
     for tab in placeholders:
         assert tab.slice_name.startswith("S4")
 
@@ -60,4 +60,13 @@ def test_four_tabs_remain_placeholders(qtbot):
     qtbot.addWidget(window)
     placeholders = [window.tabs.widget(i) for i in range(window.tabs.count())
                     if isinstance(window.tabs.widget(i), PlaceholderTab)]
-    assert len(placeholders) == 4
+    assert len(placeholders) == 3
+
+
+def test_batch_tab_is_live(qtbot):
+    from sphynx_gui.batch_tab import BatchTab
+
+    window = MainWindow()
+    qtbot.addWidget(window)
+    assert isinstance(window.batch_tab, BatchTab)
+    assert window.batch_tab.state is window.state

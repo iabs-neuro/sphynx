@@ -16,6 +16,7 @@ from PySide6.QtCore import QObject, Signal
 
 from sphynx.acts.library_io import ActLibrary
 from sphynx.config import Config
+from sphynx.project import Project
 from sphynx.exceptions import SphynxIOError
 
 
@@ -24,6 +25,7 @@ class AppState(QObject):
     paradigm_changed = Signal()
     result_changed = Signal()
     library_changed = Signal()
+    project_changed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -33,6 +35,7 @@ class AppState(QObject):
         self._paradigm = "OF"
         self._result = None
         self._library = ActLibrary()
+        self._project = Project()
         self._config = Config.default()
         self.end_frame = 0
         self.heatmap_bin_cm = 4.0
@@ -101,6 +104,15 @@ class AppState(QObject):
     def library(self, value) -> None:
         self._library = value if value is not None else ActLibrary()
         self.library_changed.emit()
+
+    @property
+    def project(self):
+        return self._project
+
+    @project.setter
+    def project(self, value) -> None:
+        self._project = value if value is not None else Project()
+        self.project_changed.emit()
 
     def build_config(self) -> Config:
         """A fresh Config for one run; the state's own config is never handed out."""
