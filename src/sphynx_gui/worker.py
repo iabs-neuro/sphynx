@@ -17,16 +17,18 @@ class AnalysisWorker(QObject):
     failed = Signal(str)
     progress = Signal(str)
 
-    def __init__(self, config, paradigm=None, parent=None):
+    def __init__(self, config, paradigm=None, library=None, parent=None):
         super().__init__(parent)
         self._config = config
         self._paradigm = paradigm
+        self._library = library
 
     @Slot()
     def run(self) -> None:
         self.progress.emit("Analysing session...")
         try:
-            result = analyze_session(self._config, paradigm=self._paradigm)
+            result = analyze_session(self._config, paradigm=self._paradigm,
+                                     library=self._library)
         except SphynxError as e:
             # An engine refusal is a message for the user, not a crash.
             self.failed.emit(str(e))

@@ -13,12 +13,12 @@ def test_six_tabs_in_workflow_order(qtbot):
     ]
 
 
-def test_five_tabs_are_placeholders_naming_their_slice(qtbot):
+def test_four_tabs_are_placeholders_naming_their_slice(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
     placeholders = [window.tabs.widget(i) for i in range(window.tabs.count())
                     if isinstance(window.tabs.widget(i), PlaceholderTab)]
-    assert len(placeholders) == 5
+    assert len(placeholders) == 4
     for tab in placeholders:
         assert tab.slice_name.startswith("S4")
 
@@ -44,3 +44,20 @@ def test_window_has_a_title(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
     assert "Sphynx" in window.windowTitle()
+
+
+def test_define_acts_tab_is_live(qtbot):
+    from sphynx_gui.acts_tab import ActsTab
+
+    window = MainWindow()
+    qtbot.addWidget(window)
+    assert isinstance(window.acts_tab, ActsTab)
+    assert window.acts_tab.state is window.state
+
+
+def test_four_tabs_remain_placeholders(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    placeholders = [window.tabs.widget(i) for i in range(window.tabs.count())
+                    if isinstance(window.tabs.widget(i), PlaceholderTab)]
+    assert len(placeholders) == 4

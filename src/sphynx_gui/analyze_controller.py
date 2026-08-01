@@ -52,7 +52,8 @@ class AnalyzeController(QObject):
         self.tab.set_status("Analysing session...")
 
         config = self.state.build_config()
-        self._worker = AnalysisWorker(config, paradigm=self.state.paradigm or None)
+        self._worker = AnalysisWorker(config, paradigm=self.state.paradigm or None,
+                                      library=self.state.library)
         self._thread = QThread()
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
