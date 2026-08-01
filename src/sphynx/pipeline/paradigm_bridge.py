@@ -19,7 +19,11 @@ from sphynx.exceptions import SphynxError
 from sphynx.logging_setup import get_logger
 from sphynx.metrics.registry import MetricContext, compute_metric_refs
 from sphynx.paradigms.registry import lineage, resolve_paradigm
-from sphynx.paradigms.validate import ValidationIssue, validate_paradigm
+from sphynx.paradigms.validate import (
+    ValidationIssue,
+    ValidationReport,
+    validate_paradigm,
+)
 from sphynx.zones.geometry import (
     assign_zone_angles,
     assign_zone_indices,
@@ -99,8 +103,12 @@ def _merge_library(paradigm_acts, library_acts, report):
 
     The replacement is REPORTED: a run that quietly measured something other
     than the paradigm declared is indistinguishable from one that did not."""
-    by_name = {a.name: a for a in paradigm_acts}
-    order = [a.name for a in paradigm_acts]
+    by_name = {}
+    order = []
+    for act in paradigm_acts:
+        if act.name not in by_name:
+            order.append(act.name)
+        by_name[act.name] = act
     for act in library_acts:
         if act.name in by_name:
             report.issues.append(ValidationIssue(
@@ -143,16 +151,23 @@ def _trajectory_cm(result, pixels_per_cm):
             np.asarray(trace.y_smooth, dtype=float) / pixels_per_cm)
 
 
-def apply_paradigm(result, paradigm, registry=None, library=None) -> None:
-    """Run a paradigm over an already-analysed session, in place."""
+def apply_paradigm(result, paradigm=None, registry=None, library=None) -> None:
+    """Run a paradigm and/or an act library over an analysed session, in place.
+
+    `paradigm` may be None: a library-only run must not silently acquire some
+    other paradigm's validation rules and defaults."""
     from sphynx.pipeline.analyze import SessionAct
 
-    resolved = resolve_paradigm(paradigm, registry)
-    result.paradigm = resolved.name
-    result.paradigm_defaults = dict(resolved.config_defaults)
+    resolved = None if paradigm is None else resolve_paradigm(paradigm, registry)
+    result.paradigm = resolved.name if resolved is not None else ""
+    result.paradigm_defaults = (dict(resolved.config_defaults)
+                                if resolved is not None else {})
 
     zones = [] if result.zones is None else list(result.zones)
-    report = validate_paradigm(resolved, zones, result.options)
+    if resolved is not None:
+        report = validate_paradigm(resolved, zones, result.options)
+    else:
+        report = ValidationReport(paradigm="")
     result.validation = report
 
     # Applying a paradigm twice must not double the acts: drop whatever a
@@ -164,14 +179,35 @@ def apply_paradigm(result, paradigm, registry=None, library=None) -> None:
     frame_rate = float(_opt(result.options, "FrameRate", 30.0))
 
     _assign_ring_geometry(zones, report)
-    _build_composites(resolved, zones, report)
-    concrete = _expand_families(resolved.families, zones, report)
-    concrete.extend(resolved.acts)
+    concrete = []
+    if resolved is not None:
+        _build_composites(resolved, zones, report)
+        concrete = _expand_families(resolved.families, zones, report)
+        concrete.extend(resolved.acts)
 
     if library is not None:
         from_library = _expand_families(library.families, zones, report)
         from_library.extend(library.acts)
         concrete = _merge_library(concrete, from_library, report)
+        # A library act may also share a name with a BUILT-IN act, which was
+        # computed before this bridge ran. Leaving both would put two acts of
+        # one name into the tables, the metric context and the export.
+        library_names = {a.name for a in from_library}
+        kept = []
+        for act in result.acts:
+            if act.name in library_names:
+                report.issues.append(ValidationIssue(
+                    code="act_overridden", level="info",
+                    message=f'built-in act "{act.name}" was replaced by the '
+                            "act of the same name in your library",
+                    where=act.name))
+            else:
+                kept.append(act)
+        result.acts = kept
+
+    # The zones the acts were actually scored against, composites included, so
+    # a caller previewing one act uses the same geometry the run did.
+    result.zones_effective = zones
 
     masks = {}
     if concrete:
@@ -192,14 +228,15 @@ def apply_paradigm(result, paradigm, registry=None, library=None) -> None:
                 category="family",
                 stats=act_stats(mask, frame_rate, velocity=velocity)))
 
-        for family in list(resolved.families) + list(
-                library.families if library is not None else []):
+        families = list(resolved.families) if resolved is not None else []
+        families += list(library.families) if library is not None else []
+        for family in families:
             members = [a for a in concrete if a.family == family.name]
             if members:
                 result.event_streams[family.name] = family_event_stream(
                     members, masks, frame_rate, family=family.name)
 
-    if resolved.metrics:
+    if resolved is not None and resolved.metrics:
         pixels_per_cm = float(_opt(result.options, "pxl2sm", 0.0))
         metric_ctx = MetricContext(
             acts={a.name: a.array for a in result.acts},

@@ -89,11 +89,14 @@ class ActsTab(QWidget):
             label = f"{name}  [{source}]"
             item = QListWidgetItem(label)
             if overridden_by:
-                # Struck through, because this act is NOT what gets computed.
+                # Same name in the library. Whether it actually replaces this
+                # act depends on the preset the run expands over, so the label
+                # states the collision rather than asserting the outcome; the
+                # warnings panel reports what a run really replaced.
                 font = item.font()
                 font.setStrikeOut(True)
                 item.setFont(font)
-                item.setText(f"{label}  replaced by your {overridden_by}")
+                item.setText(f"{label}  your {overridden_by} defines this name")
             item.setData(Qt.UserRole, name)
             self.list_widget.addItem(item)
 

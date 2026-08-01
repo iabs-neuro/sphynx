@@ -217,3 +217,29 @@ def test_loading_a_missing_file_reports_instead_of_raising(qtbot, tmp_path):
     tab = _tab(qtbot)
     tab.controller.load_library(tmp_path / "nope.json")
     assert "not found" in tab.status_label.text().lower()
+
+
+# --- S4b review regressions ---
+
+def test_act_without_a_body_part_is_refused(qtbot):
+    # I5: before a session loads the combos are empty, and an act with no body
+    # part and no zone used to be saved with a success message.
+    tab = _tab(qtbot, with_session=False)
+    tab.editor.name_box.setText("empty_act")
+    tab.controller.add_act()
+    assert tab.state.library.acts == []
+    assert "body part" in tab.status_label.text().lower()
+
+
+def test_selecting_a_paradigm_act_loads_it_into_the_editor(qtbot):
+    # I6: the form used to keep showing the previous act, so Preview described
+    # something other than the highlighted row.
+    tab = _tab(qtbot)
+    tab.controller.select("nose_at_object")
+    assert tab.editor.name_box.text() == "nose_at_object"
+
+
+def test_selecting_a_builtin_act_loads_it_too(qtbot):
+    tab = _tab(qtbot)
+    tab.controller.select("rest")
+    assert tab.editor.name_box.text() == "rest"

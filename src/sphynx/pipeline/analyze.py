@@ -82,6 +82,8 @@ class SessionResult:
     degraded: dict = field(default_factory=dict)        # act name -> reasons
     paradigm: str = ""
     paradigm_defaults: dict = field(default_factory=dict)
+    # zones the acts were scored against, composites included
+    zones_effective: list = field(default_factory=list)
 
 
 def _opt(options, name, default):
@@ -336,5 +338,5 @@ def analyze_session(config: Config, paradigm=None, library=None) -> SessionResul
     if paradigm is not None or library is not None:
         from sphynx.pipeline.paradigm_bridge import apply_paradigm
 
-        apply_paradigm(result, paradigm or "OF", library=library)
+        apply_paradigm(result, paradigm, library=library)
     return result

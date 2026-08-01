@@ -70,15 +70,39 @@ class ActsController(QObject):
         self.tab.show_rows(rows)
 
     def select(self, name: str) -> None:
+        """Load the selected act into the editor, whatever its source.
+
+        Built-in and paradigm acts are loaded to be read and copied from; only
+        library acts can be deleted. Leaving the form showing the PREVIOUS act
+        while a different row is highlighted is how a preview ends up
+        describing something other than what the user is looking at."""
         self._selected = name
-        entry = self._library_entry(name)
-        if entry is not None:
-            act = entry.template if isinstance(entry, ActFamily) else entry
-            self.tab.editor.load_act(act)
-            if isinstance(entry, ActFamily):
-                self.tab.editor.binding.setCurrentText("zone class")
-                self.tab.editor.zone_box.setCurrentText(
-                    entry.selector.zone_class or "")
+        entry = self._library_entry(name) or self._readonly_entry(name)
+        if entry is None:
+            return
+        act = entry.template if isinstance(entry, ActFamily) else entry
+        self.tab.editor.load_act(act)
+        if isinstance(entry, ActFamily):
+            self.tab.editor.binding.setCurrentText("zone class")
+            self.tab.editor.zone_box.setCurrentText(entry.selector.zone_class or "")
+        if self.tab.editor.missing:
+            self.tab.set_status(
+                "This act refers to " + ", ".join(self.tab.editor.missing)
+                + ", which the loaded session does not have.")
+
+    def _readonly_entry(self, name):
+        """A built-in or paradigm act, so the editor can show it."""
+        for act in acts_library_defaults():
+            if act.name == name:
+                return act
+        try:
+            resolved = resolve_paradigm(self.state.paradigm)
+        except SphynxError:
+            return None
+        for item in list(resolved.families) + list(resolved.acts):
+            if item.name == name:
+                return item
+        return None
 
     def _library_entry(self, name):
         library = self.state.library or ActLibrary()
@@ -93,6 +117,14 @@ class ActsController(QObject):
         act = self.tab.editor.to_act()
         if not act.name:
             self.tab.set_status("Give the act a name before adding it.")
+            return
+        if not act.body_part:
+            self.tab.set_status(
+                "Choose a body part. Load a session in Analyze first if the "
+                "list is empty -- the choices come from its tracking.")
+            return
+        if not self.tab.editor.is_family() and not (act.zones and act.zones[0]):
+            self.tab.set_status("Choose the zone this act is scored in.")
             return
 
         library = self.state.library or ActLibrary()
@@ -158,7 +190,9 @@ class ActsController(QObject):
                 [t.velocity if t.velocity is not None
                  else np.zeros(result.n_frames) for t in traces], dtype=float),
             body_parts=list(result.body_parts_names),
-            zones=list(result.zones or []), frame_rate=frame_rate,
+            zones=list(getattr(result, "zones_effective", None)
+                       or result.zones or []),
+            frame_rate=frame_rate,
             pixels_per_cm=float(_opt(result.options, "pxl2sm", 1.0)),
         )
         try:

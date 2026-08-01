@@ -25,6 +25,7 @@ class ActEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._zones: list = []
+        self.missing: list = []      # choices the loaded session does not offer
 
         self.name_box = QLineEdit()
         self.binding = QComboBox()
@@ -103,14 +104,33 @@ class ActEditor(QWidget):
     def family_zone_class(self) -> str:
         return self.zone_box.currentText() if self.is_family() else ""
 
+    @staticmethod
+    def _select(box, value) -> bool:
+        """Select `value`, adding it if the session does not offer it.
+
+        `setCurrentText` is a no-op for an absent item, which would silently
+        swap the act's body part or zone for whatever was selected before and
+        then save that under the original name. Keeping the value instead makes
+        the mismatch visible."""
+        value = str(value or "")
+        if not value:
+            return True
+        if box.findText(value) < 0:
+            box.addItem(value)
+            box.setCurrentText(value)
+            return False
+        box.setCurrentText(value)
+        return True
+
     def load_act(self, act) -> None:
+        self.missing: list = []
         self.name_box.setText(act.name)
         self.binding.setCurrentText(SINGLE_ZONE)
         self._refill_zone_box()
-        if act.zones:
-            self.zone_box.setCurrentText(str(act.zones[0]))
-        if act.body_part:
-            self.body_part_box.setCurrentText(str(act.body_part))
+        if act.zones and not self._select(self.zone_box, act.zones[0]):
+            self.missing.append(f'zone "{act.zones[0]}"')
+        if act.body_part and not self._select(self.body_part_box, act.body_part):
+            self.missing.append(f'body part "{act.body_part}"')
         self.speed_min_box.setValue(float(act.speed_min))
         self.speed_max_box.setValue(
             0.0 if act.speed_max == float("inf") else float(act.speed_max))

@@ -126,3 +126,51 @@ def test_library_act_appears_in_the_event_streams_of_its_family():
     result = _result(_zones())
     apply_paradigm(result, "OF", library=_library_family("sniff", "hole"))
     assert "sniff" in result.event_streams
+
+
+# --- S4b review regressions ---
+
+def test_library_act_replaces_a_builtin_act():
+    # C1: built-ins are computed before the bridge runs, so a library act of
+    # the same name used to leave TWO acts called "rest" in the result.
+    result = _result(_zones())
+    library = ActLibrary(acts=[Act(name="rest", type="simple",
+                                   body_part="bodycenter", zones=["hole_a"],
+                                   min_duration_sec=0.0, max_gap_sec=0.0)])
+    apply_paradigm(result, "OF", library=library)
+    assert [a.name for a in result.acts].count("rest") == 1
+    assert "act_overridden" in [i.code for i in result.validation.issues]
+
+
+def test_library_only_run_does_not_acquire_a_paradigm():
+    # I1: apply_paradigm used to be called with "OF" when only a library was
+    # given, so the result claimed a paradigm it was never asked for.
+    result = _result(_zones())
+    library = ActLibrary(acts=[Act(name="my_act", type="simple",
+                                   body_part="bodycenter", zones=["hole_a"],
+                                   min_duration_sec=0.0, max_gap_sec=0.0)])
+    apply_paradigm(result, None, library=library)
+    assert result.paradigm == ""
+    assert result.paradigm_defaults == {}
+    assert result.validation.issues == []
+    assert "my_act" in [a.name for a in result.acts]
+
+
+def test_merge_deduplicates_repeated_names():
+    # I3: the merge order list was not deduplicated, so a name appearing twice
+    # on the way in came back twice. A registered paradigm cannot reach this
+    # (resolve_paradigm rejects duplicates), so the guard is checked directly.
+    from sphynx.paradigms.validate import ValidationReport
+    from sphynx.pipeline.paradigm_bridge import _merge_library
+
+    twice = Act(name="twice", type="simple", body_part="bodycenter")
+    merged = _merge_library([twice, twice], [], ValidationReport())
+    assert [a.name for a in merged] == ["twice"]
+
+
+def test_effective_zones_include_the_composites():
+    # I4: a preview scoring against result.zones missed paradigm composites.
+    result = _result(_zones())
+    apply_paradigm(result, "Barnes")
+    names = [getattr(z, "name", "") for z in result.zones_effective]
+    assert "all_holes" in names

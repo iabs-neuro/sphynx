@@ -87,3 +87,16 @@ def test_changing_a_field_emits_changed(qtbot):
     editor = _editor(qtbot)
     with qtbot.waitSignal(editor.changed, timeout=500):
         editor.name_box.setText("renamed")
+
+
+def test_absent_choices_are_kept_and_reported(qtbot):
+    # C2: setCurrentText is a no-op for an absent item, so the act silently
+    # swapped its body part for whatever was selected before.
+    editor = _editor(qtbot)
+    act = Act(name="odd", type="simple", body_part="whisker",
+              zones=["NoSuchZone"])
+    editor.load_act(act)
+    back = editor.to_act()
+    assert back.body_part == "whisker"
+    assert back.zones == ["NoSuchZone"]
+    assert len(editor.missing) == 2
