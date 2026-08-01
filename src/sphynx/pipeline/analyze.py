@@ -134,7 +134,7 @@ def _paradigm_defaults(paradigm) -> dict:
     return dict(resolve_paradigm(paradigm).config_defaults)
 
 
-def analyze_session(config: Config, paradigm=None) -> SessionResult:
+def analyze_session(config: Config, paradigm=None, library=None) -> SessionResult:
     """Run the full single-session pipeline and return a SessionResult.
 
     Required: config.paths.dlc, config.paths.preset. When `paradigm` is given
@@ -333,8 +333,8 @@ def analyze_session(config: Config, paradigm=None) -> SessionResult:
         selected_individual=dlc.selected_individual or "",
         all_individuals=list(dlc.individuals) if dlc.individuals else [],
     )
-    if paradigm is not None:
+    if paradigm is not None or library is not None:
         from sphynx.pipeline.paradigm_bridge import apply_paradigm
 
-        apply_paradigm(result, paradigm)
+        apply_paradigm(result, paradigm or "OF", library=library)
     return result

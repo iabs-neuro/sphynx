@@ -82,9 +82,9 @@ def _build_composites(resolved, zones, report):
                    where=spec.name)
 
 
-def _expand_families(resolved, zones, report):
+def _expand_families(families, zones, report):
     concrete = []
-    for family in resolved.families:
+    for family in families:
         try:
             concrete.extend(expand_family(family, zones))
         except SphynxError as e:
@@ -92,6 +92,26 @@ def _expand_families(resolved, zones, report):
                    f'act family "{family.name}" could not be expanded: {e}',
                    where=family.name)
     return concrete
+
+
+def _merge_library(paradigm_acts, library_acts, report):
+    """Library acts are added; a same-named act replaces the paradigm's.
+
+    The replacement is REPORTED: a run that quietly measured something other
+    than the paradigm declared is indistinguishable from one that did not."""
+    by_name = {a.name: a for a in paradigm_acts}
+    order = [a.name for a in paradigm_acts]
+    for act in library_acts:
+        if act.name in by_name:
+            report.issues.append(ValidationIssue(
+                code="act_overridden", level="info",
+                message=f'act "{act.name}" from the paradigm was replaced by '
+                        "the act of the same name in your library",
+                where=act.name))
+        else:
+            order.append(act.name)
+        by_name[act.name] = act
+    return [by_name[name] for name in order]
 
 
 def _act_context(result, zones, frame_rate):
@@ -123,7 +143,7 @@ def _trajectory_cm(result, pixels_per_cm):
             np.asarray(trace.y_smooth, dtype=float) / pixels_per_cm)
 
 
-def apply_paradigm(result, paradigm, registry=None) -> None:
+def apply_paradigm(result, paradigm, registry=None, library=None) -> None:
     """Run a paradigm over an already-analysed session, in place."""
     from sphynx.pipeline.analyze import SessionAct
 
@@ -145,7 +165,13 @@ def apply_paradigm(result, paradigm, registry=None) -> None:
 
     _assign_ring_geometry(zones, report)
     _build_composites(resolved, zones, report)
-    concrete = _expand_families(resolved, zones, report)
+    concrete = _expand_families(resolved.families, zones, report)
+    concrete.extend(resolved.acts)
+
+    if library is not None:
+        from_library = _expand_families(library.families, zones, report)
+        from_library.extend(library.acts)
+        concrete = _merge_library(concrete, from_library, report)
 
     masks = {}
     if concrete:
@@ -166,7 +192,8 @@ def apply_paradigm(result, paradigm, registry=None) -> None:
                 category="family",
                 stats=act_stats(mask, frame_rate, velocity=velocity)))
 
-        for family in resolved.families:
+        for family in list(resolved.families) + list(
+                library.families if library is not None else []):
             members = [a for a in concrete if a.family == family.name]
             if members:
                 result.event_streams[family.name] = family_event_stream(
