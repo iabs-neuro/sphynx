@@ -13,6 +13,12 @@ from sphynx.project.model import (
     Project,
     ProjectSession,
 )
+from sphynx.project.presets import (
+    PresetAssignment,
+    assign_presets,
+    resolve_preset,
+    runnable_sessions,
+)
 from sphynx.project.scan import parse_session_name, scan_folder, session_is_parsed
 
 __all__ = [
@@ -20,4 +26,5 @@ __all__ = [
     "project_to_dict", "project_from_dict", "save_project", "load_project",
     "SCHEMA_VERSION",
     "parse_session_name", "scan_folder", "session_is_parsed",
+    "PresetAssignment", "assign_presets", "resolve_preset", "runnable_sessions",
 ]
