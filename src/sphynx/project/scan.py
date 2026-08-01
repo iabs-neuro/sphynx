@@ -14,6 +14,19 @@ from sphynx.exceptions import SphynxIOError
 from sphynx.project.model import DEFAULT_PATTERN, ProjectSession
 
 
+# DeepLabCut writes "<video>DLC_<network>_<project><date>shuffle<n>_<iters>.csv"
+# (sometimes with _filtered or _el appended). Everything from the DLC marker on
+# describes the TRACKING, not the session, so the session name is the part
+# before it. This reads DeepLabCut's own convention rather than guessing.
+_SCORER = re.compile(r"DLC_(resnet|mobnet|dlcrnet|efficientnet)", re.IGNORECASE)
+
+
+def session_name_from_file(stem: str) -> str:
+    """The video name a DeepLabCut csv was produced from."""
+    match = _SCORER.search(str(stem))
+    return str(stem)[: match.start()] if match else str(stem)
+
+
 def parse_session_name(name, pattern) -> dict:
     """Named groups the pattern finds in `name`, or {} when it does not match."""
     try:
@@ -45,19 +58,21 @@ def scan_folder(root, pattern: str = DEFAULT_PATTERN, existing=None) -> list:
     for path in sorted(folder.rglob("*.csv")):
         if str(path) in seen_paths:
             continue          # already in the project, possibly hand-edited
-        name = path.stem
+        name = session_name_from_file(path.stem)
         if name in known:
             # Two folders can hold a file of the same name. Dropping the second
             # would lose a session without saying so, and overwriting the first
             # would lose its edits, so the name is qualified by its folder.
-            name = f"{path.parent.name}/{path.stem}"
+            base = session_name_from_file(path.stem)
+            name = f"{path.parent.name}/{base}"
             suffix = 2
             while name in known:
-                name = f"{path.parent.name}/{path.stem} ({suffix})"
+                name = f"{path.parent.name}/{base} ({suffix})"
                 suffix += 1
         known[name] = ProjectSession(
             name=name, dlc_path=str(path),
-            metadata=parse_session_name(path.stem, pattern))
+            metadata=parse_session_name(session_name_from_file(path.stem),
+                                        pattern))
         order.append(name)
 
     return [known[name] for name in order]

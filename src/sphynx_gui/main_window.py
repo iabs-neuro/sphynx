@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QMainWindow, QTabWidget
 from sphynx_gui.acts_tab import ActsTab
 from sphynx_gui.analyze_tab import AnalyzeTab
 from sphynx_gui.batch_tab import BatchTab
+from sphynx_gui.output_tab import OutputTab
 from sphynx_gui.placeholder_tab import PlaceholderTab
 from sphynx_gui.state import AppState
 
@@ -18,7 +19,6 @@ TAB_TITLES = (
 _PLACEHOLDERS = {
     "Create Preset": ("S4d", "Draw zones, mark roles, calibrate, set the arena centre."),
     "Preprocess Tracking": ("S4e", "Per-body-part cleaning, interpolation and smoothing."),
-    "Make Output": ("S4c", "Build the wide and tidy export tables."),
 }
 
 
@@ -32,6 +32,7 @@ class MainWindow(QMainWindow):
         self.analyze_tab = AnalyzeTab(self.state)
         self.acts_tab = ActsTab(self.state)
         self.batch_tab = BatchTab(self.state)
+        self.output_tab = OutputTab(self.state)
 
         for title in TAB_TITLES:
             if title == "Analyze Session":
@@ -40,6 +41,8 @@ class MainWindow(QMainWindow):
                 self.tabs.addTab(self.acts_tab, title)
             elif title == "Batch Analysis":
                 self.tabs.addTab(self.batch_tab, title)
+            elif title == "Make Output":
+                self.tabs.addTab(self.output_tab, title)
             else:
                 slice_name, detail = _PLACEHOLDERS[title]
                 self.tabs.addTab(PlaceholderTab(title, slice_name, detail), title)

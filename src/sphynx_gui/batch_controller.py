@@ -190,6 +190,8 @@ class BatchController(QObject):
 
     def on_finished(self, batch) -> None:
         self.tab.set_busy(False)
+        # Publish it so Make Output works on the run the user just watched.
+        self.state.batch = batch
         self.tab.show_batch(batch)
         done = len(batch.results)
         failed = len(batch.errors)

@@ -26,6 +26,7 @@ class AppState(QObject):
     result_changed = Signal()
     library_changed = Signal()
     project_changed = Signal()
+    batch_changed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -36,6 +37,7 @@ class AppState(QObject):
         self._result = None
         self._library = ActLibrary()
         self._project = Project()
+        self._batch = None
         self._config = Config.default()
         self.end_frame = 0
         self.heatmap_bin_cm = 4.0
@@ -113,6 +115,15 @@ class AppState(QObject):
     def project(self, value) -> None:
         self._project = value if value is not None else Project()
         self.project_changed.emit()
+
+    @property
+    def batch(self):
+        return self._batch
+
+    @batch.setter
+    def batch(self, value) -> None:
+        self._batch = value
+        self.batch_changed.emit()
 
     def build_config(self) -> Config:
         """A fresh Config for one run; the state's own config is never handed out."""

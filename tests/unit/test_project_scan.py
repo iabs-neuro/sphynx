@@ -97,3 +97,23 @@ def test_a_moved_file_is_added_rather_than_silently_reused(tmp_path):
     stale = ProjectSession(name="NOF_H01_1D", dlc_path=str(tmp_path / "gone.csv"))
     sessions = scan_folder(tmp_path, existing=[stale])
     assert len(sessions) == 2
+
+
+def test_the_deeplabcut_scorer_suffix_is_stripped(tmp_path):
+    # DeepLabCut appends "DLC_<network>_<project>...": that describes the
+    # tracking, not the session, and leaving it in makes every export column
+    # unreadable.
+    from sphynx.project.scan import session_name_from_file
+
+    assert session_name_from_file(
+        "NOF_H01_1DDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000"
+    ) == "NOF_H01_1D"
+    assert session_name_from_file("plain_name") == "plain_name"
+
+
+def test_a_real_dlc_filename_parses_into_clean_metadata(tmp_path):
+    _make(tmp_path,
+          "NOF_H01_1DDLC_resnet152_MiceUniversal152Oct23shuffle1_1000000.csv")
+    session = scan_folder(tmp_path)[0]
+    assert session.name == "NOF_H01_1D"
+    assert session.metadata == {"exp": "NOF", "mouse": "H01", "day": "1D"}
