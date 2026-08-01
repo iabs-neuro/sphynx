@@ -8,13 +8,13 @@ one column per (act, metric[, trial]).
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
 
 from sphynx.config import Config
-from sphynx.exceptions import SphynxValueError
+from sphynx.exceptions import SphynxError, SphynxValueError
 from sphynx.logging_setup import get_logger
 from sphynx.pipeline.analyze import analyze_session
 
@@ -38,6 +38,7 @@ class BatchResult:
     results: list
     tidy: pd.DataFrame
     wide: pd.DataFrame
+    errors: dict = field(default_factory=dict)
 
 
 def _spec_get(spec, name, default=""):
@@ -86,36 +87,54 @@ def _tidy_to_wide(tidy: pd.DataFrame) -> pd.DataFrame:
     return wide
 
 
-def run_batch(specs, config: Config | None = None, out_dir: str = "", preloaded=None) -> BatchResult:
+def run_batch(specs, config: Config | None = None, out_dir: str = "", preloaded=None,
+              paradigm=None, library=None, on_progress=None,
+              continue_on_error: bool = False) -> BatchResult:
     """Run every spec through analyze_session (or use `preloaded`) and aggregate.
 
     `specs` is a list of dicts. Recognised keys: session_name (required),
-    dlc_path, preset_path, mouse, group, line, trial. `preloaded`, when given,
-    is a list of result objects parallel to specs; analyze_session is not called.
-    """
+    dlc_path, preset_path, mouse, group, line, trial. With
+    `continue_on_error` a session that fails is RECORDED in `errors` and the
+    rest of the batch proceeds -- one unreadable file should not cost a
+    twelve-session run."""
     n = len(specs)
+    errors: dict = {}
     if preloaded is not None:
         if len(preloaded) != n:
             raise SphynxValueError(
                 f"preloaded length {len(preloaded)} != specs length {n}"
             )
         results = list(preloaded)
+        kept_specs = list(specs)
     else:
         results = []
+        kept_specs = []
         base = config if config is not None else Config.default()
         for k, spec in enumerate(specs):
+            name = str(_spec_get(spec, "session_name"))
+            if on_progress is not None:
+                on_progress(k + 1, n, name)
             cfg = copy.deepcopy(base)
             cfg.paths.dlc = _spec_get(spec, "dlc_path")
             cfg.paths.preset = _spec_get(spec, "preset_path")
             if out_dir:
                 cfg.paths.out_dir = out_dir
                 cfg.io.save_workspace = True
-                cfg.io.session_name = str(_spec_get(spec, "session_name"))
+                cfg.io.session_name = name
             else:
                 cfg.io.save_workspace = False
-            _log.info("Batch %d/%d: %s", k + 1, n, _spec_get(spec, "session_name"))
-            results.append(analyze_session(cfg))
+            _log.info("Batch %d/%d: %s", k + 1, n, name)
+            try:
+                results.append(analyze_session(cfg, paradigm=paradigm,
+                                               library=library))
+            except SphynxError as e:
+                if not continue_on_error:
+                    raise
+                errors[name] = str(e)
+                _log.warning("Session %s failed: %s", name, e)
+                continue
+            kept_specs.append(spec)
 
-    tidy = _build_tidy(specs, results)
+    tidy = _build_tidy(kept_specs, results)
     wide = _tidy_to_wide(tidy)
-    return BatchResult(results=results, tidy=tidy, wide=wide)
+    return BatchResult(results=results, tidy=tidy, wide=wide, errors=errors)

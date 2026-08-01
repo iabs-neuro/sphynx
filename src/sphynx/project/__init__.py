@@ -19,6 +19,7 @@ from sphynx.project.presets import (
     resolve_preset,
     runnable_sessions,
 )
+from sphynx.project.run import project_specs, run_project
 from sphynx.project.scan import parse_session_name, scan_folder, session_is_parsed
 
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     "SCHEMA_VERSION",
     "parse_session_name", "scan_folder", "session_is_parsed",
     "PresetAssignment", "assign_presets", "resolve_preset", "runnable_sessions",
+    "project_specs", "run_project",
 ]
