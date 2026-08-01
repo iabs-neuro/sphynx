@@ -31,11 +31,19 @@ def test_object_out_is_the_ring_around_it():
     assert got.index == 1
 
 
-def test_realout_union_is_not_given_a_class():
-    # Classifying the union as "object" too would make a family count every
-    # visit twice -- once for the object and once for object-plus-ring.
+def test_realout_is_the_investigation_area():
+    # Object plus the ring around it: the zone an investigation act is scored
+    # in. It is its own class, so a family binds it alone and nothing is
+    # counted twice.
     got = classify_legacy_zone("Object1RealOut")
-    assert got.zone_class == "legacy_realout"
+    assert got.zone_class == "object_area"
+    assert got.index == 1
+
+
+def test_the_three_object_classes_are_distinct():
+    assert classify_legacy_zone("Object1Real").zone_class == "object"
+    assert classify_legacy_zone("Object1Out").zone_class == "object_ring"
+    assert classify_legacy_zone("Object1RealOut").zone_class == "object_area"
 
 
 def test_aggregates_are_not_given_a_class():
@@ -56,7 +64,7 @@ def test_snake_case_names_are_understood_too():
     # Barnes presets use object1_real where NOF presets use Object1Real.
     assert classify_legacy_zone("object1_real").zone_class == "object"
     assert classify_legacy_zone("object1_out").zone_class == "object_ring"
-    assert classify_legacy_zone("arena_realout").zone_class == "legacy_realout"
+    assert classify_legacy_zone("arena_realout").zone_class == "arena_area"
 
 
 # --- experiment-dependent meaning ------------------------------------------
@@ -81,6 +89,12 @@ def test_target_is_marked_from_the_preset_name():
 def test_target_ring_keeps_the_target_flag():
     got = classify_legacy_zone("target_out", experiment_type="Barnes")
     assert got.zone_class == "hole_ring"
+    assert got.is_target is True
+
+
+def test_target_area_keeps_the_target_flag():
+    got = classify_legacy_zone("target_realout", experiment_type="Barnes")
+    assert got.zone_class == "hole_area"
     assert got.is_target is True
 
 

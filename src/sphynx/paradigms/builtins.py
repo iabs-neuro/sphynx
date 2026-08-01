@@ -62,17 +62,15 @@ def enriched_open_field() -> Paradigm:
     Declares two object families: nose exploration and the animal being inside
     the object footprint.
 
-    Three object families:
+    Two object families:
 
-    * `nose_at_object_ring` -- exploration proper. The animal cannot put its
-      nose inside a solid object, so exploration is measured in the RING around
-      it. The ring zone is disjoint from the object footprint by construction,
-      which is what "nose in the ring EXCLUDING time inside the object" means:
-      no Exclude expression is needed once the preset carries `object_ring`.
-      A preset without ring zones simply reports that this family could not be
-      expanded.
-    * `nose_at_object` -- nose on the footprint itself, kept because a flat or
-      climbable object makes it meaningful.
+    * `nose_at_object` -- investigation, scored over the object AREA: the
+      footprint together with the ring around it (`object_area`, the legacy
+      RealOut zone). Scoring the footprint alone misses almost all of it,
+      because a mouse investigating a solid object keeps its nose beside the
+      object rather than on it. A preset without area zones reports that this
+      family could not be expanded rather than quietly measuring something
+      narrower.
     * `inside_object` -- the animal's centre within the footprint, which is
       zero for a solid object and non-zero for one it can climb onto.
 
@@ -87,13 +85,8 @@ def enriched_open_field() -> Paradigm:
         composites=[CompositeSpec("all_objects", ZoneSelector(zone_class="object"))],
         families=[
             ActFamily(
-                name="nose_at_object_ring",
-                selector=ZoneSelector(zone_class="object_ring"),
-                template=_nose_template("nose_at_object_ring"),
-            ),
-            ActFamily(
                 name="nose_at_object",
-                selector=ZoneSelector(zone_class="object"),
+                selector=ZoneSelector(zone_class="object_area"),
                 template=_nose_template("nose_at_object"),
             ),
             ActFamily(

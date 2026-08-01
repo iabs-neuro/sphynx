@@ -111,13 +111,14 @@ def classify_legacy_zone(name: str, experiment_type: str = "") -> ZoneUpgrade:
     upgrade = ZoneUpgrade(name=name)
     base, number, suffix = _parse_legacy_name(name)
 
-    if suffix in ("realout", "center"):
-        upgrade.reason = f"legacy {suffix}: a derived zone, not a class member"
-        upgrade.zone_class = f"legacy_{suffix}"
+    if suffix == "center":
+        upgrade.reason = "legacy centre point: a derived zone, not a class member"
+        upgrade.zone_class = "legacy_center"
         return upgrade
 
     is_barnes = str(experiment_type).strip().lower() == "barnes"
     ring = suffix == "out"
+    area = suffix == "realout"
 
     known = _BASES.get(base)
     if known is None:
@@ -143,7 +144,18 @@ def classify_legacy_zone(name: str, experiment_type: str = "") -> ZoneUpgrade:
         # In a Barnes maze the numbered objects ARE the holes.
         kind = "hole"
 
-    upgrade.zone_class = f"{kind}_ring" if ring else kind
+    # Three distinct classes, so a family binds exactly one of them and nothing
+    # is counted twice:
+    #   <kind>        the footprint itself       (Real)
+    #   <kind>_ring   the annulus around it      (Out)
+    #   <kind>_area   footprint + ring together  (RealOut) -- the zone an
+    #                 investigation act is scored in
+    if area:
+        upgrade.zone_class = f"{kind}_area"
+    elif ring:
+        upgrade.zone_class = f"{kind}_ring"
+    else:
+        upgrade.zone_class = kind
     upgrade.index = number
     if implies_target:
         upgrade.reason = "named the target by the preset itself"
