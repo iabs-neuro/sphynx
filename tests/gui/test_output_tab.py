@@ -169,3 +169,31 @@ def test_stored_ticks_are_restored(qtbot):
     state.batch = _batch()
     checked = tab.checked_names()
     assert checked["acts"] == ["walk"]
+
+
+# --- S4c2 review regressions ---
+
+def test_a_selection_the_run_does_not_offer_is_kept(qtbot):
+    # I1: preview pruned the stored selection to what the last run offered, and
+    # an empty selection means everything -- so a narrowed export silently
+    # widened after one unrelated run.
+    state = AppState()
+    state.project.output_selection = {"acts": ["hole_7"], "act_stats": [],
+                                      "named_metrics": []}
+    tab = OutputTab(state)
+    qtbot.addWidget(tab)
+    state.batch = _batch()          # a run that knows nothing of hole_7
+    _tick(tab.acts_list, "rest")
+    assert "hole_7" in state.project.output_selection["acts"]
+    assert "rest" in state.project.output_selection["acts"]
+
+
+def test_opening_another_project_refreshes_the_ticks(qtbot):
+    # I2: only batch_changed was connected, so stale ticks survived a project
+    # change and were then written over the new project.
+    from sphynx.project import Project
+
+    tab = _tab(qtbot)
+    _tick(tab.acts_list, "walk")
+    tab.state.project = Project()
+    assert tab.checked_names()["acts"] == []

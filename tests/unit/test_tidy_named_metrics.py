@@ -80,3 +80,23 @@ def test_named_rows_carry_the_session_metadata():
     assert row["mouse"] == "A"
     assert row["trial"] == "1D"
     assert row["act_name"] == ""
+
+
+def test_two_sessions_of_one_mouse_and_day_do_not_overwrite_each_other():
+    # S4c2 review (C1): the wide pivot wrote both into one cell and the last
+    # silently won -- which DeepLabCut's raw and _filtered exports of one video
+    # produce routinely.
+    specs = [{"session_name": "raw", "mouse": "A", "trial": "1D"},
+             {"session_name": "filtered", "mouse": "A", "trial": "1D"}]
+    out = run_batch(specs, preloaded=[_Res(), _Res()])
+    assert out.wide_row_key == "session_name"
+    assert len(out.wide) == 2
+    assert set(out.wide["session_name"]) == {"raw", "filtered"}
+
+
+def test_one_row_per_mouse_when_nothing_clashes():
+    specs = [{"session_name": "a", "mouse": "A", "trial": "1D"},
+             {"session_name": "b", "mouse": "A", "trial": "2D"}]
+    out = run_batch(specs, preloaded=[_Res(), _Res()])
+    assert out.wide_row_key == "mouse"
+    assert len(out.wide) == 1

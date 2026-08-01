@@ -24,8 +24,13 @@ class OutputSelection:
     named_metrics: list = field(default_factory=list)   # empty = all
 
 
+def _has_kinds(tidy) -> bool:
+    """A table produced before metric_kind existed carries no kinds to filter."""
+    return tidy is not None and not tidy.empty and "metric_kind" in tidy.columns
+
+
 def available_columns(tidy) -> dict:
-    if tidy is None or tidy.empty:
+    if not _has_kinds(tidy):
         return {"acts": [], "act_stats": [], "named_metrics": []}
     stats = tidy[tidy["metric_kind"] == ACT_STAT]
     named = tidy[tidy["metric_kind"] == NAMED]
@@ -37,7 +42,7 @@ def available_columns(tidy) -> dict:
 
 
 def filter_tidy(tidy, selection: OutputSelection):
-    if tidy is None or tidy.empty:
+    if not _has_kinds(tidy):
         return tidy
     is_stat = tidy["metric_kind"] == ACT_STAT
     keep_stat = is_stat.copy()
@@ -56,7 +61,7 @@ def filter_tidy(tidy, selection: OutputSelection):
 def wide_column_count(tidy, selection: OutputSelection) -> int:
     """How many value columns the wide table would carry."""
     kept = filter_tidy(tidy, selection)
-    if kept is None or kept.empty:
+    if kept is None or kept.empty or "act_name" not in kept.columns:
         return 0
     keys = kept.apply(
         lambda r: (f"{r['act_name']}_{r['metric']}" if r["act_name"]

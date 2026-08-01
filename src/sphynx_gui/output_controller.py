@@ -60,8 +60,20 @@ class OutputController(QObject):
         )
 
     def remember_selection(self) -> None:
-        """Keep the ticks in the project so they survive the next open."""
-        self.state.project.output_selection = dict(self.tab.checked_names())
+        """Keep the ticks in the project so they survive the next open.
+
+        Names the current run did not offer are kept rather than pruned: a
+        selection narrowed for a Barnes project would otherwise be emptied by
+        one Open Field run, and an empty selection means EVERYTHING -- so the
+        next export would quietly widen instead of staying narrow."""
+        ticked = self.tab.checked_names()
+        stored = dict(getattr(self.state.project, "output_selection", {}) or {})
+        merged = {}
+        for key in _KEYS:
+            offered = set(self.available.get(key, []))
+            kept = [n for n in stored.get(key, []) or [] if n not in offered]
+            merged[key] = list(ticked.get(key, [])) + kept
+        self.state.project.output_selection = merged
 
     # --- preview and export ----------------------------------------------
 

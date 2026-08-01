@@ -44,6 +44,9 @@ class BatchResult:
     # every later row onto the wrong result.
     session_names: list = field(default_factory=list)
     stopped: bool = False
+    # 'mouse' normally; 'session_name' when a mouse/day clash forced one row
+    # per session so no numbers were overwritten.
+    wide_row_key: str = "mouse"
 
 
 def _spec_get(spec, name, default=""):
@@ -93,28 +96,44 @@ def _build_tidy(specs, results) -> pd.DataFrame:
     ])
 
 
-def _tidy_to_wide(tidy: pd.DataFrame) -> pd.DataFrame:
-    if tidy.empty:
-        return pd.DataFrame()
+def _wide_keys(tidy):
     keys = tidy.apply(
         lambda r: (f"{r['act_name']}_{r['metric']}" if r["act_name"]
                    else str(r["metric"])), axis=1)
     if (tidy["trial"] != "").any():
         keys = keys + "_" + tidy["trial"]
-    t = tidy.assign(col_key=keys)
-    # Without a mouse the sessions would all share one key and overwrite each
-    # other, so fall back to the session name.
+    return keys
+
+
+def _tidy_to_wide(tidy: pd.DataFrame) -> pd.DataFrame:
+    """One row per animal, one column per (act, statistic, day).
+
+    When two sessions would land in the same cell -- the same mouse on the same
+    day, a pattern with no day group, DeepLabCut's raw and _filtered exports of
+    one video -- this layout cannot hold both, and writing them in order would
+    silently keep whichever came last. The rows then fall back to one per
+    session, which always fits, and `wide_row_key` records that it happened."""
+    if tidy.empty:
+        return pd.DataFrame()
+
+    t = tidy.assign(col_key=_wide_keys(tidy))
+    # Without a mouse every session shares one key, so fall back to its name.
     t = t.assign(row_key=t["mouse"].where(t["mouse"] != "", t["session_name"]))
-    mice = list(dict.fromkeys(t["row_key"]))
+
+    collides = t.duplicated(subset=["row_key", "col_key"], keep=False)
+    if collides.any():
+        t = t.assign(row_key=t["session_name"])
+
+    rows = list(dict.fromkeys(t["row_key"]))
     cols = list(dict.fromkeys(t["col_key"]))
-    data = {c: [np.nan] * len(mice) for c in cols}
-    mouse_idx = {m: i for i, m in enumerate(mice)}
+    data = {c: [np.nan] * len(rows) for c in cols}
+    row_idx = {name: i for i, name in enumerate(rows)}
     for r in t.itertuples():
-        data[r.col_key][mouse_idx[r.row_key]] = r.value
-    # Built in one go: adding a column at a time fragments the frame, which
-    # pandas warns about once per column on a real batch.
+        data[r.col_key][row_idx[r.row_key]] = r.value
+
+    label = "session_name" if collides.any() else "mouse"
     return pd.concat(
-        [pd.DataFrame({"mouse": mice}), pd.DataFrame(data, columns=list(cols))],
+        [pd.DataFrame({label: rows}), pd.DataFrame(data, columns=list(cols))],
         axis=1)
 
 
@@ -184,5 +203,7 @@ def run_batch(specs, config: Config | None = None, out_dir: str = "", preloaded=
 
     tidy = _build_tidy(kept_specs, results)
     wide = _tidy_to_wide(tidy)
+    row_key = "session_name" if (not wide.empty and "session_name" in wide.columns) else "mouse"
     return BatchResult(results=results, tidy=tidy, wide=wide, errors=errors,
-                       session_names=names, stopped=stopped)
+                       session_names=names, stopped=stopped,
+                       wide_row_key=row_key)

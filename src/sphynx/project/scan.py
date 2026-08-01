@@ -18,7 +18,13 @@ from sphynx.project.model import DEFAULT_PATTERN, ProjectSession
 # (sometimes with _filtered or _el appended). Everything from the DLC marker on
 # describes the TRACKING, not the session, so the session name is the part
 # before it. This reads DeepLabCut's own convention rather than guessing.
-_SCORER = re.compile(r"DLC_(resnet|mobnet|dlcrnet|efficientnet)", re.IGNORECASE)
+_SCORER = re.compile(
+    r"(DLC|DeepCut)_(resnet|mobnet|dlcrnet|efficientnet|effnet|hrnet)",
+    re.IGNORECASE)
+# If a network we do not know about slips through, the greedy day group would
+# swallow the whole scorer string and quietly produce one export column per
+# session. Spotting the leftover marker is what keeps that visible.
+_SCORER_LEFTOVER = re.compile(r"(DLC|DeepCut)_", re.IGNORECASE)
 
 
 def session_name_from_file(stem: str) -> str:
@@ -33,8 +39,14 @@ def parse_session_name(name, pattern) -> dict:
         match = re.match(pattern, str(name))
     except re.error as e:
         raise SphynxIOError(f"invalid session-name pattern: {e}") from e
-    return {k: v for k, v in (match.groupdict().items() if match else [])
-            if v is not None}
+    parsed = {k: v for k, v in (match.groupdict().items() if match else [])
+              if v is not None}
+    if any(_SCORER_LEFTOVER.search(str(v)) for v in parsed.values()):
+        # A tracking suffix ended up inside a metadata field, so the name was
+        # not really understood. Marking it unparsed beats exporting columns
+        # named after a network.
+        return {}
+    return parsed
 
 
 def session_is_parsed(session) -> bool:

@@ -97,3 +97,13 @@ def test_excel_without_a_writer_says_which_package(tmp_path, monkeypatch):
         export_tables(_tidy(), pd.DataFrame(), tmp_path / "out.xlsx",
                       fmt="excel")
     assert "openpyxl" in str(exc.value)
+
+
+def test_a_tidy_without_metric_kind_does_not_raise():
+    # S4c2 review (I4): a table produced before metric_kind existed reached the
+    # tab and raised a bare KeyError that the Qt slot swallowed.
+    old = pd.DataFrame({"session_name": ["a"], "value": [1.0]})
+    assert available_columns(old) == {"acts": [], "act_stats": [],
+                                      "named_metrics": []}
+    assert filter_tidy(old, OutputSelection()) is old
+    assert wide_column_count(old, OutputSelection()) == 0

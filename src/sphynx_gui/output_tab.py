@@ -83,6 +83,9 @@ class OutputTab(QWidget):
         self.export_excel_button.clicked.connect(
             lambda: self._pick_export("excel"))
         self.state.batch_changed.connect(self.controller.refresh)
+        # Opening another project must not leave the previous project's
+        # ticks on screen, ready to be written over the new one.
+        self.state.project_changed.connect(self.controller.refresh)
 
     # --- controller callbacks --------------------------------------------
     def show_available(self, available, stored) -> None:
