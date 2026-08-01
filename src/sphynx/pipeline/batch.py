@@ -52,31 +52,53 @@ def _spec_get(spec, name, default=""):
 
 
 def _build_tidy(specs, results) -> pd.DataFrame:
+    """One row per measurement.
+
+    Two sources: the per-act statistics, and the paradigm's NAMED metrics --
+    which reached no export at all before, so every Barnes metric was
+    unexportable. A metric that could not be computed still gets a row, with
+    NaN and the reason, because a blank cell cannot be told apart from a
+    measured zero."""
     rows = []
     for spec, result in zip(specs, results):
+        common = {
+            "session_name": str(_spec_get(spec, "session_name")),
+            "mouse": str(_spec_get(spec, "mouse")),
+            "group": str(_spec_get(spec, "group")),
+            "line": str(_spec_get(spec, "line")),
+            "trial": str(_spec_get(spec, "trial")),
+        }
         for act in result.acts:
             for label, attr in _METRIC_ATTR.items():
                 value = getattr(act.stats, attr, None) if act.stats is not None else None
-                rows.append({
-                    "session_name": str(_spec_get(spec, "session_name")),
-                    "mouse": str(_spec_get(spec, "mouse")),
-                    "group": str(_spec_get(spec, "group")),
-                    "line": str(_spec_get(spec, "line")),
-                    "trial": str(_spec_get(spec, "trial")),
-                    "act_name": str(act.name),
-                    "metric": label,
-                    "value": np.nan if value is None else value,
-                })
+                rows.append({**common, "metric_kind": "act_stat",
+                             "act_name": str(act.name), "metric": label,
+                             "value": np.nan if value is None else value,
+                             "error": ""})
+
+        metrics = getattr(result, "metrics", None)
+        if metrics is None:
+            continue
+        for name, value in getattr(metrics, "values", {}).items():
+            rows.append({**common, "metric_kind": "named", "act_name": "",
+                         "metric": str(name), "value": value, "error": ""})
+        for name, message in getattr(metrics, "errors", {}).items():
+            rows.append({**common, "metric_kind": "named", "act_name": "",
+                         "metric": str(name), "value": np.nan,
+                         "error": str(message)})
+
     return pd.DataFrame(rows, columns=[
         "session_name", "mouse", "group", "line", "trial",
-        "act_name", "metric", "value",
+        "metric_kind", "act_name", "metric", "value", "error",
     ])
 
 
 def _tidy_to_wide(tidy: pd.DataFrame) -> pd.DataFrame:
     if tidy.empty:
         return pd.DataFrame()
-    keys = tidy["act_name"] + "_" + tidy["metric"]
+    keys = tidy.apply(
+        lambda r: (f"{r['act_name']}_{r['metric']}" if r["act_name"]
+                   else str(r["metric"])), axis=1)
     if (tidy["trial"] != "").any():
         keys = keys + "_" + tidy["trial"]
     t = tidy.assign(col_key=keys)
