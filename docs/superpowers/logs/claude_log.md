@@ -4808,3 +4808,6 @@ Act library as JSON on shared jsonio helpers (paradigms/io refactored onto them,
 
 ## 2026-08-01 -- S4c done (Project + Batch)
 Project package (model, JSON io, folder scan, preset rules, runner), resilient run_batch (progress, per-session errors, stop hook), sessions table with preset provenance, Batch tab, live in the window. Opus review 4C/6I -- all fixed; the worst were Cancel not cancelling, the results table shifting rows onto the wrong session, the scan silently dropping same-named files in different folders, and the batch ignoring the project's act library so it computed a different act set from Analyze. Suite 757.
+
+## 2026-08-01 -- S4c2 done (Make Output)
+Named paradigm metrics now reach the export (they reached nothing before, so every Barnes metric was unexportable): the tidy table gained metric_kind and error columns and a second row source. Output selection is three independent checkbox lists filled from the run, stored on the project; export writes CSV or Excel. The first real export exposed that DeepLabCut's scorer suffix was being swallowed by the day group, making every wide column unreadable -- fixed by cutting at the scorer marker. Opus review 1C/4I -- all fixed; the Critical was the wide pivot silently overwriting a cell when two sessions share mouse and day, which DLC's raw/_filtered pair produces routinely. Suite 806.
