@@ -62,25 +62,35 @@ def enriched_open_field() -> Paradigm:
     Declares two object families: nose exploration and the animal being inside
     the object footprint.
 
-    Two EOF items from the design are deliberately NOT declared here, rather
-    than declared wrongly:
+    Three object families:
 
-    * ring exploration ("nose in the ring EXCLUDING time inside the object")
-      needs ring zones, which the preset builder derives from each object
-      (MATLAB buildObjectZones.m). Once a preset carries `object_ring` zones a
-      family over that class plus an Exclude expression expresses it -- but a
-      family template may not be a complex act (see acts.families), so this
-      waits for the composite-act binding pass.
-    * a discrimination index is `ratio_index` over the TWO object acts the
-      experimenter chose as novel and familiar. Which two is a per-session
-      decision, so a paradigm cannot fix it; the GUI supplies the pair. Adding
-      MetricRef("ratio_index", {...}) with guessed act names here would be a
-      plausible wrong answer.
+    * `nose_at_object_ring` -- exploration proper. The animal cannot put its
+      nose inside a solid object, so exploration is measured in the RING around
+      it. The ring zone is disjoint from the object footprint by construction,
+      which is what "nose in the ring EXCLUDING time inside the object" means:
+      no Exclude expression is needed once the preset carries `object_ring`.
+      A preset without ring zones simply reports that this family could not be
+      expanded.
+    * `nose_at_object` -- nose on the footprint itself, kept because a flat or
+      climbable object makes it meaningful.
+    * `inside_object` -- the animal's centre within the footprint, which is
+      zero for a solid object and non-zero for one it can climb onto.
+
+    One EOF item from the design is deliberately NOT declared: a discrimination
+    index is `ratio_index` over the TWO object acts the experimenter chose as
+    novel and familiar. Which two is a per-session decision, so a paradigm
+    cannot fix it; the GUI supplies the pair. Adding MetricRef("ratio_index",
+    {...}) with guessed act names here would be a plausible wrong answer.
     """
     return Paradigm(
         name="EOF", parent="OF",
         composites=[CompositeSpec("all_objects", ZoneSelector(zone_class="object"))],
         families=[
+            ActFamily(
+                name="nose_at_object_ring",
+                selector=ZoneSelector(zone_class="object_ring"),
+                template=_nose_template("nose_at_object_ring"),
+            ),
             ActFamily(
                 name="nose_at_object",
                 selector=ZoneSelector(zone_class="object"),

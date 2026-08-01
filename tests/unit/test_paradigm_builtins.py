@@ -61,14 +61,14 @@ def test_of_has_speed_defaults_and_calibration_rule():
 def test_eof_inherits_of_defaults():
     eof = resolve_paradigm("EOF")
     assert eof.config_defaults["velocity_rest"] == 1.0
-    assert [f.name for f in eof.families] == ["nose_at_object", "inside_object"]
+    assert [f.name for f in eof.families] == ["nose_at_object_ring", "nose_at_object", "inside_object"]
     assert {r.code for r in eof.validation} == {"needs_calibration", "needs_object"}
 
 
 def test_nor_narrows_the_eof_object_rule():
     nor = resolve_paradigm("NOR")
     # inherits the EOF families...
-    assert [f.name for f in nor.families] == ["nose_at_object", "inside_object"]
+    assert [f.name for f in nor.families] == ["nose_at_object_ring", "nose_at_object", "inside_object"]
     # ...and overrides the same-coded rule with an exact count
     rule = next(r for r in nor.validation if r.code == "needs_object")
     assert (rule.min, rule.max) == (2, 2)
@@ -184,7 +184,7 @@ def test_eof_documents_what_it_deliberately_omits():
     # per-session decisions; they must be documented, not silently missing.
     doc = enriched_open_field.__doc__.lower()
     assert "ring" in doc
-    assert "ratio_index" in doc
+    assert "ratio_index" in doc          # the pair is a per-session choice
 
 
 # --- M7: the Barnes paradigm declares its metric set ---
