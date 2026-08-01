@@ -4805,3 +4805,6 @@ Wrote sphynx.io.preset_upgrade: reads the legacy zone naming convention (verifie
 
 ## 2026-08-01 -- S4b done (Define Acts + etogram)
 Act library as JSON on shared jsonio helpers (paradigms/io refactored onto them, behaviour-identical); etogram plot; library merged over the paradigm in the bridge with overrides reported; etogram as the fifth panel in the plot grid; act editor (no fallback control by design); Define Acts tab with a three-source list and preview; the tab is live and the library feeds the analysis. Opus review 2C/6I -- all fixed; the worst were a library act named like a BUILT-IN act producing two acts of one name, and the editor silently swapping a body part the session did not offer. Suite 679.
+
+## 2026-08-01 -- S4c done (Project + Batch)
+Project package (model, JSON io, folder scan, preset rules, runner), resilient run_batch (progress, per-session errors, stop hook), sessions table with preset provenance, Batch tab, live in the window. Opus review 4C/6I -- all fixed; the worst were Cancel not cancelling, the results table shifting rows onto the wrong session, the scan silently dropping same-named files in different folders, and the batch ignoring the project's act library so it computed a different act set from Analyze. Suite 757.
