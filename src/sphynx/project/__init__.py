@@ -13,9 +13,11 @@ from sphynx.project.model import (
     Project,
     ProjectSession,
 )
+from sphynx.project.scan import parse_session_name, scan_folder, session_is_parsed
 
 __all__ = [
     "Project", "ProjectSession", "PresetRule", "DEFAULT_PATTERN",
     "project_to_dict", "project_from_dict", "save_project", "load_project",
     "SCHEMA_VERSION",
+    "parse_session_name", "scan_folder", "session_is_parsed",
 ]
