@@ -40,3 +40,6 @@ class Project:
     library_path: str = ""
     out_dir: str = ""
     name_pattern: str = DEFAULT_PATTERN
+    # Which acts, act statistics and named metrics the export keeps; empty
+    # lists (or an absent key) mean everything.
+    output_selection: dict = field(default_factory=dict)

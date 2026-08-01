@@ -80,3 +80,17 @@ def test_empty_project_round_trips():
     assert back.sessions == []
     assert back.preset_rules == []
     assert back.paradigm == "OF"
+
+
+def test_output_selection_round_trips():
+    project = Project(output_selection={"acts": ["rest"],
+                                        "act_stats": ["ActPercent"],
+                                        "named_metrics": ["path_length"]})
+    back = project_from_dict(project_to_dict(project))
+    assert back.output_selection["acts"] == ["rest"]
+    assert back.output_selection["named_metrics"] == ["path_length"]
+
+
+def test_output_selection_defaults_to_empty():
+    assert Project().output_selection == {}
+    assert project_from_dict(project_to_dict(Project())).output_selection == {}

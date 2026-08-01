@@ -11,7 +11,7 @@ from sphynx.project.model import DEFAULT_PATTERN, PresetRule, Project, ProjectSe
 SCHEMA_VERSION = 1
 
 _TOP_LEVEL = {"schema_version", "name", "sessions", "preset_rules", "paradigm",
-              "library_path", "out_dir", "name_pattern"}
+              "library_path", "out_dir", "name_pattern", "output_selection"}
 
 
 def project_to_dict(project: Project) -> dict:
@@ -24,6 +24,7 @@ def project_to_dict(project: Project) -> dict:
         "library_path": project.library_path,
         "out_dir": project.out_dir,
         "name_pattern": project.name_pattern,
+        "output_selection": dict(project.output_selection),
     }
 
 
@@ -45,6 +46,7 @@ def project_from_dict(data: dict) -> Project:
         library_path=data.get("library_path", ""),
         out_dir=data.get("out_dir", ""),
         name_pattern=data.get("name_pattern", DEFAULT_PATTERN),
+        output_selection=dict(data.get("output_selection", {})),
     )
 
 
