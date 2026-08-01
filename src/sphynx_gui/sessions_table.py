@@ -8,6 +8,8 @@ cannot see would be the silent substitution the engine refuses everywhere else.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QAbstractItemView, QTableWidget, QTableWidgetItem
 
@@ -15,7 +17,7 @@ from sphynx.project.presets import resolve_preset
 from sphynx.project.scan import session_is_parsed
 
 COLUMNS = ("Session", "Mouse", "Group", "Line", "Day", "Preset", "From", "Status")
-_EDITABLE = {"Mouse": "mouse", "Group": "group", "Line": "line", "Day": "session"}
+_EDITABLE = {"Mouse": "mouse", "Group": "group", "Line": "line", "Day": "day"}
 
 
 class SessionsTable(QTableWidget):
@@ -47,7 +49,7 @@ class SessionsTable(QTableWidget):
                 metadata.get("mouse", ""),
                 metadata.get("group", ""),
                 metadata.get("line", ""),
-                metadata.get("session", metadata.get("day", "")),
+                metadata.get("day", ""),
                 assignment.preset_path,
                 assignment.source,
                 status,
@@ -62,6 +64,10 @@ class SessionsTable(QTableWidget):
     def _status(session, assignment) -> str:
         if not session.dlc_path:
             return "no DLC file"
+        if not Path(session.dlc_path).is_file():
+            # A stored path goes stale when files move; saying "ready" for a
+            # file that is not there would only fail at run time.
+            return "DLC file missing"
         if not assignment.preset_path:
             return "no preset assigned"
         if not session_is_parsed(session):

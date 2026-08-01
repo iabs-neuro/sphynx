@@ -13,7 +13,7 @@ def _make(root, *names):
 
 def test_parses_the_default_pattern():
     got = parse_session_name("NOF_H01_1D", DEFAULT_PATTERN)
-    assert got == {"exp": "NOF", "mouse": "H01", "session": "1D"}
+    assert got == {"exp": "NOF", "mouse": "H01", "day": "1D"}
 
 
 def test_unparsed_name_returns_empty():
@@ -38,7 +38,7 @@ def test_metadata_comes_from_the_name(tmp_path):
     _make(tmp_path, "NOF_H01_1D.csv")
     session = scan_folder(tmp_path)[0]
     assert session.metadata["mouse"] == "H01"
-    assert session.metadata["session"] == "1D"
+    assert session.metadata["day"] == "1D"
     assert session_is_parsed(session) is True
 
 
@@ -51,7 +51,8 @@ def test_unparsed_name_is_marked_not_guessed(tmp_path):
 
 def test_rescan_keeps_edited_sessions(tmp_path):
     _make(tmp_path, "NOF_H01_1D.csv")
-    edited = ProjectSession(name="NOF_H01_1D", dlc_path="old.csv",
+    edited = ProjectSession(name="NOF_H01_1D",
+                            dlc_path=str(tmp_path / "NOF_H01_1D.csv"),
                             preset_path="chosen.mat",
                             metadata={"mouse": "H01", "group": "control"})
     sessions = scan_folder(tmp_path, existing=[edited])
@@ -62,7 +63,8 @@ def test_rescan_keeps_edited_sessions(tmp_path):
 
 def test_rescan_adds_new_files(tmp_path):
     _make(tmp_path, "NOF_H01_1D.csv", "NOF_H01_2D.csv")
-    existing = [ProjectSession(name="NOF_H01_1D", dlc_path="old.csv")]
+    existing = [ProjectSession(name="NOF_H01_1D",
+                               dlc_path=str(tmp_path / "NOF_H01_1D.csv"))]
     sessions = scan_folder(tmp_path, existing=existing)
     assert [s.name for s in sessions] == ["NOF_H01_1D", "NOF_H01_2D"]
 
@@ -76,3 +78,22 @@ def test_bad_pattern_raises(tmp_path):
     _make(tmp_path, "NOF_H01_1D.csv")
     with pytest.raises(SphynxIOError):
         scan_folder(tmp_path, pattern="([unclosed")
+
+
+def test_same_name_in_two_folders_keeps_both(tmp_path):
+    # Both files are real sessions; dropping the second silently would lose one.
+    for day in ("day1", "day2"):
+        folder = tmp_path / day
+        folder.mkdir()
+        _make(folder, "NOF_H01_1D.csv")
+    sessions = scan_folder(tmp_path)
+    assert len(sessions) == 2
+    assert sorted(s.name for s in sessions) == ["NOF_H01_1D", "day2/NOF_H01_1D"]
+    assert len({s.dlc_path for s in sessions}) == 2
+
+
+def test_a_moved_file_is_added_rather_than_silently_reused(tmp_path):
+    _make(tmp_path, "NOF_H01_1D.csv")
+    stale = ProjectSession(name="NOF_H01_1D", dlc_path=str(tmp_path / "gone.csv"))
+    sessions = scan_folder(tmp_path, existing=[stale])
+    assert len(sessions) == 2

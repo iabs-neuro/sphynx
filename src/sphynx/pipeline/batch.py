@@ -39,6 +39,11 @@ class BatchResult:
     tidy: pd.DataFrame
     wide: pd.DataFrame
     errors: dict = field(default_factory=dict)
+    # Session name per entry of `results`, same order. Deriving the names from
+    # the tidy table instead loses any session that produced no acts and shifts
+    # every later row onto the wrong result.
+    session_names: list = field(default_factory=list)
+    stopped: bool = False
 
 
 def _spec_get(spec, name, default=""):
@@ -75,12 +80,15 @@ def _tidy_to_wide(tidy: pd.DataFrame) -> pd.DataFrame:
     if (tidy["trial"] != "").any():
         keys = keys + "_" + tidy["trial"]
     t = tidy.assign(col_key=keys)
-    mice = list(dict.fromkeys(t["mouse"]))
+    # Without a mouse the sessions would all share one key and overwrite each
+    # other, so fall back to the session name.
+    t = t.assign(row_key=t["mouse"].where(t["mouse"] != "", t["session_name"]))
+    mice = list(dict.fromkeys(t["row_key"]))
     cols = list(dict.fromkeys(t["col_key"]))
     data = {c: [np.nan] * len(mice) for c in cols}
     mouse_idx = {m: i for i, m in enumerate(mice)}
     for r in t.itertuples():
-        data[r.col_key][mouse_idx[r.mouse]] = r.value
+        data[r.col_key][mouse_idx[r.row_key]] = r.value
     # Built in one go: adding a column at a time fragments the frame, which
     # pandas warns about once per column on a real batch.
     return pd.concat(
@@ -90,7 +98,7 @@ def _tidy_to_wide(tidy: pd.DataFrame) -> pd.DataFrame:
 
 def run_batch(specs, config: Config | None = None, out_dir: str = "", preloaded=None,
               paradigm=None, library=None, on_progress=None,
-              continue_on_error: bool = False) -> BatchResult:
+              continue_on_error: bool = False, should_stop=None) -> BatchResult:
     """Run every spec through analyze_session (or use `preloaded`) and aggregate.
 
     `specs` is a list of dicts. Recognised keys: session_name (required),
@@ -107,11 +115,20 @@ def run_batch(specs, config: Config | None = None, out_dir: str = "", preloaded=
             )
         results = list(preloaded)
         kept_specs = list(specs)
+        names = [str(_spec_get(s, "session_name")) for s in specs]
+        stopped = False
     else:
         results = []
         kept_specs = []
+        names = []
+        stopped = False
         base = config if config is not None else Config.default()
         for k, spec in enumerate(specs):
+            # Checked before every session, so Cancel stops the run rather than
+            # only the queue that was built before it started.
+            if should_stop is not None and should_stop():
+                stopped = True
+                break
             name = str(_spec_get(spec, "session_name"))
             if on_progress is not None:
                 on_progress(k + 1, n, name)
@@ -134,8 +151,16 @@ def run_batch(specs, config: Config | None = None, out_dir: str = "", preloaded=
                 errors[name] = str(e)
                 _log.warning("Session %s failed: %s", name, e)
                 continue
+            except Exception as e:      # noqa: BLE001 - a bug in one session
+                if not continue_on_error:
+                    raise
+                errors[name] = f"unexpected {type(e).__name__}: {e}"
+                _log.error("Session %s raised %s: %s", name, type(e).__name__, e)
+                continue
             kept_specs.append(spec)
+            names.append(name)
 
     tidy = _build_tidy(kept_specs, results)
     wide = _tidy_to_wide(tidy)
-    return BatchResult(results=results, tidy=tidy, wide=wide, errors=errors)
+    return BatchResult(results=results, tidy=tidy, wide=wide, errors=errors,
+                       session_names=names, stopped=stopped)

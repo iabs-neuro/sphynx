@@ -70,6 +70,9 @@ class BatchController(QObject):
             f"{len(ready)} session(s) ready, {len(blocked)} blocked.")
 
     def scan(self, folder) -> None:
+        # Typed cells are written back first: rebuilding the table
+        # would otherwise discard what the user was entering.
+        self.tab.table.apply_edits(self.state.project)
         project = self.state.project
         try:
             sessions = scan_folder(folder, pattern=project.name_pattern,
@@ -82,6 +85,9 @@ class BatchController(QObject):
         self.refresh()
 
     def assign_preset_to_selected(self, path) -> None:
+        # Typed cells are written back first: rebuilding the table
+        # would otherwise discard what the user was entering.
+        self.tab.table.apply_edits(self.state.project)
         names = set(self.tab.table.selected_names())
         if not names:
             self.tab.set_status(
@@ -95,6 +101,9 @@ class BatchController(QObject):
         self.refresh()
 
     def add_preset_rule(self, path, match) -> None:
+        # Typed cells are written back first: rebuilding the table
+        # would otherwise discard what the user was entering.
+        self.tab.table.apply_edits(self.state.project)
         from sphynx.project import PresetRule
 
         project = self.state.project
@@ -130,6 +139,9 @@ class BatchController(QObject):
             self.tab.set_status("A batch is already running.")
             return
         self.tab.table.apply_edits(self.state.project)
+        # The batch runs the paradigm the app is showing, not whichever one the
+        # project file happened to be saved with.
+        self.state.project.paradigm = self.state.paradigm
         ready, blocked = runnable_sessions(self.state.project)
         if not ready:
             reasons = "; ".join(f"{s.name}: {why}" for s, why in blocked[:3])
@@ -187,5 +199,6 @@ class BatchController(QObject):
 
     def on_failed(self, message: str) -> None:
         self.tab.set_busy(False)
-        self.tab.clear_results()
+        # Whatever finished before the failure stays on screen: throwing away a
+        # long run because its tail broke loses real work.
         self.tab.set_status(f"Batch failed: {message}")

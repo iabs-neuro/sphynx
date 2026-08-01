@@ -41,13 +41,23 @@ def scan_folder(root, pattern: str = DEFAULT_PATTERN, existing=None) -> list:
     known = {s.name: s for s in (existing or [])}
     order = [s.name for s in (existing or [])]
 
+    seen_paths = {s.dlc_path for s in (existing or []) if s.dlc_path}
     for path in sorted(folder.rglob("*.csv")):
+        if str(path) in seen_paths:
+            continue          # already in the project, possibly hand-edited
         name = path.stem
         if name in known:
-            continue          # already in the project, possibly hand-edited
+            # Two folders can hold a file of the same name. Dropping the second
+            # would lose a session without saying so, and overwriting the first
+            # would lose its edits, so the name is qualified by its folder.
+            name = f"{path.parent.name}/{path.stem}"
+            suffix = 2
+            while name in known:
+                name = f"{path.parent.name}/{path.stem} ({suffix})"
+                suffix += 1
         known[name] = ProjectSession(
             name=name, dlc_path=str(path),
-            metadata=parse_session_name(name, pattern))
+            metadata=parse_session_name(path.stem, pattern))
         order.append(name)
 
     return [known[name] for name in order]

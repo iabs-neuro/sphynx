@@ -144,7 +144,8 @@ def test_run_with_nothing_ready_reports_the_reason(qtbot, tmp_path):
 def test_finished_batch_fills_the_results_table(qtbot):
     tab = _tab(qtbot)
     tidy = pd.DataFrame({"session_name": ["a", "a"], "value": [1.0, 2.0]})
-    batch = BatchResult(results=[_Res()], tidy=tidy, wide=pd.DataFrame())
+    batch = BatchResult(results=[_Res()], tidy=tidy, wide=pd.DataFrame(),
+                        session_names=["a"])
     tab.controller.on_finished(batch)
     assert tab.results_table.rowCount() == 1
     assert tab.results_table.item(0, 0).text() == "a"
@@ -220,3 +221,57 @@ def test_worker_reports_a_bug_instead_of_dying(qtbot, monkeypatch):
     with qtbot.waitSignal(worker.failed, timeout=2000) as blocker:
         worker.run()
     assert "ZeroDivisionError" in blocker.args[0]
+
+
+# --- S4c review regressions ---
+
+def test_a_session_with_no_acts_still_gets_its_own_row(qtbot):
+    # C2: names were derived from the tidy table, so a session contributing no
+    # tidy rows vanished and every later row showed the previous result.
+    class _Empty:
+        acts = []
+        validation = None
+        degraded = {}
+        metrics = None
+
+    tab = _tab(qtbot)
+    batch = BatchResult(results=[_Empty(), _Res()], tidy=pd.DataFrame(),
+                        wide=pd.DataFrame(), session_names=["quiet", "loud"])
+    tab.controller.on_finished(batch)
+    assert [tab.results_table.item(r, 0).text() for r in range(2)] ==         ["quiet", "loud"]
+    assert tab.results_table.item(0, 2).text() == "0"
+    assert tab.results_table.item(1, 2).text() == "1"
+
+
+def test_a_failure_keeps_the_sessions_that_finished(qtbot):
+    # I4: on_failed used to clear the table, discarding completed work.
+    tab = _tab(qtbot)
+    tidy = pd.DataFrame({"session_name": ["a"], "value": [1.0]})
+    tab.controller.on_finished(BatchResult(results=[_Res()], tidy=tidy,
+                                           wide=pd.DataFrame(),
+                                           session_names=["a"]))
+    tab.controller.on_failed("something broke")
+    assert tab.results_table.rowCount() == 1
+    assert "something broke" in tab.status_label.text()
+
+
+def test_the_batch_runs_the_paradigm_shown_in_the_app(qtbot, tmp_path):
+    # I5: the batch used the project's saved paradigm while Analyze used the
+    # dropdown, so the two silently diverged.
+    real = tmp_path / "NOF_H01_1D.csv"
+    real.write_text("x", encoding="utf-8")
+    project = Project(
+        sessions=[ProjectSession(name="NOF_H01_1D", dlc_path=str(real),
+                                 metadata={"mouse": "H01"})],
+        preset_rules=[PresetRule("all.mat")], paradigm="OF")
+    tab = _tab(qtbot, project)
+    tab.state.paradigm = "Barnes"
+
+    class _Thread:
+        def isRunning(self):
+            return False
+
+    tab.controller._thread = _Thread()
+    tab.controller.run()
+    assert tab.state.project.paradigm == "Barnes"
+    tab.controller.shutdown()

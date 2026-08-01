@@ -115,12 +115,18 @@ class BatchTab(QWidget):
         """One row per session, whether it produced a result or an error."""
         self._results = list(getattr(batch, "results", []) or [])
         errors = dict(getattr(batch, "errors", {}) or {})
-        names = [str(r) for r in batch.tidy["session_name"].unique()] \
-            if not batch.tidy.empty else []
+        # Names recorded alongside the results, not derived from the tidy
+        # table: a session that produced no acts contributes no tidy rows and
+        # would drop out, shifting every later row onto the wrong result.
+        names = list(getattr(batch, "session_names", []) or [])
+        if len(names) != len(self._results):
+            names = names[:len(self._results)]
+            names += [f"session {i + 1}"
+                      for i in range(len(names), len(self._results))]
 
         rows = []
         for index, name in enumerate(names):
-            result = self._results[index] if index < len(self._results) else None
+            result = self._results[index]
             warnings = 0
             if result is not None:
                 report = getattr(result, "validation", None)

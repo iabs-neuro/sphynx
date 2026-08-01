@@ -83,7 +83,7 @@ def test_project_specs_carry_metadata():
     project = Project(
         sessions=[ProjectSession(name="a", dlc_path="a.csv",
                                  metadata={"mouse": "A", "group": "ctrl",
-                                           "session": "1D"})],
+                                           "day": "1D"})],
         preset_rules=[PresetRule("all.mat")])
     spec = project_specs(project)[0][0]
     assert spec["mouse"] == "A"

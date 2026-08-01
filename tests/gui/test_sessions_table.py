@@ -9,9 +9,9 @@ def _project(**kw):
     if sessions is None:
         sessions = [
             ProjectSession(name="NOF_H01_1D", dlc_path="a.csv",
-                           metadata={"mouse": "H01", "session": "1D"}),
+                           metadata={"mouse": "H01", "day": "1D"}),
             ProjectSession(name="NOF_H01_3D", dlc_path="b.csv",
-                           metadata={"mouse": "H01", "session": "3D"}),
+                           metadata={"mouse": "H01", "day": "3D"}),
         ]
     return Project(sessions=sessions, **kw)
 
@@ -39,10 +39,10 @@ def test_a_general_rule_covers_every_session(qtbot):
 
 def test_a_specific_rule_refines_the_general_one(qtbot):
     project = _project(preset_rules=[PresetRule("all.mat"),
-                                     PresetRule("day3.mat", {"session": "3D"})])
+                                     PresetRule("day3.mat", {"day": "3D"})])
     table = _table(qtbot, project)
     assert [r["preset"] for r in table.rows] == ["all.mat", "day3.mat"]
-    assert table.rows[1]["source"] == "rule: session=3D"
+    assert table.rows[1]["source"] == "rule: day=3D"
 
 
 def test_the_from_column_shows_the_source(qtbot):
@@ -60,8 +60,12 @@ def test_a_manual_path_is_marked_manual(qtbot):
     assert table.rows[0]["source"] == "manual"
 
 
-def test_a_session_without_a_preset_is_not_ready(qtbot):
-    table = _table(qtbot, _project())
+def test_a_session_without_a_preset_is_not_ready(qtbot, tmp_path):
+    real = tmp_path / "NOF_H01_1D.csv"
+    real.write_text("x", encoding="utf-8")
+    sessions = [ProjectSession(name="NOF_H01_1D", dlc_path=str(real),
+                               metadata={"mouse": "H01", "day": "1D"})]
+    table = _table(qtbot, _project(sessions=sessions))
     assert table.rows[0]["source"] == "unassigned"
     assert table.rows[0]["status"] == "no preset assigned"
 
@@ -73,16 +77,33 @@ def test_a_session_without_a_dlc_file_is_not_ready(qtbot):
     assert table.rows[0]["status"] == "no DLC file"
 
 
-def test_an_unparsed_name_is_flagged(qtbot):
-    sessions = [ProjectSession(name="whatever", dlc_path="a.csv")]
+def test_an_unparsed_name_is_flagged(qtbot, tmp_path):
+    real = tmp_path / "whatever.csv"
+    real.write_text("x", encoding="utf-8")
+    sessions = [ProjectSession(name="whatever", dlc_path=str(real))]
     table = _table(qtbot, _project(sessions=sessions,
                                    preset_rules=[PresetRule("all.mat")]))
     assert table.rows[0]["status"] == "name not parsed"
 
 
-def test_ready_when_everything_is_present(qtbot):
-    table = _table(qtbot, _project(preset_rules=[PresetRule("all.mat")]))
-    assert [r["status"] for r in table.rows] == ["ready", "ready"]
+def test_ready_when_everything_is_present(qtbot, tmp_path):
+    real = tmp_path / "NOF_H01_1D.csv"
+    real.write_text("x", encoding="utf-8")
+    sessions = [ProjectSession(name="NOF_H01_1D", dlc_path=str(real),
+                               metadata={"mouse": "H01", "day": "1D"})]
+    table = _table(qtbot, _project(sessions=sessions,
+                                   preset_rules=[PresetRule("all.mat")]))
+    assert table.rows[0]["status"] == "ready"
+
+
+def test_a_stale_path_is_not_ready(qtbot):
+    # S4c review (I1): status checked only that the string was non-empty, so a
+    # file that had moved still read "ready" and failed at run time.
+    sessions = [ProjectSession(name="s", dlc_path="gone.csv",
+                               metadata={"mouse": "H01", "day": "1D"})]
+    table = _table(qtbot, _project(sessions=sessions,
+                                   preset_rules=[PresetRule("all.mat")]))
+    assert table.rows[0]["status"] == "DLC file missing"
 
 
 def test_editing_metadata_writes_back(qtbot):

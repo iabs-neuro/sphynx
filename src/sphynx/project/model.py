@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-DEFAULT_PATTERN = r"^(?P<exp>[^_]+)_(?P<mouse>[^_]+)_(?P<session>.+)$"
+# The named groups become metadata keys, so they are the names rules are
+# written against: exp, mouse, day.
+DEFAULT_PATTERN = r"^(?P<exp>[^_]+)_(?P<mouse>[^_]+)_(?P<day>.+)$"
 
 
 @dataclass
