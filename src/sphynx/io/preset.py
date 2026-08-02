@@ -34,13 +34,26 @@ def _parse_zones(mat_zones):
         # Convert MATLAB mask to Python boolean array
         mask = np.asarray(getattr(mat_z, "maskfilled", np.zeros((1, 1))), dtype=bool)
 
+        # Extract and reconstruct roles from mat file
+        mat_roles = getattr(mat_z, "roles", None)
+        if mat_roles is not None:
+            tags = getattr(mat_roles, "tags", [])
+            # Convert array to list; empty arrays need special handling
+            tags = list(tags) if hasattr(tags, "__len__") else []
+            roles = ZoneRoles(
+                is_target=bool(getattr(mat_roles, "is_target", False)),
+                tags=tags
+            )
+        else:
+            roles = ZoneRoles()
+
         # Create Zone object with defaults for missing attributes
         z = Zone(
             name=getattr(mat_z, "name", "unknown"),
             type=getattr(mat_z, "type", "area"),
             maskfilled=mask,
             zone_class=getattr(mat_z, "zone_class", "unknown"),
-            roles=ZoneRoles(),
+            roles=roles,
             index=None,
             angle=None,
             members=[],

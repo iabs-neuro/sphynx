@@ -31,6 +31,7 @@ import numpy as np
 import scipy.io
 
 from sphynx.exceptions import SphynxIOError
+from sphynx.io.preset_write import Roles as _Roles, zone_to_mat
 from sphynx.logging_setup import get_logger
 
 _log = get_logger()
@@ -183,32 +184,6 @@ def upgrade_zone_structs(zones, experiment_type: str = "") -> UpgradeReport:
     return report
 
 
-class _Roles:
-    """Minimal stand-in for ZoneRoles that survives a .mat round trip."""
-
-    def __init__(self, is_target: bool = False, tags=None):
-        self.is_target = bool(is_target)
-        self.tags = list(tags or [])
-
-
-def _roles_to_mat(roles) -> dict:
-    return {"is_target": bool(getattr(roles, "is_target", False)),
-            "tags": np.array(list(getattr(roles, "tags", []) or []), dtype=object)}
-
-
-def _zone_to_mat(zone) -> dict:
-    index = getattr(zone, "index", None)
-    return {
-        "name": str(getattr(zone, "name", "")),
-        "type": str(getattr(zone, "type", "area")),
-        "maskfilled": np.asarray(zone.maskfilled),
-        "zone_class": str(getattr(zone, "zone_class", "unknown")),
-        "index": np.nan if index is None else float(index),
-        "angle": float(getattr(zone, "angle", float("nan"))),
-        "roles": _roles_to_mat(getattr(zone, "roles", _Roles())),
-    }
-
-
 def upgrade_preset_file(source, destination) -> UpgradeReport:
     """Read a legacy preset, add zone roles, and write it to a new file."""
     source = Path(source)
@@ -233,7 +208,7 @@ def upgrade_preset_file(source, destination) -> UpgradeReport:
     payload = {
         "Options": mat["Options"],
         "ArenaAndObjects": mat.get("ArenaAndObjects", np.array([])),
-        "Zones": np.array([_zone_to_mat(z) for z in keep], dtype=object),
+        "Zones": np.array([zone_to_mat(z) for z in keep], dtype=object),
     }
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
