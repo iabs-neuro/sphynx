@@ -64,6 +64,51 @@ def test_anisotropy_changes_the_shape():
     assert not np.array_equal(plain, stretched)
 
 
+def test_the_ring_is_the_requested_width_in_cm_on_both_axes():
+    # The point of the normalization: the band must be the SAME number of
+    # centimetres on both axes, which on an anisotropic pixel is a different
+    # number of pixels on each. pxl_y = 20 px/cm and x_kcorr = pxl_y/pxl_x = 2,
+    # so pxl_x = 10 px/cm and a 2.5 cm band is 50 px along y, 25 px along x.
+    # `width_pixels` is in y-pixels, so it is 2.5 * pxl_y.
+    size, half = 200, 10
+    pixels_per_cm_y, x_kcorr, width_cm = 20.0, 2.0, 2.5
+    pixels_per_cm_x = pixels_per_cm_y / x_kcorr
+    mask = np.zeros((size, size), dtype=bool)
+    mask[100 - half:100 + half, 100 - half:100 + half] = True
+
+    inflated, _ring = inflate_mask(mask, width_cm * pixels_per_cm_y,
+                                   x_kcorr=x_kcorr)
+    rows, cols = np.nonzero(inflated)
+    # how far the band grew on each side, in pixels
+    grown_y = (rows.max() - rows.min() + 1 - 2 * half) / 2.0
+    grown_x = (cols.max() - cols.min() + 1 - 2 * half) / 2.0
+
+    # half a pixel of slack for the nearest-neighbour resample back to pixels
+    assert grown_y / pixels_per_cm_y == pytest.approx(width_cm, abs=0.025)
+    assert grown_x / pixels_per_cm_x == pytest.approx(width_cm, abs=0.05)
+    # and the two axes really do disagree in PIXELS, which is the whole point
+    assert grown_x == pytest.approx(grown_y / x_kcorr, abs=0.5)
+
+
+def test_an_empty_mask_inflates_to_nothing():
+    # MATLAB bwdist on an all-false mask returns Inf everywhere, so nothing is
+    # within the band. distance_transform_edt returns finite distances measured
+    # from just outside the (0,0) corner instead, which used to hand back a
+    # whole corner block (or the whole frame) as the ring.
+    mask = np.zeros((H, W), dtype=bool)
+    inflated, ring = inflate_mask(mask, 25)
+    assert not inflated.any()
+    assert not ring.any()
+
+
+def test_an_empty_mask_inflates_to_nothing_when_anisotropic():
+    mask = np.zeros((H, W), dtype=bool)
+    inflated, ring = inflate_mask(mask, 25, x_kcorr=1.6)
+    assert inflated.shape == mask.shape
+    assert not inflated.any()
+    assert not ring.any()
+
+
 # --- the zone set ----------------------------------------------------------
 
 def test_three_zones_per_object():
@@ -135,3 +180,23 @@ def test_zero_width_needs_no_calibration():
 
 def test_an_empty_object_list_gives_no_zones():
     assert build_object_zones([], H, W, pixels_per_cm=10.0) == []
+
+
+# --- an object drawn off the frame is user error, not a zone ---------------
+
+def test_an_empty_object_mask_raises_and_names_the_object():
+    # A shape dragged off the frame clips to an empty mask. Emitting zones for
+    # it would publish time spent in a phantom object.
+    empty = np.zeros((H, W), dtype=bool)
+    with pytest.raises(SphynxValueError) as excinfo:
+        build_object_zones([("object1", _square(30, 30)), ("offscreen", empty)],
+                           H, W, pixels_per_cm=10.0)
+    assert "offscreen" in str(excinfo.value)
+
+
+def test_an_empty_object_mask_raises_even_with_no_ring():
+    empty = np.zeros((H, W), dtype=bool)
+    with pytest.raises(SphynxValueError) as excinfo:
+        build_object_zones([("offscreen", empty)], H, W, pixels_per_cm=None,
+                           zone_width_cm=0)
+    assert "offscreen" in str(excinfo.value)

@@ -47,6 +47,13 @@ def inflate_mask(mask, width_pixels, x_kcorr: float = 1.0):
     mask = np.asarray(mask, dtype=bool)
     if width_pixels <= 0:
         return mask.copy(), np.zeros_like(mask)
+    if not mask.any():
+        # MATLAB's bwdist on an all-false mask returns Inf everywhere, so
+        # nothing is within the band. distance_transform_edt(~mask) of an
+        # all-True input returns FINITE distances measured as if a background
+        # pixel sat just outside the (0,0) corner, which would hand back a
+        # corner block -- or, for a wide band, the whole frame -- as the ring.
+        return mask.copy(), np.zeros_like(mask)
 
     if x_kcorr == 1:
         # bwdist(mask) in MATLAB is the distance to the nearest True pixel,
@@ -90,6 +97,14 @@ def build_object_zones(objects, height, width, pixels_per_cm=None,
 
     for position, (name, mask) in enumerate(objects, start=1):
         mask = np.asarray(mask, dtype=bool)
+        if not mask.any():
+            # A shape dragged off the frame clips to an empty mask. Emitting
+            # zones for it would publish time spent in an object that is not
+            # there; there is no defensible zone to build, so this is an error.
+            raise SphynxValueError(
+                f'object "{name}" (position {position}) has an empty mask: it '
+                "is outside the frame or was never drawn; move or delete it "
+                "and build again")
         is_target = name in targets
         _add(f"{name}_real", mask, kind, position, is_target)
         all_real |= mask
