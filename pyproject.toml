@@ -7,15 +7,22 @@ name = "sphynx"
 version = "0.0.1"
 description = "Segmented PHYsical aNalysis of eXploration — behavioural analysis engine"
 requires-python = ">=3.11"
+# The engine. Everything here is imported by src/sphynx and must be present
+# for a headless analysis run.
 dependencies = [
     "numpy>=1.26",
     "scipy>=1.11",
     "pandas>=2.1",
     "tomli-w>=1.0",
+    "matplotlib>=3.8",          # point-in-polygon (zone masks), session plots
+    "opencv-python>=4.9",       # sphynx.io.video, the only place it is imported
+    "scikit-image>=0.22",       # sphynx.preset.detect: hough, contours, morphology
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.5"]
+# The GUI. The engine never imports Qt -- a test enforces that in a subprocess.
+gui = ["PySide6>=6.6"]
+dev = ["pytest>=8.0", "pytest-qt>=4.4", "ruff>=0.5"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sphynx"]
