@@ -140,6 +140,31 @@
 | `PreprocessVideoTabController` + `PreprocessVideoWindow` | 530 | — | **нет**; видео-оверлеи заявлены «не входит» |
 | `SyntheticDataTabController` | 244 | — | **нет**; `makeSyntheticDLC.m` (263) тоже не портирован |
 
+## B2. Найдено при работе над S4f: результаты сессий никуда не пишутся
+
+`config.io.save_workspace` и `config.paths.out_dir` протаскиваются через весь Python-движок
+и **нигде не читаются**. В MATLAB `analyzeSession.m` шаг 12:
+
+```matlab
+if config.io.saveWorkspace && ~isempty(config.paths.outDir)
+    sphynx.io.saveSession(result, config.paths.outDir, sessionName);
+end
+```
+
+`sphynx/+io/saveSession.m` (15 строк) пишет `<outDir>/<sessionName>_WorkSpace.mat`.
+В Python этого шага нет, и `save_session_plots` (портирован) тоже нигде не вызывается,
+кроме тестов.
+
+Следствие: единственный выход Python-пайплайна — итоговая таблица, которую Make Output
+пишет по явно выбранному пути. Папки `behavior/` и `temp/` из S4f правильные, но писателя
+у них пока нет.
+
+Почему не поймали раньше: ни один тест не проверял, что прогон оставляет файлы.
+
+Порт `saveSession.m` сам по себе тривиален, но `SessionResult` несёт `Config`, `Point`,
+акты со статистиками, метрики и отчёт валидации — форму `.mat` надо спроектировать, а не
+угадать: файл неправильной формы выглядит рабочим. Это отдельная задача.
+
 ## C. Движковые пакеты без Python-следа (машинный проход, требует проверки)
 
 - **`+stats` целиком** — `runTest` (373), `extractMetrics` (127), `metricToLong` (79),

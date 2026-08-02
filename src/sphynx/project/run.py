@@ -32,6 +32,19 @@ def project_specs(project):
     return specs, blocked
 
 
+def batch_out_dir(project) -> str:
+    """Where a batch's per-session output belongs: behavior/.
+
+    A batch is the real run. A single run from the Analyze tab is setup and
+    goes to temp/, so the two never mix and it stays clear afterwards which
+    numbers were final. `out_dir` remains an explicit override for projects
+    that keep their results somewhere else."""
+    root = getattr(project, "root", "")
+    if getattr(project, "out_dir", ""):
+        return resolve_path(project.out_dir, root)
+    return folder(project, "behavior")
+
+
 def run_project(project, config=None, on_progress=None,
                 should_stop=None) -> BatchResult:
     """Run every ready session. A failing session is recorded, not fatal.
@@ -46,12 +59,8 @@ def run_project(project, config=None, on_progress=None,
         # The project states which acts it was analysed with; ignoring it would
         # make a batch compute a different act set from the Analyze tab.
         library = load_library(resolve_path(project.library_path, root))
-    # A batch is the real run, so it writes to behavior/. out_dir stays as an
-    # explicit override for projects that keep results elsewhere.
-    out_dir = (resolve_path(project.out_dir, root) if project.out_dir
-               else folder(project, "behavior"))
     return run_batch(
-        specs, config=config, out_dir=out_dir or "",
+        specs, config=config, out_dir=batch_out_dir(project),
         paradigm=project.paradigm or None, library=library,
         on_progress=on_progress, should_stop=should_stop,
         continue_on_error=True)
