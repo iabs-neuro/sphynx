@@ -59,23 +59,106 @@ def test_a_frame_past_the_end_is_reported(qtbot):
 
 # --- calibration -----------------------------------------------------------
 
-def test_calibration_fills_the_pixels_per_cm_box(qtbot):
-    tab = _tab(qtbot)
-    tab.controller.calibrate([(10.0, 10.0), (10.0, 50.0)], 10.0)
-    assert tab.pixels_per_cm_box.value() == pytest.approx(4.0)
+def _calibrate(tab, mode, points, distance_y=10.0, distance_x=10.0):
+    """Drive the Choose -> click -> Compute flow the way the buttons do."""
+    tab.calib_mode_box.setCurrentText(mode)
+    tab.distance_y_box.setValue(distance_y)
+    tab.distance_x_box.setValue(distance_x)
+    tab.controller.begin_calibration()
+    for x, y in points:
+        tab.canvas.add_point(x, y)
+    tab.controller.compute_calibration()
 
 
-def test_calibration_over_zero_distance_is_reported(qtbot):
+def test_choose_arms_the_canvas_for_as_many_points_as_the_mode_needs(qtbot):
     tab = _tab(qtbot)
-    tab.controller.calibrate([(10.0, 10.0), (10.0, 50.0)], 0.0)
-    assert "distance" in tab.status_label.text().lower()
+    for mode, wanted in (("1 line", 2), ("2 lines", 4), ("4 points", 4)):
+        tab.calib_mode_box.setCurrentText(mode)
+        tab.controller.begin_calibration()
+        for index in range(wanted):
+            assert tab.controller.calib_points == []
+            tab.canvas.add_point(10.0 + index, 20.0 + index)
+        assert len(tab.controller.calib_points) == wanted
+
+
+def test_one_line_calibration_fills_the_box_and_leaves_kcorr_at_one(qtbot):
+    tab = _tab(qtbot)
+    _calibrate(tab, "1 line", [(0.0, 0.0), (30.0, 40.0)], distance_y=10.0)
+    assert tab.pixels_per_cm_box.value() == pytest.approx(5.0)
+    assert tab.controller.x_kcorr() == pytest.approx(1.0)
+
+
+def test_four_point_calibration_measures_the_anisotropy(qtbot):
+    tab = _tab(qtbot)
+    # 100 px per 10 cm down, 200 px per 10 cm across: a pixel twice as wide
+    # as it is tall.
+    _calibrate(tab, "4 points",
+               [(0.0, 0.0), (0.0, 100.0), (0.0, 0.0), (200.0, 0.0)])
+    assert tab.pixels_per_cm_box.value() == pytest.approx(10.0)
+    assert tab.controller.x_kcorr() == pytest.approx(0.5)
+    assert "kcorr: 0.500" in tab.calib_label.text()
+
+
+def test_two_line_calibration_agrees_with_the_same_points_clicked(qtbot):
+    tab = _tab(qtbot)
+    points = [(0.0, 0.0), (0.0, 100.0), (0.0, 0.0), (200.0, 0.0)]
+    _calibrate(tab, "2 lines", points)
+    from_lines = tab.controller.calibration
+    _calibrate(tab, "4 points", points)
+    assert from_lines.pixels_per_cm == pytest.approx(
+        tab.controller.calibration.pixels_per_cm)
+    assert from_lines.x_kcorr == pytest.approx(
+        tab.controller.calibration.x_kcorr)
+
+
+def test_a_near_axis_single_line_is_refused_with_the_angle_named(qtbot):
+    tab = _tab(qtbot)
+    _calibrate(tab, "1 line", [(0.0, 0.0), (100.0, 5.0)])
+    assert "deg" in tab.status_label.text().lower()
     assert tab.pixels_per_cm_box.value() == 0.0
+    assert tab.controller.calibration is None
 
 
-def test_calibration_over_coincident_points_is_reported(qtbot):
+def test_computing_before_picking_any_point_is_reported(qtbot):
     tab = _tab(qtbot)
-    tab.controller.calibrate([(10.0, 10.0), (10.0, 10.0)], 10.0)
-    assert "same" in tab.status_label.text().lower()
+    tab.controller.compute_calibration()
+    assert "choose" in tab.status_label.text().lower()
+
+
+def test_a_refused_measurement_clears_the_points_so_it_is_not_half_reused(qtbot):
+    tab = _tab(qtbot)
+    _calibrate(tab, "1 line", [(0.0, 0.0), (100.0, 5.0)])
+    assert tab.controller.calib_points == []
+    assert tab.canvas.points == []
+
+
+def test_the_x_distance_is_disabled_for_the_single_line_mode(qtbot):
+    tab = _tab(qtbot)
+    tab.calib_mode_box.setCurrentText("1 line")
+    assert not tab.distance_x_box.isEnabled()
+    tab.calib_mode_box.setCurrentText("4 points")
+    assert tab.distance_x_box.isEnabled()
+
+
+def test_typing_a_pixels_per_cm_by_hand_drops_the_measured_anisotropy(qtbot):
+    # The kcorr belongs to the measurement it came from. Kept beside a
+    # hand-typed scale it would stretch every zone against a measurement
+    # that was never made.
+    tab = _tab(qtbot)
+    _calibrate(tab, "4 points",
+               [(0.0, 0.0), (0.0, 100.0), (0.0, 0.0), (200.0, 0.0)])
+    assert tab.controller.x_kcorr() == pytest.approx(0.5)
+    tab.pixels_per_cm_box.setValue(7.0)
+    assert tab.controller.x_kcorr() == pytest.approx(1.0)
+    assert tab.controller.options()["x_kcorr"] == pytest.approx(1.0)
+
+
+def test_a_new_frame_drops_points_picked_on_the_old_one(qtbot):
+    tab = _tab(qtbot)
+    tab.controller.begin_calibration()
+    tab.canvas.add_point(10.0, 10.0)
+    tab.controller.use_frame(np.zeros((120, 160, 3), dtype=np.uint8))
+    assert tab.canvas.points == []
 
 
 # --- building the zones ----------------------------------------------------
@@ -222,6 +305,42 @@ def test_the_saved_options_carry_the_calibration(qtbot, tmp_path):
     assert float(preset.options.pxl2sm) == pytest.approx(4.0)
     assert int(preset.options.Width) == 160
     assert int(preset.options.Height) == 120
+
+
+def test_a_measured_anisotropy_reaches_the_saved_options(qtbot, tmp_path):
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    # 40 px per 10 cm down, 80 px per 10 cm across.
+    _calibrate(tab, "4 points",
+               [(0.0, 0.0), (0.0, 40.0), (0.0, 0.0), (80.0, 0.0)])
+    tab.controller.build_zones()
+    target = tmp_path / "aniso.mat"
+    tab.controller.save(target)
+    preset = read_preset(target)
+    assert float(preset.options.x_kcorr) == pytest.approx(0.5)
+    assert float(preset.options.pxl2smY) == pytest.approx(4.0)
+    assert float(preset.options.pxl2smX) == pytest.approx(8.0)
+    assert str(preset.options.CalibrationMode) == "4 points"
+
+
+def test_a_measured_anisotropy_changes_the_object_rings(qtbot):
+    # The whole point of measuring kcorr: the ring must be the same number of
+    # centimetres on both axes, which on a non-square pixel is a different
+    # number of pixels on each.
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.controller.build_zones()
+    square = {z.name: int(np.asarray(z.maskfilled).sum())
+              for z in tab.controller.zones}
+
+    _calibrate(tab, "4 points",
+               [(0.0, 0.0), (0.0, 40.0), (0.0, 0.0), (80.0, 0.0)])
+    tab.controller.build_zones()
+    stretched = {z.name: int(np.asarray(z.maskfilled).sum())
+                 for z in tab.controller.zones}
+
+    assert tab.controller.x_kcorr() == pytest.approx(0.5)
+    assert square["object1_out"] != stretched["object1_out"]
 
 
 def test_saving_sets_the_preset_path_on_the_state(qtbot, tmp_path):

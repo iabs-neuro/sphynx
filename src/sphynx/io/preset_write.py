@@ -50,11 +50,20 @@ def zone_to_mat(zone) -> dict:
 
 def options_struct(frame_rate, pixels_per_cm, width, height,
                    x_kcorr: float = 1.0, experiment_type: str = "",
-                   **extra) -> dict:
-    """The Options fields the engine reads, under their legacy names."""
+                   pxl_y=None, pxl_x=None, **extra) -> dict:
+    """The Options fields the engine reads, under their legacy names.
+
+    The per-axis scales are kept beside the combined one, as the MATLAB app
+    does (assembleOptions): `pxl2sm` alone cannot say whether it is an average
+    of two agreeing axes or the y-axis of two that disagreed, and that is
+    exactly what a reader needs to judge `x_kcorr`. Absent measurements fall
+    back to the combined scale, matching setPixelsPerCm's ifNaN."""
+    pixels_per_cm = float(pixels_per_cm)
     options = {
         "FrameRate": float(frame_rate),
-        "pxl2sm": float(pixels_per_cm),
+        "pxl2sm": pixels_per_cm,
+        "pxl2smY": pixels_per_cm if pxl_y is None else float(pxl_y),
+        "pxl2smX": pixels_per_cm if pxl_x is None else float(pxl_x),
         "Width": int(width),
         "Height": int(height),
         "x_kcorr": float(x_kcorr),

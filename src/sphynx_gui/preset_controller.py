@@ -17,6 +17,7 @@ from sphynx.exceptions import SphynxError
 from sphynx.io.preset_write import options_struct, save_preset
 from sphynx.io.video import read_frame, video_info
 from sphynx.paradigms import resolve_paradigm, validate_paradigm
+from sphynx.preset.calibration import calibrate, points_needed
 from sphynx.preset.objects import build_object_zones
 from sphynx.zones import (
     Zone, ZoneRoles, assign_zone_angles, classify_circle,
@@ -37,6 +38,18 @@ _SQUARE_CLASSES = {
 }
 
 
+# What to click, per mode. The order matters: the first pair measures the
+# vertical scale and the second the horizontal one.
+_CALIB_PROMPT = {
+    "1 line": "Click the two ends of one diagonal reference line (20-70 deg "
+              "from horizontal), then set its total length in 'cm Y'.",
+    "2 lines": "Click the two ends of the VERTICAL reference line, then the "
+               "two ends of the HORIZONTAL one.",
+    "4 points": "Click the vertical pair (points 1 and 2), then the "
+                "horizontal pair (points 3 and 4).",
+}
+
+
 def _circle_class(name: str) -> str:
     if name.startswith("middle"):
         return "middle"
@@ -53,6 +66,8 @@ class PresetController(QObject):
         self.zones: list = []
         self.build_notes: list = []      # (level, text) shown beside validation
         self.built_options: dict | None = None   # what the masks were built for
+        self.calib_points: list = []     # clicks awaiting Compute
+        self.calibration = None          # the last accepted measurement
 
     # --- the frame --------------------------------------------------------
     def use_frame(self, frame) -> None:
@@ -114,29 +129,76 @@ class PresetController(QObject):
         self.use_frame(frame)
 
     # --- calibration ------------------------------------------------------
-    def calibrate(self, points, distance_cm) -> None:
-        """Pixels-per-cm from two points a known distance apart."""
+    def begin_calibration(self) -> None:
+        """Arm the canvas for the clicks the chosen mode needs."""
+        if self.frame is None:
+            self.tab.set_status("Open a video or load a frame first.")
+            return
+        mode = self.tab.calib_mode_box.currentText()
         try:
-            (x0, y0), (x1, y1) = [(float(x), float(y)) for x, y in points]
-        except (TypeError, ValueError):
-            self.tab.set_status("Calibration needs exactly two points.")
+            wanted = points_needed(mode)
+        except SphynxError as e:
+            self.tab.set_status(str(e))
             return
-        distance_cm = float(distance_cm)
-        if not distance_cm > 0:
-            self.tab.set_status(
-                f"The calibration distance must be greater than zero; "
-                f"got {distance_cm:g}.")
-            return
-        pixels = math.hypot(x1 - x0, y1 - y0)
-        if pixels <= 0:
-            self.tab.set_status(
-                "The two calibration points are the same point; "
-                "click two ends of a known length.")
-            return
-        self.tab.pixels_per_cm_box.setValue(pixels / distance_cm)
+        self.calib_points = []
+        self.calibration = None
+        self.tab.canvas.begin_points(wanted)
+        self.tab.set_status(_CALIB_PROMPT[mode])
+
+    def on_points_picked(self, points) -> None:
+        self.calib_points = [(float(x), float(y)) for x, y in points]
         self.tab.set_status(
-            f"{pixels:.1f} px over {distance_cm:g} cm = "
-            f"{pixels / distance_cm:.3f} px/cm.")
+            f"{len(self.calib_points)} points picked; set the lengths in cm "
+            "and press Compute.")
+
+    def compute_calibration(self) -> None:
+        """Turn the picked points into pixels-per-cm and, where the mode can
+        measure it, the pixel anisotropy."""
+        if not self.calib_points:
+            self.tab.set_status("Press Choose and click the reference points "
+                                "on the frame first.")
+            return
+        mode = self.tab.calib_mode_box.currentText()
+        try:
+            result = calibrate(mode, self.calib_points,
+                               float(self.tab.distance_y_box.value()),
+                               float(self.tab.distance_x_box.value()))
+        except SphynxError as e:
+            # A refused measurement leaves the previous calibration alone
+            # rather than half-replacing it.
+            self.calib_points = []
+            self.tab.canvas.clear_points()
+            self.tab.set_status(str(e))
+            return
+        self.calibration = result
+        self.tab.pixels_per_cm_box.setValue(result.pixels_per_cm)
+        self.tab.show_calibration(result)
+        note = ("" if not result.is_anisotropic else
+                f" The axes differ by {result.diff_pct:.1f}%, so the y-axis "
+                f"scale is used and x is corrected by {result.x_kcorr:.3f}.")
+        self.tab.set_status(
+            f"Calibrated ({mode}): {result.pixels_per_cm:.3f} px/cm."
+            + note + " Rebuild the zones to apply it.")
+
+    def _active_calibration(self):
+        """The last measurement, but only while it still describes the value
+        in the box.
+
+        Typing a pixels-per-cm by hand replaces the measurement without
+        replacing the anisotropy that came with it. Shipping the old
+        `x_kcorr` beside a new scale would stretch every zone against a
+        measurement that was never made."""
+        if self.calibration is None:
+            return None
+        if not math.isclose(self.calibration.pixels_per_cm,
+                            float(self.tab.pixels_per_cm_box.value()),
+                            rel_tol=1e-9, abs_tol=1e-9):
+            return None
+        return self.calibration
+
+    def x_kcorr(self) -> float:
+        active = self._active_calibration()
+        return 1.0 if active is None else float(active.x_kcorr)
 
     # --- zones ------------------------------------------------------------
     def build_zones(self) -> None:
@@ -175,6 +237,7 @@ class PresetController(QObject):
         zones.extend(self._derived_zones(arena_shape, arena_mask, pixels_per_cm))
 
         ring_cm = float(self.tab.ring_width_box.value())
+        x_kcorr = self.x_kcorr()
         for kind in ("object", "hole"):
             drawn = [s for s in self.tab.canvas.shapes
                      if roles.get(s.name, ("", False))[0] == kind]
@@ -186,7 +249,8 @@ class PresetController(QObject):
                     [(s.name, self.tab.canvas.mask_for(s, height, width))
                      for s in drawn],
                     height, width, pixels_per_cm=pixels_per_cm,
-                    zone_width_cm=ring_cm, kind=kind, targets=targets))
+                    zone_width_cm=ring_cm, x_kcorr=x_kcorr, kind=kind,
+                    targets=targets))
             except SphynxError as e:
                 self.tab.set_status(str(e))
                 self.zones = []
@@ -272,11 +336,17 @@ class PresetController(QObject):
     def options(self) -> dict:
         height, width = ((int(self.frame.shape[0]), int(self.frame.shape[1]))
                          if self.frame is not None else (0, 0))
+        active = self._active_calibration()
+        pixels_per_cm = float(self.tab.pixels_per_cm_box.value())
         return options_struct(
             frame_rate=float(self.tab.frame_rate_box.value()),
-            pixels_per_cm=float(self.tab.pixels_per_cm_box.value()),
+            pixels_per_cm=pixels_per_cm,
             width=width, height=height,
+            x_kcorr=1.0 if active is None else float(active.x_kcorr),
+            pxl_y=None if active is None else float(active.pxl_y),
+            pxl_x=None if active is None else float(active.pxl_x),
             experiment_type=str(self.state.paradigm or ""),
+            CalibrationMode="" if active is None else str(active.mode),
             WallWidthCm=float(self.tab.wall_width_box.value()),
             RingWidthCm=float(self.tab.ring_width_box.value()))
 

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from sphynx.paradigms import PARADIGMS, register_builtin_paradigms
+from sphynx.preset.calibration import MODES as CALIBRATION_MODES
 from sphynx_gui.preset_canvas import KINDS, PresetCanvas
 from sphynx_gui.preset_controller import PresetController
 from sphynx_gui.warnings_panel import WarningsPanel
@@ -47,11 +48,29 @@ class PresetTab(QWidget):
         self.frame_rate_box.setDecimals(3)
         self.frame_rate_box.setValue(30.0)
 
-        self.calibrate_button = QPushButton("Calibrate...")
+        self.calib_mode_box = QComboBox()
+        self.calib_mode_box.addItems(CALIBRATION_MODES)
+        self.calib_mode_box.setCurrentText("1 line")
+        self.choose_button = QPushButton("Choose")
+        self.compute_button = QPushButton("Compute")
+        # The MATLAB app's defaults; the arena these presets were built for is
+        # 92 cm across, and starting anywhere else would make the common case
+        # a retype.
+        self.distance_y_box = QDoubleSpinBox()
+        self.distance_y_box.setRange(0.1, 10_000.0)
+        self.distance_y_box.setDecimals(2)
+        self.distance_y_box.setValue(92.0)
+        self.distance_x_box = QDoubleSpinBox()
+        self.distance_x_box.setRange(0.1, 10_000.0)
+        self.distance_x_box.setDecimals(2)
+        self.distance_x_box.setValue(92.0)
+
         self.pixels_per_cm_box = QDoubleSpinBox()
         self.pixels_per_cm_box.setRange(0.0, 10_000.0)
         self.pixels_per_cm_box.setDecimals(4)
         self.pixels_per_cm_box.setValue(0.0)
+        self.calib_label = QLabel("Y: ?   X: ?   avg: ?   kcorr: ?")
+        self.calib_label.setWordWrap(True)
 
         self.wall_width_box = QDoubleSpinBox()
         self.wall_width_box.setRange(0.0, 100.0)
@@ -92,11 +111,28 @@ class PresetTab(QWidget):
         video_layout.addWidget(self.frame_spin)
         video_layout.addStretch(1)
 
+        calib_row = QWidget()
+        calib_layout = QHBoxLayout(calib_row)
+        calib_layout.setContentsMargins(0, 0, 0, 0)
+        calib_layout.addWidget(self.calib_mode_box)
+        calib_layout.addWidget(self.choose_button)
+        calib_layout.addWidget(self.compute_button)
+
+        distance_row = QWidget()
+        distance_layout = QHBoxLayout(distance_row)
+        distance_layout.setContentsMargins(0, 0, 0, 0)
+        distance_layout.addWidget(QLabel("cm Y"))
+        distance_layout.addWidget(self.distance_y_box)
+        distance_layout.addWidget(QLabel("cm X"))
+        distance_layout.addWidget(self.distance_x_box)
+
         form = QGroupBox("Calibration and geometry")
         form_layout = QFormLayout(form)
         form_layout.addRow("Frame rate, fps", self.frame_rate_box)
+        form_layout.addRow("Calibration", calib_row)
+        form_layout.addRow(distance_row)
+        form_layout.addRow(self.calib_label)
         form_layout.addRow("Pixels per cm", self.pixels_per_cm_box)
-        form_layout.addRow(self.calibrate_button)
         form_layout.addRow("Ring width, cm", self.ring_width_box)
         form_layout.addRow("Wall band, cm", self.wall_width_box)
 
@@ -139,7 +175,12 @@ class PresetTab(QWidget):
     def _connect(self) -> None:
         self.video_button.clicked.connect(self._pick_video)
         self.frame_spin.valueChanged.connect(self._on_frame)
-        self.calibrate_button.clicked.connect(self._ask_calibration)
+        self.choose_button.clicked.connect(self.controller.begin_calibration)
+        self.compute_button.clicked.connect(
+            self.controller.compute_calibration)
+        self.canvas.points_picked.connect(self.controller.on_points_picked)
+        self.calib_mode_box.currentTextChanged.connect(self._on_calib_mode)
+        self._on_calib_mode(self.calib_mode_box.currentText())
         self.tool_box.currentTextChanged.connect(self.canvas.set_tool)
         self.draw_button.clicked.connect(self._ask_shape)
         self.remove_button.clicked.connect(self._remove_selected)
@@ -251,26 +292,15 @@ class PresetTab(QWidget):
             return
         self.remove_selected_shape(self.shapes_table.item(row, 0).text())
 
-    def _ask_calibration(self) -> None:
-        self.set_status(
-            "Calibration is entered as two clicked points and a known "
-            "distance; draw a shape whose two corners span the length, then "
-            "give the distance below.")
-        distance, ok = QInputDialog.getDouble(
-            self, "Calibrate", "Distance between the two corners, cm",
-            10.0, 0.0, 10_000.0, 2)
-        if not ok:
-            return
-        row = self.shapes_table.currentRow()
-        if row < 0:
-            self.set_status("Select the shape that spans the known length.")
-            return
-        name = self.shapes_table.item(row, 0).text()
-        shape = next((s for s in self.canvas.shapes if s.name == name), None)
-        if shape is None or len(shape.points) < 2:
-            self.set_status(f"{name!r} has no two points to measure between.")
-            return
-        self.controller.calibrate([shape.points[0], shape.points[-1]], distance)
+    def _on_calib_mode(self, mode: str) -> None:
+        # One line measures a single length, so there is no separate
+        # horizontal distance to enter.
+        self.distance_x_box.setEnabled(mode != "1 line")
+
+    def show_calibration(self, result) -> None:
+        self.calib_label.setText(
+            f"Y: {result.pxl_y:.2f}   X: {result.pxl_x:.2f}   "
+            f"avg: {result.pixels_per_cm:.2f}   kcorr: {result.x_kcorr:.3f}")
 
     def _pick_save(self) -> None:
         path, _ = QFileDialog.getSaveFileName(

@@ -25,6 +25,7 @@ from sphynx.exceptions import SphynxValueError
 
 KINDS = ("rectangle", "ellipse", "polygon")
 _OUTLINE = {"rectangle": "#e8c547", "ellipse": "#7ec8e3", "polygon": "#c586c0"}
+_PICKED = "#4ec9b0"              # calibration clicks, distinct from any shape
 
 
 @dataclass
@@ -91,18 +92,26 @@ def shape_mask(shape, height: int, width: int) -> np.ndarray:
 
 
 class PresetCanvas(QWidget):
-    """An embedded matplotlib canvas that shows a frame and collects shapes."""
+    """An embedded matplotlib canvas that shows a frame and collects shapes.
+
+    It also collects bare points, which is how calibration is measured: the
+    reference length is clicked on the frame itself rather than inferred from
+    a shape drawn for another purpose."""
 
     shape_drawn = Signal(str)
+    points_picked = Signal(list)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.shapes: list = []
         self.tool = "rectangle"
         self.frame_shape = None
+        self.points: list = []           # calibration clicks, in frame pixels
         self._frame = None
         self._selector = None
         self._pending_name = None
+        self._wanted_points = 0
+        self._click_cid = None
 
         self.figure = Figure(figsize=(6.0, 4.5), layout="constrained")
         self.axes = self.figure.add_subplot(111)
@@ -124,6 +133,10 @@ class PresetCanvas(QWidget):
         # A selector armed on the old axes would keep drawing onto artists
         # that _redraw is about to throw away.
         self.cancel_shape()
+        # Points measured on one frame describe that frame. Keeping them
+        # across a change would let a length clicked on frame 0 be computed
+        # against frame 9000 of a video that was re-opened at another size.
+        self.clear_points()
         self._redraw()
 
     # --- tools ------------------------------------------------------------
@@ -137,6 +150,7 @@ class PresetCanvas(QWidget):
 
     def begin_shape(self, name: str) -> None:
         """Arm the current tool; the next drag or polygon becomes `name`."""
+        self.cancel_points()
         self._pending_name = str(name)
         self._disconnect_selector()
         if self.tool == "rectangle":
@@ -158,6 +172,57 @@ class PresetCanvas(QWidget):
             self._selector.set_active(False)
             self._selector.disconnect_events()
             self._selector = None
+
+    # --- picking bare points ---------------------------------------------
+    def begin_points(self, count: int) -> None:
+        """Collect `count` clicks, then emit them as one list.
+
+        Any half-finished previous pick is dropped: leaving two of the four
+        points of an earlier attempt on the canvas would silently mix two
+        measurements into one calibration."""
+        count = int(count)
+        if count < 1:
+            raise SphynxValueError(
+                f"a point pick collects at least one point; got {count}")
+        self._disconnect_selector()
+        self._pending_name = None
+        self.points = []
+        self._wanted_points = count
+        if self._click_cid is None:
+            self._click_cid = self.canvas.mpl_connect(
+                "button_press_event", self._on_click)
+        self._redraw()
+
+    def cancel_points(self) -> None:
+        self._wanted_points = 0
+        if self._click_cid is not None:
+            self.canvas.mpl_disconnect(self._click_cid)
+            self._click_cid = None
+
+    def clear_points(self) -> None:
+        self.cancel_points()
+        self.points = []
+        self._redraw()
+
+    def add_point(self, x, y) -> None:
+        """Record one picked point; emits once the wanted count is reached."""
+        if self._wanted_points < 1:
+            return
+        self.points.append((float(x), float(y)))
+        if len(self.points) >= self._wanted_points:
+            picked = list(self.points)
+            self.cancel_points()
+            self._redraw()
+            self.points_picked.emit(picked)
+            return
+        self._redraw()
+
+    def _on_click(self, event) -> None:
+        if event.inaxes is not self.axes:
+            return
+        if event.xdata is None or event.ydata is None:
+            return
+        self.add_point(event.xdata, event.ydata)
 
     # --- selector callbacks ----------------------------------------------
     def _on_box(self, press, release) -> None:
@@ -223,6 +288,19 @@ class PresetCanvas(QWidget):
                                             outline[:, 1].mean()),
                                color=_OUTLINE[shape.kind], fontsize=8,
                                ha="center", va="center")
+        if self.points:
+            picked = np.asarray(self.points, dtype=float)
+            self.axes.plot(picked[:, 0], picked[:, 1], "+", markersize=10,
+                           color=_PICKED, markeredgewidth=1.4)
+            # Points are consumed in pairs, so joining them in pairs shows
+            # what is about to be measured rather than one zigzag.
+            for start in range(0, len(picked) - 1, 2):
+                pair = picked[start:start + 2]
+                self.axes.plot(pair[:, 0], pair[:, 1], "-", linewidth=1.0,
+                               color=_PICKED)
+            for order, (x, y) in enumerate(picked, start=1):
+                self.axes.annotate(str(order), (x, y), color=_PICKED,
+                                   fontsize=8, ha="left", va="bottom")
         if self.frame_shape is not None:
             height, width = self.frame_shape
             self.axes.set_xlim(-0.5, width - 0.5)
