@@ -18,6 +18,23 @@ class PresetData:
     arena_and_objects: object
 
 
+def _optional_number(value, field, name):
+    """A numeric zone field that may be absent. NaN in the file means None.
+
+    NaN is how save_preset writes "not set" (a .mat struct field cannot hold
+    Python's None), so it is the only value that maps back to None. Anything
+    non-numeric is a malformed file and is reported, not guessed at.
+    """
+    if value is None or (hasattr(value, "size") and np.size(value) == 0):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as e:
+        raise SphynxIOError(
+            f'zone "{name}": field "{field}" is not a number ({value!r})') from e
+    return None if np.isnan(number) else number
+
+
 def _parse_zones(mat_zones):
     """Convert mat_struct zones from preset to Zone objects.
 
@@ -29,8 +46,10 @@ def _parse_zones(mat_zones):
 
     from sphynx.zones import Zone, ZoneRoles
 
+    # squeeze_me collapses a one-zone array to a bare mat_struct, which is not
+    # iterable; atleast_1d puts it back in a list of one.
     zones = []
-    for mat_z in mat_zones:
+    for mat_z in np.atleast_1d(mat_zones):
         # Convert MATLAB mask to Python boolean array
         mask = np.asarray(getattr(mat_z, "maskfilled", np.zeros((1, 1))), dtype=bool)
 
@@ -47,15 +66,21 @@ def _parse_zones(mat_zones):
         else:
             roles = ZoneRoles()
 
+        # Read back what save_preset wrote rather than discarding it: a Barnes
+        # hole's ring index and angle are geometry, not decoration.
+        name = getattr(mat_z, "name", "unknown")
+        index = _optional_number(getattr(mat_z, "index", None), "index", name)
+        angle = _optional_number(getattr(mat_z, "angle", None), "angle", name)
+
         # Create Zone object with defaults for missing attributes
         z = Zone(
-            name=getattr(mat_z, "name", "unknown"),
+            name=name,
             type=getattr(mat_z, "type", "area"),
             maskfilled=mask,
             zone_class=getattr(mat_z, "zone_class", "unknown"),
             roles=roles,
-            index=None,
-            angle=None,
+            index=None if index is None else int(round(index)),
+            angle=angle,
             members=[],
         )
         zones.append(z)

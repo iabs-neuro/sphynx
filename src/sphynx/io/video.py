@@ -64,8 +64,28 @@ def read_frame(path, index: int = 0) -> np.ndarray:
                 f"frame {index} is past the end of {path} ({total} frames)")
         capture.set(cv2.CAP_PROP_POS_FRAMES, int(index))
         ok, frame = capture.read()
+        # Read back where the reader actually landed. Seeking is approximate
+        # for long-GOP codecs: some readers snap to the nearest keyframe and
+        # hand back a different frame without saying so, and the caller would
+        # then label someone else's frame "frame N".
+        position = capture.get(cv2.CAP_PROP_POS_FRAMES)
     finally:
         capture.release()
     if not ok or frame is None:
         raise SphynxIOError(f"cannot read frame {index} of {path}")
+
+    # POS_FRAMES is the index of the NEXT frame, so after reading frame N an
+    # honest reader reports N + 1. Tolerance is 0: the demo clip
+    # (Demo/Video/NOF_H01_1D.mp4, H.264, 18006 frames) was measured to land
+    # exactly at frames 0, 1, 50, 500, 5000, 9003 and 18005, so any drift here
+    # is a real mismatch rather than a known codec quirk. If a future clip
+    # turns out to seek inexactly, widen this to a justified number of frames
+    # -- do not remove the check.
+    _SEEK_TOLERANCE_FRAMES = 0
+    landed = int(round(position)) - 1
+    if abs(landed - int(index)) > _SEEK_TOLERANCE_FRAMES:
+        raise SphynxIOError(
+            f"asked {path} for frame {index} but the reader returned frame "
+            f"{landed}; this codec cannot seek exactly, so the frame shown "
+            "would not be the frame named")
     return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

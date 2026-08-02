@@ -83,6 +83,36 @@ def test_the_options_the_engine_reads_survive(tmp_path):
     assert float(options.x_kcorr) == 1.0
 
 
+def test_the_index_and_angle_survive(tmp_path):
+    # S4d review F3: read_preset used to hardcode index=None, angle=None and
+    # throw away what save_preset had just written.
+    path = tmp_path / "preset.mat"
+    zones = [
+        Zone("hole1_real", "area", _mask(10, 16, 10, 16), zone_class="hole",
+             index=3, angle=0.0),
+        Zone("hole2_real", "area", _mask(20, 26, 20, 26), zone_class="hole",
+             index=4, angle=1.25),
+    ]
+    save_preset(zones, _options(), path)
+    back = {str(z.name): z for z in np.atleast_1d(read_preset(path).zones)}
+    assert int(back["hole1_real"].index) == 3
+    assert int(back["hole2_real"].index) == 4
+    # 0.0 is a legitimate angle (the hole at 3 o'clock); it must not read as
+    # "not set".
+    assert back["hole1_real"].angle == 0.0
+    assert back["hole1_real"].angle is not None
+    assert back["hole2_real"].angle == pytest.approx(1.25)
+
+
+def test_an_unset_index_and_angle_come_back_as_none(tmp_path):
+    path = tmp_path / "preset.mat"
+    save_preset([Zone("arena", "area", _mask(5, 55, 5, 55), zone_class="arena")],
+                _options(), path)
+    arena = np.atleast_1d(read_preset(path).zones)[0]
+    assert arena.index is None          # NaN in the file means "not set"
+    assert arena.angle is None
+
+
 def test_saving_no_zones_raises(tmp_path):
     with pytest.raises(SphynxIOError):
         save_preset([], _options(), tmp_path / "empty.mat")
