@@ -91,3 +91,68 @@ def test_loading_a_missing_settings_file_raises(tmp_path, qtbot):
     state = AppState()
     with pytest.raises(SphynxIOError):
         state.load_settings(tmp_path / "nope.toml")
+
+
+# --- the project owns the settings that used to be duplicated (S4f) --------
+
+def test_setting_the_paradigm_writes_it_to_the_project():
+    state = AppState()
+    state.paradigm = "EOF"
+    assert state.project.paradigm == "EOF"
+
+
+def test_setting_the_paradigm_marks_the_project_unsaved():
+    state = AppState()
+    assert not state.project_dirty
+    state.paradigm = "Barnes"
+    assert state.project_dirty
+
+
+def test_setting_the_same_paradigm_changes_nothing():
+    state = AppState()
+    state.paradigm = "EOF"
+    state.clear_project_dirty()
+    state.paradigm = "EOF"
+    assert not state.project_dirty
+
+
+def test_the_library_path_lives_on_the_project_too():
+    state = AppState()
+    state.library_path = "D:/acts.json"
+    assert state.project.library_path == "D:/acts.json"
+    assert state.project_dirty
+
+
+def test_loading_a_project_clears_the_unsaved_mark():
+    from sphynx.project import Project
+
+    state = AppState()
+    state.paradigm = "EOF"
+    assert state.project_dirty
+    state.project = Project(name="fresh", paradigm="OF")
+    assert not state.project_dirty
+    assert state.paradigm == "OF"
+
+
+def test_the_session_paths_are_not_project_settings():
+    # Which DLC file is open is a choice about right now, not a property of
+    # the project, so it must not mark the project unsaved.
+    state = AppState()
+    state.dlc_path = "D:/one.csv"
+    state.preset_path = "D:/one.mat"
+    assert not state.project_dirty
+
+
+def test_a_project_folder_is_empty_without_a_project(tmp_path):
+    state = AppState()
+    assert state.project_folder("temp") == ""
+
+
+def test_a_project_folder_follows_the_root(tmp_path):
+    from pathlib import Path
+    from sphynx.project import Project
+
+    state = AppState()
+    state.project = Project(root=str(tmp_path))
+    assert state.project_folder("temp") == str(Path(tmp_path) / "temp")
+    assert state.project_folder("presets") == str(Path(tmp_path) / "presets")

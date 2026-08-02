@@ -17,6 +17,7 @@ from PySide6.QtCore import QObject, Signal
 from sphynx.acts.library_io import ActLibrary
 from sphynx.config import Config
 from sphynx.project import Project
+from sphynx.project.model import folder
 from sphynx.exceptions import SphynxIOError
 
 
@@ -26,6 +27,7 @@ class AppState(QObject):
     result_changed = Signal()
     library_changed = Signal()
     project_changed = Signal()
+    project_dirty_changed = Signal()
     batch_changed = Signal()
 
     def __init__(self, parent=None):
@@ -33,10 +35,10 @@ class AppState(QObject):
         self._dlc_path = ""
         self._preset_path = ""
         self._out_dir = ""
-        self._paradigm = "OF"
         self._result = None
         self._library = ActLibrary()
         self._project = Project()
+        self._project_dirty = False
         self._batch = None
         self._config = Config.default()
         self.end_frame = 0
@@ -76,17 +78,55 @@ class AppState(QObject):
             self._out_dir = value
             self.paths_changed.emit()
 
-    # --- paradigm ---
+    # --- settings the project owns ---
+    # These used to be fields here as well as on the project, so the same
+    # setting had two values and which one reached the analysis depended on
+    # which tab started it. The project is the only copy now.
     @property
     def paradigm(self) -> str:
-        return self._paradigm
+        return self._project.paradigm
 
     @paradigm.setter
     def paradigm(self, value: str) -> None:
         value = str(value or "")
-        if value != self._paradigm:
-            self._paradigm = value
+        if value != self._project.paradigm:
+            self._project.paradigm = value
+            self.mark_project_dirty()
             self.paradigm_changed.emit()
+
+    @property
+    def library_path(self) -> str:
+        return self._project.library_path
+
+    @library_path.setter
+    def library_path(self, value: str) -> None:
+        value = str(value or "")
+        if value != self._project.library_path:
+            self._project.library_path = value
+            self.mark_project_dirty()
+            self.library_changed.emit()
+
+    def project_folder(self, which: str) -> str:
+        """One of the project's folders, or "" when there is no project.
+
+        Empty is a state the tabs handle: without a project they behave as
+        they did before, starting their dialogs wherever the OS last was."""
+        return folder(self._project, which)
+
+    # --- unsaved changes ---
+    @property
+    def project_dirty(self) -> bool:
+        return self._project_dirty
+
+    def mark_project_dirty(self) -> None:
+        if not self._project_dirty:
+            self._project_dirty = True
+            self.project_dirty_changed.emit()
+
+    def clear_project_dirty(self) -> None:
+        if self._project_dirty:
+            self._project_dirty = False
+            self.project_dirty_changed.emit()
 
     # --- result ---
     @property
@@ -114,7 +154,11 @@ class AppState(QObject):
     @project.setter
     def project(self, value) -> None:
         self._project = value if value is not None else Project()
+        # A project that has just been loaded or created matches its file.
+        self.clear_project_dirty()
         self.project_changed.emit()
+        self.paradigm_changed.emit()
+        self.library_changed.emit()
 
     @property
     def batch(self):
@@ -141,7 +185,7 @@ class AppState(QObject):
         data = {
             "paths": {"dlc": self._dlc_path, "preset": self._preset_path,
                       "out_dir": self._out_dir},
-            "analysis": {"paradigm": self._paradigm,
+            "analysis": {"paradigm": self.paradigm,
                          "end_frame": int(self.end_frame or 0),
                          "heatmap_bin_cm": float(self.heatmap_bin_cm)},
         }
