@@ -12,6 +12,7 @@ from pathlib import Path
 
 from sphynx.exceptions import SphynxIOError
 from sphynx.project.model import DEFAULT_PATTERN, ProjectSession
+from sphynx.project.paths import store_path
 
 
 # DeepLabCut writes "<video>DLC_<network>_<project><date>shuffle<n>_<iters>.csv"
@@ -53,8 +54,12 @@ def session_is_parsed(session) -> bool:
     return bool(session.metadata)
 
 
-def scan_folder(root, pattern: str = DEFAULT_PATTERN, existing=None) -> list:
-    """Sessions for every csv under `root`, merged with the ones already known."""
+def scan_folder(root, pattern: str = DEFAULT_PATTERN, existing=None,
+                project_root=None) -> list:
+    """Sessions for every csv under `root`, merged with the ones already known.
+
+    `project_root` makes the stored dlc paths relative to the project folder
+    where they sit under it, so a scanned project can still be moved."""
     folder = Path(root)
     if not folder.is_dir():
         raise SphynxIOError(f"folder not found: {folder}")
@@ -66,9 +71,12 @@ def scan_folder(root, pattern: str = DEFAULT_PATTERN, existing=None) -> list:
     known = {s.name: s for s in (existing or [])}
     order = [s.name for s in (existing or [])]
 
+    def stored(path) -> str:
+        return store_path(path, project_root) if project_root else str(path)
+
     seen_paths = {s.dlc_path for s in (existing or []) if s.dlc_path}
     for path in sorted(folder.rglob("*.csv")):
-        if str(path) in seen_paths:
+        if stored(path) in seen_paths or str(path) in seen_paths:
             continue          # already in the project, possibly hand-edited
         name = session_name_from_file(path.stem)
         if name in known:
@@ -82,7 +90,7 @@ def scan_folder(root, pattern: str = DEFAULT_PATTERN, existing=None) -> list:
                 name = f"{path.parent.name}/{base} ({suffix})"
                 suffix += 1
         known[name] = ProjectSession(
-            name=name, dlc_path=str(path),
+            name=name, dlc_path=stored(path),
             metadata=parse_session_name(session_name_from_file(path.stem),
                                         pattern))
         order.append(name)

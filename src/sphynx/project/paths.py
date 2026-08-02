@@ -47,11 +47,15 @@ def store_path(path, root) -> str:
 
 
 def resolve_path(stored, root) -> str:
-    """The absolute path a stored one refers to."""
+    """The absolute path a stored one refers to.
+
+    Without a root the stored value is returned unchanged: resolving it
+    against the working directory would invent a location the project never
+    named, and the caller would not be able to tell that it was invented."""
     if not stored:
         return ""
     path = Path(stored)
-    if path.is_absolute():
+    if path.is_absolute() or not root:
         return str(path)
     return str(_root(root) / path)
 
