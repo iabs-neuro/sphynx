@@ -18,7 +18,7 @@ def test_four_tabs_are_placeholders_naming_their_slice(qtbot):
     qtbot.addWidget(window)
     placeholders = [window.tabs.widget(i) for i in range(window.tabs.count())
                     if isinstance(window.tabs.widget(i), PlaceholderTab)]
-    assert len(placeholders) == 2
+    assert len(placeholders) == 1
     for tab in placeholders:
         assert tab.slice_name.startswith("S4")
 
@@ -60,7 +60,7 @@ def test_four_tabs_remain_placeholders(qtbot):
     qtbot.addWidget(window)
     placeholders = [window.tabs.widget(i) for i in range(window.tabs.count())
                     if isinstance(window.tabs.widget(i), PlaceholderTab)]
-    assert len(placeholders) == 2
+    assert len(placeholders) == 1
 
 
 def test_batch_tab_is_live(qtbot):
@@ -79,3 +79,21 @@ def test_output_tab_is_live(qtbot):
     qtbot.addWidget(window)
     assert isinstance(window.output_tab, OutputTab)
     assert window.output_tab.state is window.state
+
+
+def test_create_preset_tab_is_live(qtbot):
+    from sphynx_gui.preset_tab import PresetTab
+
+    window = MainWindow()
+    qtbot.addWidget(window)
+    assert isinstance(window.preset_tab, PresetTab)
+    assert window.preset_tab.state is window.state
+    assert window.tabs.indexOf(window.preset_tab) == 0
+
+
+def test_only_preprocess_is_still_a_placeholder(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    left = [window.tabs.tabText(i) for i in range(window.tabs.count())
+            if isinstance(window.tabs.widget(i), PlaceholderTab)]
+    assert left == ["Preprocess Tracking"]

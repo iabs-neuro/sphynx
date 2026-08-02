@@ -9,6 +9,7 @@ from sphynx_gui.analyze_tab import AnalyzeTab
 from sphynx_gui.batch_tab import BatchTab
 from sphynx_gui.output_tab import OutputTab
 from sphynx_gui.placeholder_tab import PlaceholderTab
+from sphynx_gui.preset_tab import PresetTab
 from sphynx_gui.state import AppState
 
 TAB_TITLES = (
@@ -17,7 +18,6 @@ TAB_TITLES = (
 )
 
 _PLACEHOLDERS = {
-    "Create Preset": ("S4d", "Draw zones, mark roles, calibrate, set the arena centre."),
     "Preprocess Tracking": ("S4e", "Per-body-part cleaning, interpolation and smoothing."),
 }
 
@@ -33,9 +33,12 @@ class MainWindow(QMainWindow):
         self.acts_tab = ActsTab(self.state)
         self.batch_tab = BatchTab(self.state)
         self.output_tab = OutputTab(self.state)
+        self.preset_tab = PresetTab(self.state)
 
         for title in TAB_TITLES:
-            if title == "Analyze Session":
+            if title == "Create Preset":
+                self.tabs.addTab(self.preset_tab, title)
+            elif title == "Analyze Session":
                 self.tabs.addTab(self.analyze_tab, title)
             elif title == "Define Acts":
                 self.tabs.addTab(self.acts_tab, title)
