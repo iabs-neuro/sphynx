@@ -116,24 +116,46 @@ class AnalyzeTab(QWidget):
         self.heatmap_bin_box.valueChanged.connect(self._on_heatmap_bin)
         self.run_button.clicked.connect(self.controller.run)
         self.state.paths_changed.connect(self._refresh_paths)
+        self.state.project_changed.connect(self._on_project)
+        self._on_project()
+
+    def _on_project(self) -> None:
+        """Point a single run at the newly opened project's temp folder.
+
+        Opening a project is an explicit act, so following it is expected; the
+        folder stays editable afterwards."""
+        temp = self.default_out_dir()
+        if temp:
+            self.state.out_dir = temp
 
     # --- slots ---
     def _pick_dlc(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Choose DLC csv", "",
-                                              "CSV files (*.csv)")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choose DLC csv", self.state.project_folder("tracking"),
+            "CSV files (*.csv)")
         if path:
             self.state.dlc_path = path
 
     def _pick_preset(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Choose preset", "",
-                                              "MAT files (*.mat)")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choose preset", self.state.project_folder("presets"),
+            "MAT files (*.mat)")
         if path:
             self.state.preset_path = path
 
     def _pick_out_dir(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Choose output directory")
+        path = QFileDialog.getExistingDirectory(
+            self, "Choose output directory", self.default_out_dir())
         if path:
             self.state.out_dir = path
+
+    def default_out_dir(self) -> str:
+        """Where a single run writes: temp/, not the results folder.
+
+        A run here is setup -- pick the preset, the paradigm and the acts on
+        one session. Batch re-analyses that same session for real, and mixing
+        the two makes it impossible to tell later which numbers were final."""
+        return self.state.project_folder("temp")
 
     def _on_paradigm(self, name: str) -> None:
         self.state.paradigm = name

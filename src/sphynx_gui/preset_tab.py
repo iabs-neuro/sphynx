@@ -272,7 +272,8 @@ class PresetTab(QWidget):
 
     def _pick_video(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open video", "", "Video files (*.mp4 *.avi *.mov *.mkv)")
+            self, "Open video", self.state.project_folder("raw_videos"),
+            "Video files (*.mp4 *.avi *.mov *.mkv)")
         if path:
             self.controller.open_video(path)
 
@@ -304,6 +305,7 @@ class PresetTab(QWidget):
 
     def _pick_save(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save preset", "", "Preset files (*.mat)")
+            self, "Save preset", self.state.project_folder("presets"),
+            "Preset files (*.mat)")
         if path:
             self.controller.save(path)

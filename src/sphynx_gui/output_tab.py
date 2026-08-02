@@ -139,11 +139,14 @@ class OutputTab(QWidget):
         self.controller.preview()
 
     def _pick_export(self, fmt: str) -> None:
+        # The final table belongs in the project root, beside project.json,
+        # not in one of the working folders.
+        start = self.state.project.root or ""
         if fmt == "excel":
-            path, _ = QFileDialog.getSaveFileName(self, "Export Excel", "",
+            path, _ = QFileDialog.getSaveFileName(self, "Export Excel", start,
                                                   "Excel files (*.xlsx)")
         else:
-            path, _ = QFileDialog.getSaveFileName(self, "Export CSV", "",
+            path, _ = QFileDialog.getSaveFileName(self, "Export CSV", start,
                                                   "CSV files (*.csv)")
         if path:
             self.controller.export(path, fmt)

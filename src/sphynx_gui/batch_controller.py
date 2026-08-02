@@ -76,7 +76,8 @@ class BatchController(QObject):
         project = self.state.project
         try:
             sessions = scan_folder(folder, pattern=project.name_pattern,
-                                   existing=project.sessions)
+                                   existing=project.sessions,
+                                   project_root=project.root or None)
         except SphynxError as e:
             self.tab.set_status(f"Scan failed: {e}")
             return

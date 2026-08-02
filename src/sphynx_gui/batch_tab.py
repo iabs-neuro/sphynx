@@ -26,9 +26,8 @@ class BatchTab(QWidget):
 
     # --- construction -----------------------------------------------------
     def _build_ui(self) -> None:
-        self.new_project_button = QPushButton("New project")
-        self.open_button = QPushButton("Open project...")
-        self.save_button = QPushButton("Save project...")
+        # Creating, opening and saving the project moved to the Project tab in
+        # S4f; what is left here is what a batch does with one.
         self.scan_button = QPushButton("Scan folder...")
         self.assign_preset_button = QPushButton("Preset for selected...")
         self.add_rule_button = QPushButton("Preset for all...")
@@ -36,9 +35,8 @@ class BatchTab(QWidget):
         buttons = QWidget()
         buttons_layout = QHBoxLayout(buttons)
         buttons_layout.setContentsMargins(0, 0, 0, 0)
-        for button in (self.new_project_button, self.open_button,
-                       self.save_button, self.scan_button,
-                       self.assign_preset_button, self.add_rule_button):
+        for button in (self.scan_button, self.assign_preset_button,
+                       self.add_rule_button):
             buttons_layout.addWidget(button)
         buttons_layout.addStretch(1)
 
@@ -82,9 +80,6 @@ class BatchTab(QWidget):
         layout.addWidget(splitter)
 
     def _connect(self) -> None:
-        self.new_project_button.clicked.connect(self._new_project)
-        self.open_button.clicked.connect(self._pick_open)
-        self.save_button.clicked.connect(self._pick_save)
         self.scan_button.clicked.connect(self._pick_scan)
         self.assign_preset_button.clicked.connect(self._pick_preset_for_selected)
         self.add_rule_button.clicked.connect(self._pick_preset_for_all)
@@ -160,37 +155,23 @@ class BatchTab(QWidget):
         if 0 <= row < len(results) and results[row] is not None:
             self.warnings.show_result(results[row])
 
-    def _new_project(self) -> None:
-        from sphynx.project import Project
-
-        self.state.project = Project()
-        self.clear_results()
-
     def _pick_scan(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Scan folder for DLC csv")
+        folder = QFileDialog.getExistingDirectory(
+            self, "Scan folder for DLC csv",
+            self.state.project_folder("tracking"))
         if folder:
             self.controller.scan(folder)
 
     def _pick_preset_for_selected(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Preset for the selected rows",
-                                              "", "MAT files (*.mat)")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Preset for the selected rows",
+            self.state.project_folder("presets"), "MAT files (*.mat)")
         if path:
             self.controller.assign_preset_to_selected(path)
 
     def _pick_preset_for_all(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Preset for every session",
-                                              "", "MAT files (*.mat)")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Preset for every session",
+            self.state.project_folder("presets"), "MAT files (*.mat)")
         if path:
             self.controller.add_preset_rule(path, {})
-
-    def _pick_open(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Open project", "",
-                                              "JSON files (*.json)")
-        if path:
-            self.controller.open_project(path)
-
-    def _pick_save(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Save project", "",
-                                              "JSON files (*.json)")
-        if path:
-            self.controller.save_project(path)
