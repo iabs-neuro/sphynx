@@ -274,13 +274,15 @@ class PresetController(QObject):
         # canvas stores a rectangle and an ellipse as two corners, which
         # cannot carry a rotated or free-form outline without losing it.
         added = []
-        for index, detection in enumerate(found, start=1):
-            name = self._free_name(f"auto{index}")
-            points = [(float(x), float(y))
-                      for x, y in zip(detection.x, detection.y)]
-            self.tab.canvas.add_shape(name, "polygon", points)
-            self.tab.set_shape_role(name, "object", False)
-            added.append(name)
+        with self.tab.canvas.batch():
+            for index, detection in enumerate(found, start=1):
+                name = self._free_name(f"auto{index}")
+                points = [(float(x), float(y))
+                          for x, y in zip(detection.x, detection.y)]
+                self.tab.canvas.add_shape(name, "polygon", points)
+                self.tab.remember_role(name, "object", False)
+                added.append(name)
+        self.tab.refresh_shape_table()
         self.tab.set_status(
             f"Auto-detect proposed {len(added)} object(s) as "
             f"{', '.join(added)}. Check them on the frame, then build the "

@@ -224,3 +224,41 @@ def test_hough_only_applies_to_the_circle_mode():
     # the threshold path rather than silently ignoring the choice.
     found = _detect(mode="free-form", algorithm="hough")
     assert found and all(d.geometry == "Polygon" for d in found)
+
+
+# --- cost ------------------------------------------------------------------
+
+def test_a_full_size_frame_is_handled_in_seconds_not_minutes():
+    # Filling each outline over the WHOLE frame costs the frame area per
+    # detection: on a real 1340x1172 clip with a few dozen blobs that ran for
+    # minutes and the button read as hung. Each blob is now handled inside its
+    # own bounding box. The bound is loose on purpose -- it is a regression
+    # guard against O(frame x detections), not a benchmark.
+    import time
+
+    size = 1200
+    frame, arena = _scene(size=size, objects=())
+    ys, xs = np.mgrid[0:size, 0:size]
+    for cx in range(300, 900, 60):
+        for cy in range(300, 900, 60):
+            frame[((xs - cx) ** 2 + (ys - cy) ** 2) <= 12**2] = 60
+
+    started = time.monotonic()
+    found = detect_objects(frame, arena, pixels_per_cm=PPC,
+                           min_area_cm2=5.0, max_area_cm2=200.0)
+    elapsed = time.monotonic() - started
+    assert len(found) > 50, len(found)
+    assert elapsed < 30.0, f"{len(found)} detections took {elapsed:.1f}s"
+
+
+def test_a_blob_touching_its_own_bounding_box_is_outlined_whole():
+    # Cropped to its bounding box a blob touches all four edges; an unpadded
+    # contour trace comes back open and pulls the mask off the object.
+    frame, arena = _scene(objects=((100, 100, 20),))
+    found = detect_objects(frame, arena, pixels_per_cm=PPC, min_area_cm2=5.0,
+                           max_area_cm2=400.0)
+    assert len(found) == 1
+    ys, xs = np.nonzero(found[0].mask)
+    assert xs.mean() == pytest.approx(100, abs=3)
+    assert ys.mean() == pytest.approx(100, abs=3)
+    assert found[0].area_px == pytest.approx(np.pi * 20**2, rel=0.25)

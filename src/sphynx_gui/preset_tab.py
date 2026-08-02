@@ -305,7 +305,17 @@ class PresetTab(QWidget):
         return out
 
     def set_shape_role(self, name: str, role: str, is_target: bool = False) -> None:
+        self.remember_role(name, role, is_target)
+        self._refresh_table()
+
+    def remember_role(self, name: str, role: str, is_target: bool = False) -> None:
+        """Record a role WITHOUT rebuilding the table.
+
+        Rebuilding it constructs a combo box and a checkbox per row, so doing
+        it once per shape while adding a dozen at a time is quadratic."""
         self._roles[name] = (role, bool(is_target))
+
+    def refresh_shape_table(self) -> None:
         self._refresh_table()
 
     def forget_roles(self) -> None:

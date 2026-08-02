@@ -11,6 +11,7 @@ preprocess orchestrator uses.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -112,6 +113,7 @@ class PresetCanvas(QWidget):
         self._pending_name = None
         self._wanted_points = 0
         self._click_cid = None
+        self._batching = False
 
         self.figure = Figure(figsize=(6.0, 4.5), layout="constrained")
         self.axes = self.figure.add_subplot(111)
@@ -274,7 +276,24 @@ class PresetCanvas(QWidget):
         return shape_mask(shape, int(height), int(width))
 
     # --- drawing ----------------------------------------------------------
+    @contextmanager
+    def batch(self):
+        """Draw once at the end instead of once per shape.
+
+        Every redraw re-imshows the whole frame, which on a 1340x1172 clip is
+        far from free. Adding a dozen auto-detected objects one at a time cost
+        a dozen full redraws and read as a hang."""
+        previous, self._batching = self._batching, True
+        try:
+            yield self
+        finally:
+            self._batching = previous
+            if not self._batching:
+                self._redraw()
+
     def _redraw(self) -> None:
+        if self._batching:
+            return
         self.axes.clear()
         self.axes.set_axis_off()
         if self._frame is not None:

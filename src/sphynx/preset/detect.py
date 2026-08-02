@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from scipy.ndimage import (
-    binary_erosion, binary_opening, label, uniform_filter,
+    binary_opening, distance_transform_edt, find_objects, label, uniform_filter,
 )
 
 from sphynx.exceptions import SphynxValueError
@@ -91,22 +91,40 @@ def local_threshold(gray, sensitivity: float, neighborhood_px: int = 0):
     return np.clip(local_mean * (1.0 + (sensitivity - 0.5)), 0.0, 1.0)
 
 
+def _perimeter(bx, by) -> float:
+    return float(np.hypot(np.diff(bx), np.diff(by)).sum())
+
+
 def _outline_of_component(component, mode, stats):
     """The requested outline for one connected component."""
     from skimage.measure import approximate_polygon, find_contours
 
-    contours = find_contours(component.astype(float), 0.5)
+    # A blob cropped to its own bounding box touches all four edges, and a
+    # contour that runs off the array is returned open -- it would trace only
+    # part of the outline and pull the filled mask off the object. One ring of
+    # background around it keeps every contour closed.
+    padded = np.pad(component.astype(float), 1)
+    contours = find_contours(padded, 0.5)
     if not contours:
         return None
     # find_contours returns (row, col); the canvas speaks (x, y).
     contour = max(contours, key=len)
-    bx, by = contour[:, 1], contour[:, 0]
+    bx, by = contour[:, 1] - 1.0, contour[:, 0] - 1.0
 
     if mode in ("free-form", "all-polygons"):
-        if mode == "all-polygons":
-            reduced = approximate_polygon(np.column_stack([bx, by]), 0.02)
-            if len(reduced) >= 3:
-                bx, by = reduced[:, 0], reduced[:, 1]
+        # A traced outline at full resolution has thousands of vertices. Both
+        # filling it (cost = pixels x vertices) and storing it as a canvas
+        # polygon then cost far more than the shape is worth -- one real frame
+        # spent 50 s in a single fill. MATLAB does not pay this because imfill
+        # rasterises in linear time whatever the vertex count.
+        #
+        # 'all-polygons' asks for a deliberately coarse outline, as there;
+        # 'free-form' is simplified only to within a pixel, which no one can
+        # see and which leaves the shape editable.
+        tolerance = 0.02 * _perimeter(bx, by) if mode == "all-polygons" else 1.0
+        reduced = approximate_polygon(np.column_stack([bx, by]), tolerance)
+        if len(reduced) >= 3:
+            bx, by = reduced[:, 0], reduced[:, 1]
         return "Polygon", bx, by
     if mode == "all-circles":
         try:
@@ -126,14 +144,29 @@ def _outline_of_component(component, mode, stats):
 
 
 def _mask_from_outline(bx, by, height, width) -> np.ndarray:
+    """Fill an outline into a full-frame mask.
+
+    Only the outline's own bounding box is rasterized. Testing every pixel of
+    the frame instead costs the full frame area PER detection -- on a 1340x1172
+    clip with a few dozen blobs that is minutes, and the button reads as
+    hung."""
     from matplotlib.path import Path as MplPath
 
+    mask = np.zeros((height, width), dtype=bool)
     if len(bx) < 3:
-        return np.zeros((height, width), dtype=bool)
-    grid_y, grid_x = np.mgrid[0:height, 0:width]
+        return mask
+    x0 = max(int(np.floor(np.min(bx))), 0)
+    x1 = min(int(np.ceil(np.max(bx))) + 1, width)
+    y0 = max(int(np.floor(np.min(by))), 0)
+    y1 = min(int(np.ceil(np.max(by))) + 1, height)
+    if x1 <= x0 or y1 <= y0:
+        return mask                     # entirely off the frame
+
+    grid_y, grid_x = np.mgrid[y0:y1, x0:x1]
     points = np.column_stack([grid_x.ravel(), grid_y.ravel()])
     inside = MplPath(np.column_stack([bx, by])).contains_points(points)
-    return inside.reshape(height, width)
+    mask[y0:y1, x0:x1] = inside.reshape(y1 - y0, x1 - x0)
+    return mask
 
 
 def _area_bounds(min_area_cm2, max_area_cm2, pixels_per_cm, arena_area):
@@ -221,8 +254,12 @@ def detect_objects(frame, arena_mask, pixels_per_cm, mode: str = "free-form",
         return _detect_hough(gray, arena, radius_px, sensitivity, bounds)
 
     # Shrink the arena by ~1 cm so a darkened boundary ring is not returned
-    # as a blob hugging the wall.
-    eroded = binary_erosion(arena, _disk(max(3, int(round(pixels_per_cm)))))
+    # as a blob hugging the wall. Eroding with a disk structuring element is
+    # what MATLAB writes, but at 22 px/cm that is a 45x45 element over a
+    # 1.6-megapixel frame and it dominates the whole call; the distance
+    # transform gives the same set of pixels in one linear pass.
+    erosion_px = max(3.0, float(pixels_per_cm))
+    eroded = distance_transform_edt(arena) > erosion_px
     if not eroded.any():
         eroded = arena          # arena too small to erode; use it as drawn
 
@@ -243,24 +280,32 @@ def detect_objects(frame, arena_mask, pixels_per_cm, mode: str = "free-form",
     labels, count = label(blobs)
     lowest, highest = bounds
     height, width = arena.shape
+    # Each blob is handled inside its own bounding box. Materialising a
+    # full-frame mask per component instead makes every step cost the whole
+    # frame, however small the object.
+    boxes = find_objects(labels)
     out = []
-    for index in range(1, count + 1):
-        component = labels == index
-        area = int(component.sum())
+    for index, box in enumerate(boxes, start=1):
+        if box is None:
+            continue
+        local = labels[box] == index
+        area = int(local.sum())
         if area < lowest or area > highest:
             continue
-        ys, xs = np.nonzero(component)
-        cx, cy = xs.mean(), ys.mean()
+        top, left = box[0].start, box[1].start
+        ys, xs = np.nonzero(local)
+        cx, cy = xs.mean() + left, ys.mean() + top
         row = int(np.clip(round(cy), 0, height - 1))
         column = int(np.clip(round(cx), 0, width - 1))
         if not arena[row, column]:
             continue
 
-        outline = _outline_of_component(component, mode,
-                                        _shape_stats(component, cx, cy))
+        outline = _outline_of_component(
+            local, mode, _shape_stats(local, cx - left, cy - top))
         if outline is None:
             continue
         geometry, bx, by = outline
+        bx, by = np.asarray(bx) + left, np.asarray(by) + top
         mask = _mask_from_outline(bx, by, height, width)
         if not mask.any():
             continue
