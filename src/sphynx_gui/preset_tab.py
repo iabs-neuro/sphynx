@@ -53,6 +53,12 @@ class PresetTab(QWidget):
         self.pixels_per_cm_box.setDecimals(4)
         self.pixels_per_cm_box.setValue(0.0)
 
+        self.wall_width_box = QDoubleSpinBox()
+        self.wall_width_box.setRange(0.0, 100.0)
+        self.wall_width_box.setDecimals(2)
+        self.wall_width_box.setSingleStep(0.5)
+        self.wall_width_box.setValue(3.0)
+
         self.ring_width_box = QDoubleSpinBox()
         self.ring_width_box.setRange(0.0, 100.0)
         self.ring_width_box.setDecimals(2)
@@ -92,6 +98,7 @@ class PresetTab(QWidget):
         form_layout.addRow("Pixels per cm", self.pixels_per_cm_box)
         form_layout.addRow(self.calibrate_button)
         form_layout.addRow("Ring width, cm", self.ring_width_box)
+        form_layout.addRow("Wall band, cm", self.wall_width_box)
 
         draw_row = QWidget()
         draw_layout = QHBoxLayout(draw_row)
@@ -155,6 +162,11 @@ class PresetTab(QWidget):
 
     def set_shape_role(self, name: str, role: str, is_target: bool = False) -> None:
         self._roles[name] = (role, bool(is_target))
+        self._refresh_table()
+
+    def forget_roles(self) -> None:
+        """Drop every remembered role; used when the shapes themselves go."""
+        self._roles = {}
         self._refresh_table()
 
     def remove_selected_shape(self, name: str) -> None:

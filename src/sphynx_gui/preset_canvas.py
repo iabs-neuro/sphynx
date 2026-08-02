@@ -121,6 +121,9 @@ class PresetCanvas(QWidget):
                 f"a frame is a 2-D or 3-D image; got shape {frame.shape}")
         self._frame = frame
         self.frame_shape = (int(frame.shape[0]), int(frame.shape[1]))
+        # A selector armed on the old axes would keep drawing onto artists
+        # that _redraw is about to throw away.
+        self.cancel_shape()
         self._redraw()
 
     # --- tools ------------------------------------------------------------
@@ -193,11 +196,13 @@ class PresetCanvas(QWidget):
         self.shapes = [s for s in self.shapes if s.name != name]
         removed = len(self.shapes) != before
         if removed:
+            self.cancel_shape()
             self._redraw()
         return removed
 
     def clear_shapes(self) -> None:
         self.shapes = []
+        self.cancel_shape()
         self._redraw()
 
     def mask_for(self, shape, height: int, width: int) -> np.ndarray:

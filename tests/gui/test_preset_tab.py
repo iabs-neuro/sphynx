@@ -259,3 +259,140 @@ def test_a_removed_shape_leaves_no_zone(qtbot):
     tab.controller.build_zones()
     classes = [z.zone_class for z in tab.controller.zones]
     assert classes.count("object") == 1
+
+
+# --- S4d slice-review regressions -----------------------------------------
+
+def test_recalibrating_without_rebuilding_refuses_to_save(qtbot, tmp_path):
+    # C2: options were read at save time and masks at build time, so a
+    # rebuild-free recalibration shipped a pxl2sm the masks were not built for
+    # -- a ring labelled 2.5 cm that is physically half that.
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.controller.build_zones()
+    tab.pixels_per_cm_box.setValue(8.0)
+    tab.controller.save(tmp_path / "stale.mat")
+    assert not (tmp_path / "stale.mat").exists()
+    assert "rebuild" in tab.status_label.text().lower()
+
+
+def test_the_saved_options_are_the_ones_the_masks_were_built_for(qtbot, tmp_path):
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.controller.build_zones()
+    target = tmp_path / "ok.mat"
+    tab.controller.save(target)
+    preset = read_preset(target)
+    assert float(preset.options.pxl2sm) == pytest.approx(4.0)
+
+
+def test_a_new_frame_of_another_size_drops_the_shapes(qtbot):
+    # I3: shapes survived in old pixel coordinates, so an arena covering most
+    # of a small frame became a corner patch on a larger one, silently.
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.controller.use_frame(np.zeros((240, 320, 3), dtype=np.uint8))
+    assert tab.canvas.shapes == []
+    assert "size" in tab.status_label.text().lower()
+
+
+def test_a_new_frame_of_the_same_size_keeps_the_shapes(qtbot):
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.controller.use_frame(np.zeros((120, 160, 3), dtype=np.uint8))
+    assert [s.name for s in tab.canvas.shapes] == ["arena", "object1", "object2"]
+
+
+def test_saving_without_a_frame_rate_is_refused(qtbot, tmp_path):
+    # I4: an unreadable FPS silently wrote FrameRate = 30.0.
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.frame_rate_box.setValue(0.0)
+    tab.controller.build_zones()
+    tab.controller.save(tmp_path / "nofps.mat")
+    assert not (tmp_path / "nofps.mat").exists()
+    assert "frame rate" in tab.status_label.text().lower()
+
+
+def test_the_wall_width_is_one_number_for_both_arena_shapes(qtbot):
+    # I6: 3 cm for a rectangle and 10 cm for an ellipse, hardcoded, so the same
+    # arena gave a 19.5% or a 57.5% border band depending on the drawing tool.
+    tab = _tab(qtbot)
+    assert tab.wall_width_box.value() == pytest.approx(3.0)
+
+
+def test_a_wider_wall_gives_a_wider_band(qtbot):
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.controller.build_zones()
+    narrow = sum(int(z.maskfilled.sum()) for z in tab.controller.zones
+                 if z.zone_class in ("wall", "corner"))
+    tab.wall_width_box.setValue(6.0)
+    tab.controller.build_zones()
+    wide = sum(int(z.maskfilled.sum()) for z in tab.controller.zones
+               if z.zone_class in ("wall", "corner"))
+    assert wide > narrow
+
+
+def test_the_wall_width_reaches_the_saved_options(qtbot, tmp_path):
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.wall_width_box.setValue(4.0)
+    tab.controller.build_zones()
+    target = tmp_path / "w.mat"
+    tab.controller.save(target)
+    assert float(read_preset(target).options.WallWidthCm) == pytest.approx(4.0)
+
+
+def test_a_shape_marked_wall_becomes_a_wall_zone(qtbot):
+    # I7: roles offered in the UI were silently dropped -- no zone, no note.
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.canvas.add_shape("nest", "rectangle", [(15, 90), (35, 105)])
+    tab.set_shape_role("nest", "corner", False)
+    tab.controller.build_zones()
+    named = [z for z in tab.controller.zones if z.name == "nest"]
+    assert len(named) == 1
+    assert named[0].zone_class == "corner"
+
+
+def test_a_polygon_arena_says_its_corners_were_not_derived(qtbot):
+    # I8: every polygon vertex was fed to classify_square as a corner seed, so
+    # a 12-gon turned half its border band into "corner".
+    tab = _tab(qtbot)
+    tab.canvas.add_shape("arena", "polygon",
+                         [(20, 20), (140, 20), (140, 100), (20, 100)])
+    tab.set_shape_role("arena", "arena", False)
+    tab.pixels_per_cm_box.setValue(4.0)
+    tab.controller.build_zones()
+    text = " ".join(str(r) for r in tab.warnings.rows).lower()
+    assert "corner" in text
+    assert "corner" not in {z.zone_class for z in tab.controller.zones}
+
+
+def test_an_object_drawn_off_the_frame_is_reported(qtbot):
+    # C1 (engine) seen from the tab: an empty mask must not become a zone.
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.canvas.add_shape("object3", "rectangle", [(400, 400), (450, 450)])
+    tab.set_shape_role("object3", "object", False)
+    tab.controller.build_zones()
+    assert tab.controller.zones == []
+    assert "object3" in tab.status_label.text()
+
+
+def test_a_barnes_preset_with_one_target_validates_clean(qtbot):
+    # I5 seen from the tab: one target hole yields three target zones, and the
+    # "exactly one target" rule used to count all three.
+    tab = _tab(qtbot, paradigm="Barnes")
+    tab.canvas.add_shape("arena", "rectangle", [(10, 10), (150, 110)])
+    tab.set_shape_role("arena", "arena", False)
+    for index, (x, y) in enumerate([(40, 40), (100, 40), (70, 90)], start=1):
+        tab.canvas.add_shape(f"hole{index}", "ellipse",
+                             [(x, y), (x + 10, y + 10)])
+        tab.set_shape_role(f"hole{index}", "hole", index == 1)
+    tab.pixels_per_cm_box.setValue(4.0)
+    tab.controller.build_zones()
+    tab.controller.validate()
+    errors = [r for r in tab.warnings.rows if r[1] == "error"]
+    assert errors == [], errors
