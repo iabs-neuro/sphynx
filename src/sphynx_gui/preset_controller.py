@@ -18,6 +18,7 @@ from sphynx.io.preset_write import options_struct, save_preset
 from sphynx.io.video import read_frame, video_info
 from sphynx.paradigms import resolve_paradigm, validate_paradigm
 from sphynx.preset.calibration import calibrate, points_needed
+from sphynx.preset.detect import detect_objects as detect
 from sphynx.preset.objects import build_object_zones
 from sphynx.zones import (
     Zone, ZoneRoles, assign_zone_angles, classify_circle,
@@ -221,6 +222,78 @@ class PresetController(QObject):
     def x_kcorr(self) -> float:
         active = self._active_calibration()
         return 1.0 if active is None else float(active.x_kcorr)
+
+    # --- automatic detection ----------------------------------------------
+    def detect_objects(self) -> None:
+        """Propose the objects inside the arena as ordinary drawn shapes.
+
+        The detections are added to the canvas, not to the preset: the
+        experimenter sees each one, and deletes or redraws what is wrong,
+        before any zone is built from it."""
+        if self.frame is None:
+            self.tab.set_status("Open a video or load a frame first.")
+            return
+        roles = self.tab.shape_roles()
+        arenas = [s for s in self.tab.canvas.shapes
+                  if roles.get(s.name, ("", False))[0] == "arena"]
+        if len(arenas) != 1:
+            self.tab.set_status(
+                f"Auto-detect needs exactly one shape marked as the arena to "
+                f"search inside; {len(arenas)} are.")
+            return
+        pixels_per_cm = float(self.tab.pixels_per_cm_box.value())
+        if pixels_per_cm <= 0:
+            self.tab.set_status(
+                "Calibrate first: the area filters are in square centimetres.")
+            return
+
+        height, width = int(self.frame.shape[0]), int(self.frame.shape[1])
+        arena_mask = self.tab.canvas.mask_for(arenas[0], height, width)
+        try:
+            found = detect(
+                self.frame, arena_mask, pixels_per_cm=pixels_per_cm,
+                mode=self.tab.detect_mode_box.currentText(),
+                algorithm=self.tab.detect_algorithm_box.currentText(),
+                sensitivity=float(self.tab.sensitivity_box.value()),
+                min_area_cm2=float(self.tab.min_area_box.value()),
+                max_area_cm2=float(self.tab.max_area_box.value()),
+                neighborhood_cm=float(self.tab.neighborhood_box.value()),
+                radius_range_cm=(float(self.tab.radius_min_box.value()),
+                                 float(self.tab.radius_max_box.value())))
+        except SphynxError as e:
+            self.tab.set_status(str(e))
+            return
+
+        if not found:
+            self.tab.set_status(
+                "Auto-detect found nothing inside the arena. Try a higher "
+                "sensitivity, or a wider area range.")
+            return
+
+        # Detections become polygons whatever shape they were fitted as: the
+        # canvas stores a rectangle and an ellipse as two corners, which
+        # cannot carry a rotated or free-form outline without losing it.
+        added = []
+        for index, detection in enumerate(found, start=1):
+            name = self._free_name(f"auto{index}")
+            points = [(float(x), float(y))
+                      for x, y in zip(detection.x, detection.y)]
+            self.tab.canvas.add_shape(name, "polygon", points)
+            self.tab.set_shape_role(name, "object", False)
+            added.append(name)
+        self.tab.set_status(
+            f"Auto-detect proposed {len(added)} object(s) as "
+            f"{', '.join(added)}. Check them on the frame, then build the "
+            "zones; delete or redraw anything wrong first.")
+
+    def _free_name(self, base: str) -> str:
+        taken = {s.name for s in self.tab.canvas.shapes}
+        if base not in taken:
+            return base
+        suffix = 2
+        while f"{base}_{suffix}" in taken:
+            suffix += 1
+        return f"{base}_{suffix}"
 
     # --- zones ------------------------------------------------------------
     def build_zones(self) -> None:

@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 
 from sphynx.paradigms import PARADIGMS, register_builtin_paradigms
 from sphynx.preset.calibration import MODES as CALIBRATION_MODES
+from sphynx.preset.detect import ALGORITHMS as DETECT_ALGORITHMS
+from sphynx.preset.detect import MODES as DETECT_MODES
 from sphynx_gui.preset_canvas import KINDS, PresetCanvas
 from sphynx_gui.preset_controller import (
     AUTO_STRATEGY, STRATEGY_FIELDS, ZONE_STRATEGIES, PresetController,
@@ -111,6 +113,32 @@ class PresetTab(QWidget):
         self.strip_direction_box = QComboBox()
         self.strip_direction_box.addItems(("horizontal", "vertical"))
 
+        self.detect_mode_box = QComboBox()
+        self.detect_mode_box.addItems(DETECT_MODES)
+        self.detect_algorithm_box = QComboBox()
+        self.detect_algorithm_box.addItems(DETECT_ALGORITHMS)
+        self.sensitivity_box = QDoubleSpinBox()
+        self.sensitivity_box.setRange(0.0, 1.0)
+        self.sensitivity_box.setSingleStep(0.05)
+        self.sensitivity_box.setDecimals(2)
+        self.sensitivity_box.setValue(0.75)
+        self.min_area_box = QDoubleSpinBox()
+        self.min_area_box.setRange(0.0, 100_000.0)
+        self.min_area_box.setValue(1.0)
+        self.max_area_box = QDoubleSpinBox()
+        self.max_area_box.setRange(0.1, 100_000.0)
+        self.max_area_box.setValue(200.0)
+        self.neighborhood_box = QDoubleSpinBox()
+        self.neighborhood_box.setRange(0.0, 1000.0)
+        self.neighborhood_box.setValue(0.0)      # 0 = the default neighbourhood
+        self.radius_min_box = QDoubleSpinBox()
+        self.radius_min_box.setRange(0.1, 1000.0)
+        self.radius_min_box.setValue(1.0)
+        self.radius_max_box = QDoubleSpinBox()
+        self.radius_max_box.setRange(0.2, 1000.0)
+        self.radius_max_box.setValue(10.0)
+        self.detect_button = QPushButton("Auto-detect objects")
+
         self.tool_box = QComboBox()
         self.tool_box.addItems(KINDS)
         self.draw_button = QPushButton("Draw shape...")
@@ -195,9 +223,36 @@ class PresetTab(QWidget):
         left_layout.addWidget(self.canvas, 1)
 
         right = QWidget()
+        area_row = QWidget()
+        area_layout = QHBoxLayout(area_row)
+        area_layout.setContentsMargins(0, 0, 0, 0)
+        area_layout.addWidget(QLabel("min"))
+        area_layout.addWidget(self.min_area_box)
+        area_layout.addWidget(QLabel("max"))
+        area_layout.addWidget(self.max_area_box)
+
+        radius_row = QWidget()
+        radius_layout = QHBoxLayout(radius_row)
+        radius_layout.setContentsMargins(0, 0, 0, 0)
+        radius_layout.addWidget(QLabel("min"))
+        radius_layout.addWidget(self.radius_min_box)
+        radius_layout.addWidget(QLabel("max"))
+        radius_layout.addWidget(self.radius_max_box)
+
+        detect = QGroupBox("Find objects automatically")
+        detect_layout = QFormLayout(detect)
+        detect_layout.addRow("Shape", self.detect_mode_box)
+        detect_layout.addRow("Algorithm", self.detect_algorithm_box)
+        detect_layout.addRow("Sensitivity", self.sensitivity_box)
+        detect_layout.addRow("Area, cm2", area_row)
+        detect_layout.addRow("Radius, cm", radius_row)
+        detect_layout.addRow("Neighbourhood, cm", self.neighborhood_box)
+        detect_layout.addRow(self.detect_button)
+
         right_layout = QVBoxLayout(right)
         right_layout.addWidget(form)
         right_layout.addWidget(zones)
+        right_layout.addWidget(detect)
         right_layout.addWidget(draw_row)
         right_layout.addWidget(self.shapes_table, 1)
         right_layout.addWidget(actions)
@@ -224,6 +279,11 @@ class PresetTab(QWidget):
         self._on_calib_mode(self.calib_mode_box.currentText())
         self.strategy_box.currentTextChanged.connect(self._on_strategy)
         self._on_strategy(self.strategy_box.currentText())
+        self.detect_button.clicked.connect(self.controller.detect_objects)
+        self.detect_mode_box.currentTextChanged.connect(self._on_detect_mode)
+        self.detect_algorithm_box.currentTextChanged.connect(
+            lambda _: self._on_detect_mode(self.detect_mode_box.currentText()))
+        self._on_detect_mode(self.detect_mode_box.currentText())
         self.tool_box.currentTextChanged.connect(self.canvas.set_tool)
         self.draw_button.clicked.connect(self._ask_shape)
         self.remove_button.clicked.connect(self._remove_selected)
@@ -352,6 +412,18 @@ class PresetTab(QWidget):
         self.center_diameter_box.setEnabled("center_diameter" in uses)
         self.strips_box.setEnabled("strips" in uses)
         self.strip_direction_box.setEnabled("strips" in uses)
+
+    def _on_detect_mode(self, mode: str) -> None:
+        """The radius range belongs to the Hough circle search alone.
+
+        MATLAB offers Hough only for the circle mode; leaving the radius boxes
+        live elsewhere would suggest they do something."""
+        hough = (mode == "all-circles"
+                 and self.detect_algorithm_box.currentText() == "hough")
+        self.radius_min_box.setEnabled(hough)
+        self.radius_max_box.setEnabled(hough)
+        self.neighborhood_box.setEnabled(not hough)
+        self.detect_algorithm_box.setEnabled(mode == "all-circles")
 
     def show_calibration(self, result) -> None:
         self.calib_label.setText(

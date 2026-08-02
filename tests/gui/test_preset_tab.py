@@ -653,3 +653,114 @@ def test_the_saved_options_name_the_resolved_strategy_not_auto(qtbot, tmp_path):
     target = tmp_path / "auto.mat"
     tab.controller.save(target)
     assert str(read_preset(target).options.ZoneStrategy) == "corners-walls-center"
+
+
+# --- automatic object detection (S4h) --------------------------------------
+
+def _scene_tab(qtbot):
+    """A tab showing a bright arena with two dark discs on it."""
+    size = 200
+    frame = np.full((size, size), 200, dtype=np.uint8)
+    ys, xs = np.mgrid[0:size, 0:size]
+    centre = (size - 1) / 2.0
+    inside = ((xs - centre) ** 2 + (ys - centre) ** 2) <= (size * 0.45) ** 2
+    frame[~inside] = 40
+    for cx, cy in ((70, 70), (130, 70)):
+        frame[((xs - cx) ** 2 + (ys - cy) ** 2) <= 14**2] = 60
+
+    state = AppState()
+    state.paradigm = "EOF"
+    tab = PresetTab(state)
+    qtbot.addWidget(tab)
+    tab.controller.use_frame(np.repeat(frame[:, :, None], 3, axis=2))
+    tab.canvas.add_shape("arena", "ellipse", [(10, 10), (190, 190)])
+    tab.set_shape_role("arena", "arena", False)
+    tab.pixels_per_cm_box.setValue(4.0)
+    tab.min_area_box.setValue(5.0)
+    return tab
+
+
+def test_auto_detect_proposes_the_objects_as_shapes(qtbot):
+    tab = _scene_tab(qtbot)
+    tab.controller.detect_objects()
+    proposed = [s for s in tab.canvas.shapes if s.name.startswith("auto")]
+    assert len(proposed) == 2, tab.status_label.text()
+
+
+def test_a_proposal_is_a_shape_the_user_can_delete(qtbot):
+    # The point of proposing rather than building: nothing is committed.
+    tab = _scene_tab(qtbot)
+    tab.controller.detect_objects()
+    assert tab.controller.zones == []
+    name = next(s.name for s in tab.canvas.shapes if s.name.startswith("auto"))
+    tab.remove_selected_shape(name)
+    assert name not in {s.name for s in tab.canvas.shapes}
+
+
+def test_proposals_come_in_already_marked_as_objects(qtbot):
+    tab = _scene_tab(qtbot)
+    tab.controller.detect_objects()
+    roles = tab.shape_roles()
+    assert all(roles[s.name][0] == "object"
+               for s in tab.canvas.shapes if s.name.startswith("auto"))
+
+
+def test_detected_objects_build_into_the_object_trio(qtbot):
+    tab = _scene_tab(qtbot)
+    tab.controller.detect_objects()
+    tab.controller.build_zones()
+    classes = [z.zone_class for z in tab.controller.zones]
+    assert classes.count("object") == 2
+    assert classes.count("object_area") == 2
+
+
+def test_detecting_twice_does_not_collide_on_names(qtbot):
+    tab = _scene_tab(qtbot)
+    tab.controller.detect_objects()
+    tab.controller.detect_objects()
+    names = [s.name for s in tab.canvas.shapes if s.name.startswith("auto")]
+    assert len(names) == len(set(names)) == 4
+
+
+def test_auto_detect_without_an_arena_is_reported(qtbot):
+    tab = _tab(qtbot)
+    tab.pixels_per_cm_box.setValue(4.0)
+    tab.controller.detect_objects()
+    assert "arena" in tab.status_label.text().lower()
+
+
+def test_auto_detect_without_a_calibration_is_reported(qtbot):
+    tab = _scene_tab(qtbot)
+    tab.pixels_per_cm_box.setValue(0.0)
+    tab.controller.detect_objects()
+    assert "calibrat" in tab.status_label.text().lower()
+
+
+def test_finding_nothing_says_so_instead_of_failing(qtbot):
+    tab = _scene_tab(qtbot)
+    tab.min_area_box.setValue(500.0)
+    tab.max_area_box.setValue(900.0)
+    tab.controller.detect_objects()
+    assert "found nothing" in tab.status_label.text().lower()
+    assert not [s for s in tab.canvas.shapes if s.name.startswith("auto")]
+
+
+def test_a_bad_area_range_is_reported_not_raised(qtbot):
+    tab = _scene_tab(qtbot)
+    tab.min_area_box.setValue(50.0)
+    tab.max_area_box.setValue(10.0)
+    tab.controller.detect_objects()
+    assert "area range" in tab.status_label.text().lower()
+
+
+def test_the_radius_boxes_only_live_for_the_hough_circle_search(qtbot):
+    tab = _tab(qtbot)
+    tab.detect_mode_box.setCurrentText("free-form")
+    assert not tab.radius_min_box.isEnabled()
+    assert not tab.detect_algorithm_box.isEnabled()
+
+    tab.detect_mode_box.setCurrentText("all-circles")
+    assert tab.detect_algorithm_box.isEnabled()
+    tab.detect_algorithm_box.setCurrentText("hough")
+    assert tab.radius_min_box.isEnabled() and tab.radius_max_box.isEnabled()
+    assert not tab.neighborhood_box.isEnabled()
