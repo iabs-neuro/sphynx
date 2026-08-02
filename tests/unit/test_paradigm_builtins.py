@@ -138,6 +138,52 @@ def test_barnes_needs_exactly_one_target():
     assert [i.code for i in two.errors] == ["needs_one_target"]
 
 
+def test_a_barnes_preset_built_by_the_zone_builder_validates_clean():
+    # S4d review F2. build_object_zones emits three zones per hole
+    # (hole / hole_ring / hole_area) and carries the target flag onto all
+    # three, so an unscoped target_count saw n=3 and the rule could never pass
+    # on a correctly built preset.
+    from sphynx.preset.objects import build_object_zones
+
+    size = 120
+
+    def _hole(cx, cy, half=6):
+        m = np.zeros((size, size), dtype=bool)
+        m[cy - half:cy + half, cx - half:cx + half] = True
+        return m
+
+    holes = [("hole1", _hole(30, 30)), ("hole2", _hole(90, 30)),
+             ("hole3", _hole(60, 90))]
+    zones = [Zone("arena", "area", np.ones((size, size), dtype=bool),
+                  zone_class="arena")]
+    zones += build_object_zones(holes, size, size, pixels_per_cm=10.0,
+                                zone_width_cm=2.5, kind="hole",
+                                targets=["hole1"])
+
+    report = validate_paradigm(resolve_paradigm("Barnes"), zones, _Options())
+    assert [i.code for i in report.errors] == []
+    assert report.ok is True
+
+
+def test_a_barnes_preset_with_two_targets_is_still_reported():
+    from sphynx.preset.objects import build_object_zones
+
+    size = 120
+
+    def _hole(cx, cy, half=6):
+        m = np.zeros((size, size), dtype=bool)
+        m[cy - half:cy + half, cx - half:cx + half] = True
+        return m
+
+    zones = build_object_zones(
+        [("hole1", _hole(30, 30)), ("hole2", _hole(90, 30)),
+         ("hole3", _hole(60, 90))],
+        size, size, pixels_per_cm=10.0, zone_width_cm=2.5, kind="hole",
+        targets=["hole1", "hole2"])
+    report = validate_paradigm(resolve_paradigm("Barnes"), zones, _Options())
+    assert [i.code for i in report.errors] == ["needs_one_target"]
+
+
 def test_missing_calibration_is_reported_for_every_paradigm():
     for factory in (open_field, enriched_open_field, novel_object_recognition,
                     barnes_maze, ty_maze):

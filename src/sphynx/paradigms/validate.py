@@ -106,14 +106,22 @@ def validate_paradigm(paradigm, zones, options=None) -> ValidationReport:
                     where=rule.zone_class))
 
         elif rule.kind == "target_count":
+            # One target OBJECT is several zones (footprint, ring, area), so a
+            # rule that means "one target hole" must scope itself to the class
+            # that carries the footprint, exactly as zone_count does. A rule
+            # that declares no class keeps counting every target zone.
             n = sum(1 for z in zones
-                    if getattr(getattr(z, "roles", None), "is_target", False))
+                    if getattr(getattr(z, "roles", None), "is_target", False)
+                    and (not rule.zone_class
+                         or getattr(z, "zone_class", None) == rule.zone_class))
             if not _count_in_range(n, rule):
+                of_class = (f' of class "{rule.zone_class}"'
+                            if rule.zone_class else "")
                 report.issues.append(_issue(
                     rule,
-                    f"needs {_expected(rule)} zone(s) marked as the target; "
-                    f"the preset has {n}",
-                    where="roles.is_target"))
+                    f"needs {_expected(rule)} zone(s){of_class} marked as the "
+                    f"target; the preset has {n}",
+                    where=rule.zone_class or "roles.is_target"))
 
         elif rule.kind == "calibration":
             pxl = getattr(options, "pxl2sm", None) if options is not None else None

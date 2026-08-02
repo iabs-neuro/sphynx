@@ -128,3 +128,47 @@ def test_count_rule_without_bounds_raises():
     bad = ValidationRule(code="toothless", kind="zone_count", zone_class="object")
     with pytest.raises(SphynxValueError):
         validate_paradigm(_paradigm(bad), _zones())
+
+
+# --- S4d review F2: a target object is THREE zones ------------------------
+
+ONE_TARGET_HOLE = ValidationRule(code="needs_one_target", kind="target_count",
+                                 zone_class="hole", min=1, max=1)
+
+
+def _target_trio(base="target"):
+    """The footprint / ring / area trio build_object_zones emits per object."""
+    return [
+        Zone(f"{base}_real", "area", _m(), zone_class="hole",
+             roles=ZoneRoles(is_target=True)),
+        Zone(f"{base}_out", "area", _m(), zone_class="hole_ring",
+             roles=ZoneRoles(is_target=True)),
+        Zone(f"{base}_realout", "area", _m(), zone_class="hole_area",
+             roles=ZoneRoles(is_target=True)),
+    ]
+
+
+def test_a_scoped_target_rule_counts_only_that_class():
+    # One target object = three target zones of three classes. Scoped to
+    # "hole", that is one target, so the rule passes.
+    zones = _zones(n_holes=2) + _target_trio()
+    assert validate_paradigm(_paradigm(ONE_TARGET_HOLE), zones).ok
+
+
+def test_a_scoped_target_rule_still_catches_two_targets():
+    zones = _zones(n_holes=2) + _target_trio("t1") + _target_trio("t2")
+    report = validate_paradigm(_paradigm(ONE_TARGET_HOLE), zones)
+    assert report.ok is False
+    assert report.errors[0].code == "needs_one_target"
+    assert "2" in report.errors[0].message
+
+
+def test_a_scoped_target_rule_still_catches_no_target():
+    report = validate_paradigm(_paradigm(ONE_TARGET_HOLE), _zones(n_holes=2))
+    assert report.ok is False
+
+
+def test_an_unscoped_target_rule_keeps_counting_every_class():
+    # Unchanged behaviour for rules that declare no class.
+    zones = _zones(n_holes=2) + _target_trio()
+    assert validate_paradigm(_paradigm(ONE_TARGET), zones).ok is False

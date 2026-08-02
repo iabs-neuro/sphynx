@@ -173,8 +173,12 @@ def barnes_maze() -> Paradigm:
             ValidationRule(
                 code="needs_holes", kind="zone_count", zone_class="hole", min=2,
                 message="a Barnes maze needs its holes marked as zones"),
+            # Scoped to "hole": build_object_zones emits three zones per hole
+            # (hole / hole_ring / hole_area) and carries the target flag onto
+            # all three, so an unscoped count would see 3 for one target hole.
             ValidationRule(
-                code="needs_one_target", kind="target_count", min=1, max=1,
+                code="needs_one_target", kind="target_count", zone_class="hole",
+                min=1, max=1,
                 message="exactly one hole must be marked as the target"),
         ],
         doc="Barnes maze: hole ring with one target hole.",
