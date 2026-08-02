@@ -65,6 +65,11 @@ def _vertices(shape) -> np.ndarray:
     return np.column_stack([cx + rx * np.cos(angle), cy + ry * np.sin(angle)])
 
 
+def shape_vertices(shape) -> np.ndarray:
+    """The closed outline of a shape as an (N, 2) array of (x, y) pixels."""
+    return _vertices(shape)
+
+
 def shape_mask(shape, height: int, width: int) -> np.ndarray:
     """A filled HxW mask, clipped to the frame.
 

@@ -25,6 +25,12 @@ class WarningsPanel(QGroupBox):
         self.rows = []
         self._render()
 
+    def show_rows(self, rows) -> None:
+        """Show (source, level, text) rows straight, for callers that have no
+        SessionResult -- marking a preset happens before any analysis."""
+        self.rows = [(str(s), str(l), str(t)) for s, l, t in rows]
+        self._render()
+
     def show_result(self, result) -> None:
         rows: list = []
 
