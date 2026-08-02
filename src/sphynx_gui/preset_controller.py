@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import numpy as np
 from PySide6.QtCore import QObject
 
-from sphynx.exceptions import SphynxError
+from sphynx.exceptions import SphynxError, SphynxValueError
 from sphynx.io.preset_write import options_struct, save_preset
 from sphynx.io.video import read_frame, video_info
 from sphynx.paradigms import resolve_paradigm, validate_paradigm
@@ -21,7 +21,8 @@ from sphynx.preset.calibration import calibrate, points_needed
 from sphynx.preset.objects import build_object_zones
 from sphynx.zones import (
     Zone, ZoneRoles, assign_zone_angles, classify_circle,
-    classify_square, resolve_arena_center,
+    classify_circle_center, classify_circle_wall, classify_square,
+    resolve_arena_center,
 )
 from sphynx_gui.preset_canvas import shape_vertices
 
@@ -47,6 +48,27 @@ _CALIB_PROMPT = {
                "two ends of the HORIZONTAL one.",
     "4 points": "Click the vertical pair (points 1 and 2), then the "
                 "horizontal pair (points 3 and 4).",
+}
+
+
+AUTO_STRATEGY = "auto (by arena shape)"
+
+# The MATLAB app's own list, plus AUTO for what this tab did before it had a
+# choice at all: rectangle -> corners-walls-center, ellipse -> circle-rings.
+ZONE_STRATEGIES = (
+    AUTO_STRATEGY, "circle", "circle-rings", "circle-with-center",
+    "corners-walls-center", "strips", "none",
+)
+
+# Which parameter each strategy actually reads, so the rest can be greyed out.
+STRATEGY_FIELDS = {
+    AUTO_STRATEGY: {"wall", "middle"},
+    "circle": {"wall"},
+    "circle-rings": {"wall", "middle"},
+    "circle-with-center": {"wall", "center_diameter"},
+    "corners-walls-center": {"wall"},
+    "strips": {"strips"},
+    "none": set(),
 }
 
 
@@ -294,42 +316,89 @@ class PresetController(QObject):
         self.tab.show_zones(zones)
         self.validate()
 
+    def strategy(self) -> str:
+        """The chosen strategy, with AUTO already resolved to a real one."""
+        chosen = self.tab.strategy_box.currentText()
+        if chosen != AUTO_STRATEGY:
+            return chosen
+        arenas = [s for s in self.tab.canvas.shapes
+                  if self.tab.shape_roles().get(s.name, ("", False))[0] == "arena"]
+        kind = arenas[0].kind if arenas else ""
+        # What this tab did before the choice existed. A polygon resolved to
+        # nothing, which is why polygon arenas used to derive no zones at all;
+        # picking 'circle' explicitly now gives them a wall and a centre.
+        return {"rectangle": "corners-walls-center",
+                "ellipse": "circle-rings"}.get(kind, "none")
+
     def _derived_zones(self, shape, mask, pixels_per_cm) -> list:
-        """Walls, corners and centre implied by the arena outline.
+        """The zones the arena outline implies, per the chosen strategy.
 
         A failure here is recorded as a note and the rest of the preset still
         builds: losing the objects because the wall band did not fit would be
         worse, and the note says exactly what was not built."""
+        strategy = self.strategy()
         wall_width_cm = float(self.tab.wall_width_box.value())
         try:
-            if shape.kind == "ellipse":
-                built = classify_circle(mask, pixels_per_cm,
-                                        wall_width_cm=wall_width_cm)
-                return [Zone(z.name, "area", z.maskfilled,
-                             zone_class=_circle_class(z.name)) for z in built]
-            if shape.kind != "rectangle":
-                # classify_square seeds one corner per point given, so handing
-                # it every vertex of a polygon would turn most of the border
-                # band into "corner". Which vertices are corners is the
-                # experimenter's call, not something to guess.
-                self.build_notes.append((
-                    "warning",
-                    f"the arena {shape.name!r} is a polygon, so its walls, "
-                    "corners and centre were not derived; draw the corners as "
-                    "their own shapes and mark them 'corner'"))
+            if strategy == "none":
+                if self.tab.strategy_box.currentText() == AUTO_STRATEGY:
+                    self.build_notes.append((
+                        "warning",
+                        f"the arena {shape.name!r} is a {shape.kind}, which "
+                        "'auto' cannot resolve, so no walls or centre were "
+                        "derived; pick a strategy such as 'circle' to get them"))
                 return []
-            # classify_square reads corner seeds in 1-based image coordinates.
-            corner_points = shape_vertices(shape) + 1.0
-            built = classify_square(
-                mask, "corners-walls-center", pixels_per_cm=pixels_per_cm,
-                wall_width_cm=wall_width_cm,
-                corner_points=corner_points)
+
+            if strategy == "circle":
+                built = classify_circle_wall(mask, pixels_per_cm,
+                                             wall_width_cm=wall_width_cm)
+            elif strategy == "circle-rings":
+                built = classify_circle(
+                    mask, pixels_per_cm, wall_width_cm=wall_width_cm,
+                    middle_width_cm=float(self.tab.middle_width_box.value()))
+            elif strategy == "circle-with-center":
+                built = classify_circle_center(
+                    mask, pixels_per_cm, wall_width_cm=wall_width_cm,
+                    center_diameter_cm=float(
+                        self.tab.center_diameter_box.value()))
+            elif strategy == "strips":
+                built = classify_square(
+                    mask, "strips",
+                    num_strips=int(self.tab.strips_box.value()),
+                    strip_direction=self.tab.strip_direction_box.currentText())
+                return [Zone(z.name, "area", z.maskfilled, zone_class="strip")
+                        for z in built]
+            elif strategy == "corners-walls-center":
+                if shape.kind != "rectangle":
+                    # classify_square seeds one corner per point given, so
+                    # handing it every vertex of a polygon would turn most of
+                    # the border band into "corner". Which vertices are corners
+                    # is the experimenter's call, not something to guess.
+                    self.build_notes.append((
+                        "warning",
+                        f"'corners-walls-center' needs a rectangular arena to "
+                        f"know where the corners are, and {shape.name!r} is a "
+                        f"{shape.kind}; nothing was derived. Use 'circle' for a "
+                        "wall and a centre, or draw the corners yourself and "
+                        "mark them 'corner'"))
+                    return []
+                # classify_square reads corner seeds in 1-based image coords.
+                built = classify_square(
+                    mask, "corners-walls-center", pixels_per_cm=pixels_per_cm,
+                    wall_width_cm=wall_width_cm,
+                    corner_points=shape_vertices(shape) + 1.0)
+                return [Zone(z.name, "area", z.maskfilled,
+                             zone_class=_SQUARE_CLASSES.get(z.name, "unknown"))
+                        for z in built]
+            else:
+                raise SphynxValueError(
+                    f"unknown zone strategy {strategy!r}; expected one of "
+                    f"{ZONE_STRATEGIES}")
+
             return [Zone(z.name, "area", z.maskfilled,
-                         zone_class=_SQUARE_CLASSES.get(z.name, "unknown"))
-                    for z in built]
+                         zone_class=_circle_class(z.name)) for z in built]
         except SphynxError as e:
             self.build_notes.append(
-                ("error", f"the arena's walls/corners/centre were not built: {e}"))
+                ("error", f"the arena's derived zones were not built: {e}"))
             return []
 
     # --- validation -------------------------------------------------------
@@ -347,6 +416,9 @@ class PresetController(QObject):
             pxl_x=None if active is None else float(active.pxl_x),
             experiment_type=str(self.state.paradigm or ""),
             CalibrationMode="" if active is None else str(active.mode),
+            # The resolved strategy, not the word "auto": a preset read back a
+            # year later should say which zones it actually holds.
+            ZoneStrategy=str(self.strategy()),
             WallWidthCm=float(self.tab.wall_width_box.value()),
             RingWidthCm=float(self.tab.ring_width_box.value()))
 

@@ -17,7 +17,9 @@ from PySide6.QtWidgets import (
 from sphynx.paradigms import PARADIGMS, register_builtin_paradigms
 from sphynx.preset.calibration import MODES as CALIBRATION_MODES
 from sphynx_gui.preset_canvas import KINDS, PresetCanvas
-from sphynx_gui.preset_controller import PresetController
+from sphynx_gui.preset_controller import (
+    AUTO_STRATEGY, STRATEGY_FIELDS, ZONE_STRATEGIES, PresetController,
+)
 from sphynx_gui.warnings_panel import WarningsPanel
 
 ROLES = ("arena", "object", "hole", "wall", "corner", "unused")
@@ -84,6 +86,31 @@ class PresetTab(QWidget):
         self.ring_width_box.setSingleStep(0.5)
         self.ring_width_box.setValue(2.5)
 
+        # Which zones the arena outline implies. This used to be inferred from
+        # the shape drawn, so a round arena silently got 'circle-rings' where
+        # MATLAB's default builds 'circle' -- a different set of zones, and a
+        # different set of numbers. AUTO keeps the inferred behaviour, but it
+        # is now one named choice among the app's own.
+        self.strategy_box = QComboBox()
+        self.strategy_box.addItems(ZONE_STRATEGIES)
+        self.strategy_box.setCurrentText(AUTO_STRATEGY)
+
+        self.middle_width_box = QDoubleSpinBox()      # circle-rings
+        self.middle_width_box.setRange(0.1, 1000.0)
+        self.middle_width_box.setDecimals(2)
+        self.middle_width_box.setValue(20.0)
+
+        self.center_diameter_box = QDoubleSpinBox()   # circle-with-center
+        self.center_diameter_box.setRange(0.1, 1000.0)
+        self.center_diameter_box.setDecimals(2)
+        self.center_diameter_box.setValue(20.0)
+
+        self.strips_box = QSpinBox()                  # strips
+        self.strips_box.setRange(1, 50)
+        self.strips_box.setValue(3)
+        self.strip_direction_box = QComboBox()
+        self.strip_direction_box.addItems(("horizontal", "vertical"))
+
         self.tool_box = QComboBox()
         self.tool_box.addItems(KINDS)
         self.draw_button = QPushButton("Draw shape...")
@@ -134,7 +161,20 @@ class PresetTab(QWidget):
         form_layout.addRow(self.calib_label)
         form_layout.addRow("Pixels per cm", self.pixels_per_cm_box)
         form_layout.addRow("Ring width, cm", self.ring_width_box)
-        form_layout.addRow("Wall band, cm", self.wall_width_box)
+
+        strips_row = QWidget()
+        strips_layout = QHBoxLayout(strips_row)
+        strips_layout.setContentsMargins(0, 0, 0, 0)
+        strips_layout.addWidget(self.strips_box)
+        strips_layout.addWidget(self.strip_direction_box)
+
+        zones = QGroupBox("Arena zones")
+        zones_layout = QFormLayout(zones)
+        zones_layout.addRow("Strategy", self.strategy_box)
+        zones_layout.addRow("Wall band, cm", self.wall_width_box)
+        zones_layout.addRow("Middle width, cm", self.middle_width_box)
+        zones_layout.addRow("Centre diameter, cm", self.center_diameter_box)
+        zones_layout.addRow("Strips", strips_row)
 
         draw_row = QWidget()
         draw_layout = QHBoxLayout(draw_row)
@@ -157,6 +197,7 @@ class PresetTab(QWidget):
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.addWidget(form)
+        right_layout.addWidget(zones)
         right_layout.addWidget(draw_row)
         right_layout.addWidget(self.shapes_table, 1)
         right_layout.addWidget(actions)
@@ -181,6 +222,8 @@ class PresetTab(QWidget):
         self.canvas.points_picked.connect(self.controller.on_points_picked)
         self.calib_mode_box.currentTextChanged.connect(self._on_calib_mode)
         self._on_calib_mode(self.calib_mode_box.currentText())
+        self.strategy_box.currentTextChanged.connect(self._on_strategy)
+        self._on_strategy(self.strategy_box.currentText())
         self.tool_box.currentTextChanged.connect(self.canvas.set_tool)
         self.draw_button.clicked.connect(self._ask_shape)
         self.remove_button.clicked.connect(self._remove_selected)
@@ -297,6 +340,18 @@ class PresetTab(QWidget):
         # One line measures a single length, so there is no separate
         # horizontal distance to enter.
         self.distance_x_box.setEnabled(mode != "1 line")
+
+    def _on_strategy(self, strategy: str) -> None:
+        """Only the fields the chosen strategy reads stay live.
+
+        A greyed-out box is how the user sees that changing it would do
+        nothing -- the same guard MATLAB's onZoneStrategyChanged applies."""
+        uses = STRATEGY_FIELDS.get(strategy, set())
+        self.wall_width_box.setEnabled("wall" in uses)
+        self.middle_width_box.setEnabled("middle" in uses)
+        self.center_diameter_box.setEnabled("center_diameter" in uses)
+        self.strips_box.setEnabled("strips" in uses)
+        self.strip_direction_box.setEnabled("strips" in uses)
 
     def show_calibration(self, result) -> None:
         self.calib_label.setText(

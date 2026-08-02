@@ -1,6 +1,8 @@
 """Zone classification (rings, corners/walls/center, strips)."""
 
-from sphynx.zones.circle import classify_circle
+from sphynx.zones.circle import (
+    classify_circle, classify_circle_center, classify_circle_wall,
+)
 from sphynx.zones.geometry import (
     arena_centroid,
     assign_zone_angles,
@@ -33,6 +35,8 @@ __all__ = [
     "neutral_composite",
     "class_composite",
     "classify_circle",
+    "classify_circle_center",
+    "classify_circle_wall",
     "classify_square",
     "arena_centroid",
     "mask_centroid",

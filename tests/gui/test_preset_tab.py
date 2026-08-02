@@ -475,17 +475,22 @@ def test_a_shape_marked_wall_becomes_a_wall_zone(qtbot):
     assert named[0].zone_class == "corner"
 
 
-def test_a_polygon_arena_says_its_corners_were_not_derived(qtbot):
-    # I8: every polygon vertex was fed to classify_square as a corner seed, so
-    # a 12-gon turned half its border band into "corner".
-    tab = _tab(qtbot)
+def _polygon_arena(tab):
     tab.canvas.add_shape("arena", "polygon",
                          [(20, 20), (140, 20), (140, 100), (20, 100)])
     tab.set_shape_role("arena", "arena", False)
     tab.pixels_per_cm_box.setValue(4.0)
+
+
+def test_a_polygon_arena_under_auto_derives_nothing_and_says_why(qtbot):
+    # I8: every polygon vertex was fed to classify_square as a corner seed, so
+    # a 12-gon turned half its border band into "corner". Auto now resolves a
+    # polygon to nothing and points at the strategy that would work.
+    tab = _tab(qtbot)
+    _polygon_arena(tab)
     tab.controller.build_zones()
     text = " ".join(str(r) for r in tab.warnings.rows).lower()
-    assert "corner" in text
+    assert "circle" in text
     assert "corner" not in {z.zone_class for z in tab.controller.zones}
 
 
@@ -515,3 +520,136 @@ def test_a_barnes_preset_with_one_target_validates_clean(qtbot):
     tab.controller.validate()
     errors = [r for r in tab.warnings.rows if r[1] == "error"]
     assert errors == [], errors
+
+
+# --- zone strategies (S4g) -------------------------------------------------
+
+def _classes(tab):
+    counts = {}
+    for zone in tab.controller.zones:
+        counts[zone.zone_class] = counts.get(zone.zone_class, 0) + 1
+    return counts
+
+
+def test_auto_resolves_the_way_this_tab_always_behaved(qtbot):
+    # No silent change for anyone who never touches the new box.
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    assert tab.controller.strategy() == "corners-walls-center"
+
+    other = _tab(qtbot)
+    other.canvas.add_shape("arena", "ellipse", [(10, 10), (150, 110)])
+    other.set_shape_role("arena", "arena", False)
+    assert other.controller.strategy() == "circle-rings"
+
+
+def test_the_circle_strategy_gives_a_wall_and_a_centre(qtbot):
+    # MATLAB's default strategy, which Python did not have at all: two zones,
+    # not wall + middle1..N + centre.
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.strategy_box.setCurrentText("circle")
+    tab.controller.build_zones()
+    names = [z.name for z in tab.controller.zones]
+    assert names.count("wall") == 1 and names.count("center") == 1
+    assert not [n for n in names if n.startswith("middle")]
+
+
+def test_circle_and_circle_rings_really_differ(qtbot):
+    # The whole point of the finding: these are different sets of zones, so a
+    # round arena was getting different numbers from MATLAB's default.
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.strategy_box.setCurrentText("circle")
+    tab.controller.build_zones()
+    plain = _classes(tab)
+
+    tab.strategy_box.setCurrentText("circle-rings")
+    tab.middle_width_box.setValue(3.0)
+    tab.controller.build_zones()
+    assert _classes(tab).get("middle", 0) > 0
+    assert plain.get("middle", 0) == 0
+
+
+def test_the_centre_strategy_builds_a_disc_of_the_stated_size(qtbot):
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.strategy_box.setCurrentText("circle-with-center")
+    tab.center_diameter_box.setValue(10.0)
+    tab.controller.build_zones()
+    small = {z.name: np.asarray(z.maskfilled).sum()
+             for z in tab.controller.zones}
+    tab.center_diameter_box.setValue(20.0)
+    tab.controller.build_zones()
+    large = {z.name: np.asarray(z.maskfilled).sum()
+             for z in tab.controller.zones}
+    assert large["center"] > small["center"]
+
+
+def test_a_polygon_arena_gets_zones_once_a_strategy_is_chosen(qtbot):
+    # The distance-transform strategies are shape-agnostic, so choosing one
+    # is what finally gives a polygon arena its wall and centre.
+    tab = _tab(qtbot)
+    _polygon_arena(tab)
+    tab.strategy_box.setCurrentText("circle")
+    tab.controller.build_zones()
+    names = [z.name for z in tab.controller.zones]
+    assert "wall" in names and "center" in names
+
+
+def test_corners_on_a_polygon_is_refused_with_advice(qtbot):
+    tab = _tab(qtbot)
+    _polygon_arena(tab)
+    tab.strategy_box.setCurrentText("corners-walls-center")
+    tab.controller.build_zones()
+    text = " ".join(str(r) for r in tab.warnings.rows).lower()
+    assert "rectangular" in text
+    assert "corner" not in {z.zone_class for z in tab.controller.zones}
+
+
+def test_the_strips_strategy_builds_the_number_asked_for(qtbot):
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.strategy_box.setCurrentText("strips")
+    tab.strips_box.setValue(4)
+    tab.controller.build_zones()
+    assert _classes(tab).get("strip", 0) == 4
+
+
+def test_the_none_strategy_derives_nothing_and_warns_about_nothing(qtbot):
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.strategy_box.setCurrentText("none")
+    tab.controller.build_zones()
+    assert _classes(tab).get("wall", 0) == 0
+    assert _classes(tab).get("center", 0) == 0
+    # The objects are still built: 'none' is about the arena, not the preset.
+    assert _classes(tab).get("object_area", 0) == 2
+    geometry = [r for r in tab.warnings.rows if r[0] == "geometry"]
+    assert geometry == []
+
+
+def test_only_the_fields_a_strategy_reads_stay_live(qtbot):
+    tab = _tab(qtbot)
+    tab.strategy_box.setCurrentText("circle")
+    assert tab.wall_width_box.isEnabled()
+    assert not tab.center_diameter_box.isEnabled()
+    assert not tab.strips_box.isEnabled()
+
+    tab.strategy_box.setCurrentText("circle-with-center")
+    assert tab.center_diameter_box.isEnabled()
+    assert not tab.middle_width_box.isEnabled()
+
+    tab.strategy_box.setCurrentText("strips")
+    assert tab.strips_box.isEnabled() and tab.strip_direction_box.isEnabled()
+    assert not tab.wall_width_box.isEnabled()
+
+
+def test_the_saved_options_name_the_resolved_strategy_not_auto(qtbot, tmp_path):
+    # A preset read back a year later should say which zones it holds.
+    tab = _tab(qtbot)
+    _draw_arena_and_objects(tab)
+    tab.controller.build_zones()
+    target = tmp_path / "auto.mat"
+    tab.controller.save(target)
+    assert str(read_preset(target).options.ZoneStrategy) == "corners-walls-center"
