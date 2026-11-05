@@ -12,7 +12,8 @@ function [x, y, sidesX, sidesY] = polygonFit(xCorners, yCorners, varargin)
 %     sidesY{i} - dense y-coords for side i
 %
 %   Optional name-value:
-%     'PointsPerSide' - number of points per side (default 1000)
+%     'PointsPerSide' - minimum points per side (default 1000); longer sides
+%                       get 2 points per px so the outline has no gaps
 %
 %   Replacement for legacy functions/PolygonFit.m.
 
@@ -36,8 +37,14 @@ function [x, y, sidesX, sidesY] = polygonFit(xCorners, yCorners, varargin)
     sidesY = cell(1, nSides);
     for i = 1:nSides
         i2 = mod(i, nSides) + 1; % wrap
-        sidesX{i} = linspace(xCorners(i), xCorners(i2), nPerSide);
-        sidesY{i} = linspace(yCorners(i), yCorners(i2), nPerSide);
+        % The outline is later rasterized and imfill-ed, so points must stay
+        % under 1 px apart. A fixed count breaks that on sides longer than
+        % nPerSide px (a linear track across a 1280-px frame): the fill leaks
+        % and the mask comes out as a bare outline.
+        sideLen = hypot(xCorners(i2) - xCorners(i), yCorners(i2) - yCorners(i));
+        n = max(nPerSide, ceil(2 * sideLen));
+        sidesX{i} = linspace(xCorners(i), xCorners(i2), n);
+        sidesY{i} = linspace(yCorners(i), yCorners(i2), n);
     end
 
     x = [];
