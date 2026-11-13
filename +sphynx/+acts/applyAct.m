@@ -183,15 +183,17 @@ function b = applyBacking(act, ctx, nFrames)
 end
 
 function b = applyTurnaround(act, ctx, nFrames)
-    % act.bodyParts = {head, tail}; act.thresholdCm = minimum tail-to-head
-    % distance (cm) for a frame to count as facing one way. The track axis
-    % comes from the preset's arena corners, else from the trajectory.
-    % See sphynx.acts.turnaround.
+    % act.bodyParts = {head, rear point}; act.thresholdCm = minimum
+    % rear-to-head distance (cm) for a frame to count as facing one way.
+    % Rear point is the body centre: in turns the tail base is mostly
+    % missing or interpolated, the body centre is the most reliable point.
+    % The track axis comes from the preset's arena corners, else from the
+    % trajectory. See sphynx.acts.turnaround.
     b = false(1, nFrames);
     parts = act.bodyParts;
-    if numel(parts) < 2; parts = {'headcenter', 'tailbase'}; end
+    if numel(parts) < 2; parts = {'headcenter', 'bodycenter'}; end
     hIdx = resolveWithFallback(ctx.bodyParts, parts{1}, headFallback(), act.name);
-    tIdx = resolveWithFallback(ctx.bodyParts, parts{2}, {'tailbase', 'bodycenter'}, act.name);
+    tIdx = resolveWithFallback(ctx.bodyParts, parts{2}, {'bodycenter', 'tailbase'}, act.name);
     if isempty(hIdx) || isempty(tIdx) || hIdx == tIdx; return; end
     axisVec = trackAxis(ctx);
     if isempty(axisVec); return; end

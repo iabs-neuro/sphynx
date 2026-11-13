@@ -61,18 +61,23 @@ function acts = actsLibraryDefaults()
     a.maxGapSec = 0.2;
     acts(end+1) = a;
 
-    % Turnaround on a linear track: the tail-to-head direction flips
-    % relative to the track axis. Head centre, not nose: a head-mounted
-    % miniscope often hides the nose. thresholdCm = minimum tail-to-head
-    % distance for a frame to count as facing one way. No gap bridging:
-    % it would merge two turns separated by a short straight run.
+    % Turnaround on a linear track: the body-centre -> head-centre
+    % direction flips relative to the track axis. Head centre, not nose: a
+    % head-mounted miniscope often hides the nose. Body centre, not tail
+    % base: in turns the tail base is mostly missing. thresholdCm = minimum
+    % centre-to-head distance for a frame to count as facing one way
+    % (2 cm: median 2.8 cm in straight running in LT1, 3 cm already loses
+    % turns). Turns are at least 1 s long: sphynx.acts.turnaround widens
+    % shorter detections itself. The generic post-filters stay off: a
+    % minimum duration would drop back-to-back turns split slightly under
+    % 1 s, and gap bridging would merge two turns separated by a short run.
     a = sphynx.acts.emptyAct();
     a.name = 'turnaround';
     a.type = 'special';
     a.specialKind = 'turnaround';
-    a.bodyParts = {'headcenter', 'tailbase'};
+    a.bodyParts = {'headcenter', 'bodycenter'};
     a.thresholdCm = 2;
-    a.minDurationSec = 0.2;
+    a.minDurationSec = 0;
     a.maxGapSec = 0;
     acts(end+1) = a;
 end

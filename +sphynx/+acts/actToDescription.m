@@ -29,7 +29,7 @@ function txt = actToDescription(act)
                     lines{end+1} = sprintf('Backward speed along body axis: >= %g cm/s', act.speedMin);
                     lines{end+1} = sprintf('Min centre-to-head distance: %g cm', act.thresholdCm);
                 case 'turnaround'
-                    lines{end+1} = sprintf('Min tail-to-head distance: %g cm', act.thresholdCm);
+                    lines{end+1} = sprintf('Min centre-to-head distance: %g cm', act.thresholdCm);
                 otherwise
                     if ~isnan(act.thresholdCm)
                         lines{end+1} = sprintf('Threshold: %g cm', act.thresholdCm);

@@ -41,11 +41,56 @@ function testTurnaroundFindsOneTurn(testCase)
     b = sphynx.acts.turnaround(hx, hy, tx, ty, fr, 10, [1 0]);
     [nRuns, lens] = runs(b);
     verifyEqual(testCase, nRuns, 1);
-    % |cos| < 0.7 spans ~45-135 deg of the 180 deg rotation, about half of it
-    verifyGreaterThanOrEqual(testCase, lens, 12);
-    verifyLessThanOrEqual(testCase, lens, 18);
-    verifyTrue(testCase, all(find(b) > 30 & find(b) <= 60));  % inside the rotation
-    verifyFalse(testCase, any(b([1:30, 61:90])));
+    % The rotation off ~18 deg takes ~0.8 s here, then the turn is widened to 1 s.
+    verifyEqual(testCase, lens, fr);
+    verifyTrue(testCase, all(find(b) > 25 & find(b) <= 65));  % around the rotation
+end
+
+function testTurnaroundCoversWholeRotation(testCase)
+    % 3 s rotation: the turn runs from ~18 deg off the old direction to
+    % ~18 deg off the new one, i.e. ~80% of the rotation, not only its middle.
+    fr = 30;
+    ang = [zeros(1, 30), linspace(0, pi, 90), pi * ones(1, 30)];
+    [hx, hy, tx, ty] = bodyAtAngles(ang);
+    b = sphynx.acts.turnaround(hx, hy, tx, ty, fr, 10, [1 0]);
+    [nRuns, lens] = runs(b);
+    verifyEqual(testCase, nRuns, 1);
+    verifyGreaterThanOrEqual(testCase, lens, 66);
+    verifyLessThanOrEqual(testCase, lens, 78);
+    verifyTrue(testCase, all(find(b) > 30 & find(b) <= 120));
+end
+
+function testTurnaroundShortDetectionWidenedToMinTurn(testCase)
+    ang = [zeros(1, 40), linspace(0, pi, 9), pi * ones(1, 40)];   % 0.3 s
+    [hx, hy, tx, ty] = bodyAtAngles(ang);
+    b = sphynx.acts.turnaround(hx, hy, tx, ty, 30, 10, [1 0]);
+    [nRuns, lens] = runs(b);
+    verifyEqual(testCase, nRuns, 1);
+    verifyEqual(testCase, lens, 30);
+    b = sphynx.acts.turnaround(hx, hy, tx, ty, 30, 10, [1 0], 'MinTurnSec', 2);
+    [~, lens] = runs(b);
+    verifyEqual(testCase, lens, 60);
+end
+
+function testTurnaroundBackToBackTurnsStaySeparate(testCase)
+    % Turn, face the other way for 0.4 s, turn back. With facing runs
+    % allowed from 0.2 s, widening to 1 s makes the two turns overlap;
+    % they must still come out as two turns.
+    ang = [zeros(1, 40), linspace(0, pi, 9), pi * ones(1, 12), linspace(pi, 2*pi, 9), 2*pi * ones(1, 40)];
+    [hx, hy, tx, ty] = bodyAtAngles(ang);
+    b = sphynx.acts.turnaround(hx, hy, tx, ty, 30, 10, [1 0], 'MinFacingSec', 0.2);
+    [nRuns, lens] = runs(b);
+    verifyEqual(testCase, nRuns, 2);
+    verifyGreaterThanOrEqual(testCase, lens, 30);   % each keeps 1 s
+end
+
+function testTurnaroundIgnoresHeldLookBack(testCase)
+    % Head points back for 0.4 s and returns: with the default minimum
+    % facing run (0.75 s) this is a look back, not two turns.
+    ang = [zeros(1, 40), linspace(0, pi, 9), pi * ones(1, 12), linspace(pi, 2*pi, 9), 2*pi * ones(1, 40)];
+    [hx, hy, tx, ty] = bodyAtAngles(ang);
+    b = sphynx.acts.turnaround(hx, hy, tx, ty, 30, 10, [1 0]);
+    verifyFalse(testCase, any(b));
 end
 
 function testTurnaroundIgnoresLookBack(testCase)
@@ -98,6 +143,7 @@ function testDefaultsContainLinearTrackActs(testCase)
     a = acts(strcmp(names, 'turnaround'));
     verifyEqual(testCase, a.type, 'special');
     verifyEqual(testCase, a.specialKind, 'turnaround');
+    verifyEqual(testCase, a.bodyParts, {'headcenter', 'bodycenter'});
 end
 
 function testApplyActUsesFallbackHeadAndCorners(testCase)
@@ -107,10 +153,12 @@ function testApplyActUsesFallbackHeadAndCorners(testCase)
     ang = [zeros(1, 30), linspace(0, pi, 30), pi * ones(1, 30)];
     [hx, hy, tx, ty] = bodyAtAngles(ang);
     n = numel(ang);
-    % The nose track sits on the tail point (as when the miniscope hides
-    % it), so a turn is found only if the miniscope is picked before it.
+    % The nose track sits on the body centre (no direction, as when the
+    % miniscope hides it), so a turn is found only if the miniscope is
+    % picked before the nose.
+    cx = (hx + tx) / 2; cy = (hy + ty) / 2;
     ctx = baseCtx({'nose', 'miniscopeUCLA', 'bodycenter', 'tailbase'}, ...
-        [tx; hx; (hx + tx) / 2; tx], [ty; hy; (hy + ty) / 2; ty], n);
+        [cx; hx; cx; tx], [cy; hy; cy; ty], n);
     ctx.zones = cornerZones([10 100; 1200 100; 1200 150; 10 150]);
     acts = sphynx.acts.actsLibraryDefaults();
     a = acts(strcmp({acts.name}, 'turnaround'));

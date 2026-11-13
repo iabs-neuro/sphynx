@@ -120,15 +120,23 @@ There are also **special acts**:
     direction. Backward speed along the body axis at least `speedMin`
     (1 cm/s), within ~45 deg of straight backwards, centre-to-head
     distance at least `thresholdCm` (1 cm).
-  - `turnaround` — on a linear track the tail -> head-centre direction
-    flips relative to the track axis. The nose is not used by default: a
-    head-mounted miniscope often hides it. The axis comes from the preset's arena
-    corners (`arenacorner*`), else from the trajectory. A turn is the
-    stretch between a stable "facing along" and a stable "facing against"
-    run (|cos| >= 0.7, at least 0.2 s), at most 10 s long. An instant flip
-    (tracker swapped head and tail) is not a turn. Missing body parts
-    fall back: head headcenter -> miniscopeUCLA -> nose, tail
-    tailbase -> bodycenter. Thresholds of both acts are first guesses, to
+  - `turnaround` — on a linear track the body-centre -> head-centre
+    direction flips relative to the track axis. The nose is not used by
+    default: a head-mounted miniscope often hides it. Neither is the tail
+    base: in turns it is mostly untracked. The axis comes from the
+    preset's arena corners (`arenacorner*`), else from the trajectory. A
+    turn is found when a stable "facing along" and a stable "facing
+    against" run are at most 10 s apart. A stable run has |cos| >= 0.7,
+    the head centre at least 2 cm from the body centre (body stretched)
+    and lasts at least 0.75 s; a shorter look back is not a turn.
+    The turn spans the whole rotation: from the last frame still aligned
+    with the old direction (|cos| >= 0.95, ~18 deg) to the first frame
+    aligned with the new one. A turn shorter than 1 s is widened to 1 s
+    around its centre: mice do not turn faster, a short detection means
+    the tracker lost part of the rotation. An instant flip (tracker
+    swapped head and tail) is not a turn. Missing body parts fall back:
+    head headcenter -> miniscopeUCLA -> nose, rear point
+    bodycenter -> tailbase. Thresholds of both acts are first guesses, to
     be fitted on hand-scored data through the name-value parameters of
     `sphynx.acts.backing` and `sphynx.acts.turnaround`.
 
