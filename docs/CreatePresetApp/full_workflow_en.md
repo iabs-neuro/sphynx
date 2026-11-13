@@ -116,9 +116,23 @@ operation:
 There are also **special acts**:
   - `freezing` — head + center velocity below threshold simultaneously,
   - `rears` — tailbase-paws distance below threshold (cm).
+  - `backing` — the body centre moves against the centre -> head
+    direction. Backward speed along the body axis at least `speedMin`
+    (1 cm/s), within ~45 deg of straight backwards, centre-to-head
+    distance at least `thresholdCm` (1 cm).
+  - `turnaround` — on a linear track the tail -> nose direction flips
+    relative to the track axis. The axis comes from the preset's arena
+    corners (`arenacorner*`), else from the trajectory. A turn is the
+    stretch between a stable "facing along" and a stable "facing against"
+    run (|cos| >= 0.7, at least 0.2 s), at most 10 s long. An instant flip
+    (tracker swapped nose and tail) is not a turn. Missing body parts
+    fall back: head nose -> headcenter -> miniscopeUCLA, tail
+    tailbase -> bodycenter. Thresholds of both acts are first guesses, to
+    be fitted on hand-scored data through the name-value parameters of
+    `sphynx.acts.backing` and `sphynx.acts.turnaround`.
 
 The library is loaded with sane defaults (rest / walk / locomotion /
-freezing / rears) on tab open. Save/Load button persists the library
+freezing / rears / backing / turnaround) on tab open. Save/Load button persists the library
 to a `.mat` so you can reuse it across experiments of the same type.
 
 **Barnes default library (button "Load Barnes defaults"):** 64 acts

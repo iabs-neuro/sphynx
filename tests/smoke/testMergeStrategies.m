@@ -1,16 +1,16 @@
-% Smoke-test: defaults library has 5 acts; uniqueName helper renames.
+% Smoke-test: defaults library has 7 acts; uniqueName helper renames.
 addpath(pwd);
 clear functions;
 
-% Defaults: 5 acts (rest/walk/locomotion/freezing/rear)
+% Defaults: 7 acts (rest/walk/locomotion/freezing/rear/backing/turnaround)
 defaults = sphynx.acts.actsLibraryDefaults();
-assert(numel(defaults) == 5, 'defaults must have exactly 5 acts');
+assert(numel(defaults) == 7, 'defaults must have exactly 7 acts');
 names = {defaults.name};
-expected = {'rest', 'walk', 'locomotion', 'freezing', 'rear'};
+expected = {'rest', 'walk', 'locomotion', 'freezing', 'rear', 'backing', 'turnaround'};
 for k = 1:numel(expected)
     assert(any(strcmp(names, expected{k})), 'missing default: %s', expected{k});
 end
-fprintf('PASS: defaults library = 5 acts (%s)\n', strjoin(names, ', '));
+fprintf('PASS: defaults library = 7 acts (%s)\n', strjoin(names, ', '));
 
 % Class still parses
 mt = ?sphynx.app.DefineActsTabController;

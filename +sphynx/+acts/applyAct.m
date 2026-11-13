@@ -155,9 +155,110 @@ function b = applySpecial(act, ctx, nFrames)
             b = applyRears(act, ctx, nFrames);
         case 'allinzone'
             b = applyAllInZone(act, ctx, nFrames);
+        case 'backing'
+            b = applyBacking(act, ctx, nFrames);
+        case 'turnaround'
+            b = applyTurnaround(act, ctx, nFrames);
         otherwise
             b = false(1, nFrames);
     end
+end
+
+function b = applyBacking(act, ctx, nFrames)
+    % act.bodyParts = {head, centre}; act.speedMin = backward speed
+    % along the body axis (cm/s); act.thresholdCm = minimum centre-to-head
+    % distance (cm). See sphynx.acts.backing.
+    b = false(1, nFrames);
+    parts = act.bodyParts;
+    if numel(parts) < 2; parts = {'headcenter', 'bodycenter'}; end
+    hIdx = resolveWithFallback(ctx.bodyParts, parts{1}, headFallback(), act.name);
+    cIdx = resolveWithFallback(ctx.bodyParts, parts{2}, {'bodycenter'}, act.name);
+    if isempty(hIdx) || isempty(cIdx) || hIdx == cIdx; return; end
+    minCm = act.thresholdCm;
+    if ~isfinite(minCm); minCm = 1; end
+    b = sphynx.acts.backing(ctx.X(hIdx, :), ctx.Y(hIdx, :), ...
+        ctx.X(cIdx, :), ctx.Y(cIdx, :), ctx.frameRate, ctx.pixelsPerCm, ...
+        'MinSpeedCmS', act.speedMin, 'MinHeadingCm', minCm, ...
+        'XKcorr', ctxKcorr(ctx));
+end
+
+function b = applyTurnaround(act, ctx, nFrames)
+    % act.bodyParts = {head, tail}; act.thresholdCm = minimum tail-to-head
+    % distance (cm) for a frame to count as facing one way. The track axis
+    % comes from the preset's arena corners, else from the trajectory.
+    % See sphynx.acts.turnaround.
+    b = false(1, nFrames);
+    parts = act.bodyParts;
+    if numel(parts) < 2; parts = {'nose', 'tailbase'}; end
+    hIdx = resolveWithFallback(ctx.bodyParts, parts{1}, headFallback(), act.name);
+    tIdx = resolveWithFallback(ctx.bodyParts, parts{2}, {'tailbase', 'bodycenter'}, act.name);
+    if isempty(hIdx) || isempty(tIdx) || hIdx == tIdx; return; end
+    axisVec = trackAxis(ctx);
+    if isempty(axisVec); return; end
+    minCm = act.thresholdCm;
+    if ~isfinite(minCm); minCm = 2; end
+    b = sphynx.acts.turnaround(ctx.X(hIdx, :), ctx.Y(hIdx, :), ...
+        ctx.X(tIdx, :), ctx.Y(tIdx, :), ctx.frameRate, ctx.pixelsPerCm, axisVec, ...
+        'MinBodyCm', minCm, 'XKcorr', ctxKcorr(ctx));
+end
+
+function c = headFallback()
+    % Order of preference when the requested head point is not tracked
+    % (or was dropped as NotFound). A head-mounted miniscope sits on the
+    % skull, so it still gives the facing direction relative to the body.
+    c = {'nose', 'headcenter', 'miniscopeucla'};
+end
+
+function idx = resolveWithFallback(bodyParts, wanted, fallback, actName)
+    idx = findPart(bodyParts, wanted);
+    if ~isempty(idx); return; end
+    for k = 1:numel(fallback)
+        idx = findPart(bodyParts, fallback{k});
+        if ~isempty(idx)
+            sphynx.util.log('warn', '%s: body part "%s" not available, using "%s"', ...
+                actName, wanted, bodyParts{idx});
+            return;
+        end
+    end
+    sphynx.util.log('warn', '%s: body part "%s" not available and no fallback found', ...
+        actName, wanted);
+end
+
+function xk = ctxKcorr(ctx)
+    xk = 1;
+    if isfield(ctx, 'xKcorr') && ~isempty(ctx.xKcorr); xk = ctx.xKcorr; end
+end
+
+function u = trackAxis(ctx)
+    % Long axis of the track, pixel space. Preferred source: the arena
+    % corner points the preset stores as point zones (arenacorner1..N);
+    % they do not depend on where the animal went. Fallback: principal
+    % axis of the body-centre trajectory, which on a linear track is the
+    % track itself.
+    xk = ctxKcorr(ctx);
+    pts = zeros(0, 2);
+    if isfield(ctx, 'zones') && ~isempty(ctx.zones)
+        for k = 1:numel(ctx.zones)
+            z = ctx.zones(k);
+            if isfield(z, 'type') && strcmp(z.type, 'point') ...
+                    && startsWith(lower(z.name), 'arenacorner') && numel(z.maskfilled) >= 2
+                pts(end + 1, :) = z.maskfilled(1:2); %#ok<AGROW>
+            end
+        end
+    end
+    if size(pts, 1) < 3
+        cIdx = findPart(ctx.bodyParts, 'bodycenter');
+        if isempty(cIdx); u = []; return; end
+        pts = [ctx.X(cIdx, :)', ctx.Y(cIdx, :)'];
+        pts = pts(all(isfinite(pts), 2), :);
+        if size(pts, 1) < 3; u = []; return; end
+    end
+    % PCA in the x-corrected space, mapped back to pixels.
+    q = [pts(:, 1) * xk, pts(:, 2)];
+    d = q - mean(q, 1);
+    [V, D] = eig(d' * d);
+    [~, j] = max(diag(D));
+    u = [V(1, j) / xk, V(2, j)];
 end
 
 function b = applyAllInZone(act, ctx, nFrames)
