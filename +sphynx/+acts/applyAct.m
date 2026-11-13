@@ -189,7 +189,7 @@ function b = applyTurnaround(act, ctx, nFrames)
     % See sphynx.acts.turnaround.
     b = false(1, nFrames);
     parts = act.bodyParts;
-    if numel(parts) < 2; parts = {'nose', 'tailbase'}; end
+    if numel(parts) < 2; parts = {'headcenter', 'tailbase'}; end
     hIdx = resolveWithFallback(ctx.bodyParts, parts{1}, headFallback(), act.name);
     tIdx = resolveWithFallback(ctx.bodyParts, parts{2}, {'tailbase', 'bodycenter'}, act.name);
     if isempty(hIdx) || isempty(tIdx) || hIdx == tIdx; return; end
@@ -204,9 +204,10 @@ end
 
 function c = headFallback()
     % Order of preference when the requested head point is not tracked
-    % (or was dropped as NotFound). A head-mounted miniscope sits on the
-    % skull, so it still gives the facing direction relative to the body.
-    c = {'nose', 'headcenter', 'miniscopeucla'};
+    % (or was dropped as NotFound). The nose comes last: a head-mounted
+    % miniscope often hides it, while the miniscope itself sits on the
+    % skull near the head centre and still gives the facing direction.
+    c = {'headcenter', 'miniscopeucla', 'nose'};
 end
 
 function idx = resolveWithFallback(bodyParts, wanted, fallback, actName)

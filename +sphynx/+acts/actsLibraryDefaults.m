@@ -61,15 +61,16 @@ function acts = actsLibraryDefaults()
     a.maxGapSec = 0.2;
     acts(end+1) = a;
 
-    % Turnaround on a linear track: the nose-to-tail direction flips
-    % relative to the track axis. thresholdCm = minimum tail-to-nose
+    % Turnaround on a linear track: the tail-to-head direction flips
+    % relative to the track axis. Head centre, not nose: a head-mounted
+    % miniscope often hides the nose. thresholdCm = minimum tail-to-head
     % distance for a frame to count as facing one way. No gap bridging:
     % it would merge two turns separated by a short straight run.
     a = sphynx.acts.emptyAct();
     a.name = 'turnaround';
     a.type = 'special';
     a.specialKind = 'turnaround';
-    a.bodyParts = {'nose', 'tailbase'};
+    a.bodyParts = {'headcenter', 'tailbase'};
     a.thresholdCm = 2;
     a.minDurationSec = 0.2;
     a.maxGapSec = 0;

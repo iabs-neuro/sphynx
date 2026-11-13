@@ -101,14 +101,16 @@ function testDefaultsContainLinearTrackActs(testCase)
 end
 
 function testApplyActUsesFallbackHeadAndCorners(testCase)
-    % No nose in the tracking: turnaround falls back to headcenter. The
-    % track axis comes from arena corner zones, not from the trajectory
-    % (which here is a single spot and has no direction).
+    % No head centre in the tracking: turnaround falls back to the
+    % miniscope, ahead of the nose. The track axis comes from arena corner
+    % zones, not from the trajectory (here a single spot, no direction).
     ang = [zeros(1, 30), linspace(0, pi, 30), pi * ones(1, 30)];
     [hx, hy, tx, ty] = bodyAtAngles(ang);
     n = numel(ang);
-    ctx = baseCtx({'headcenter', 'bodycenter', 'tailbase'}, ...
-        [hx; (hx + tx) / 2; tx], [hy; (hy + ty) / 2; ty], n);
+    % The nose track sits on the tail point (as when the miniscope hides
+    % it), so a turn is found only if the miniscope is picked before it.
+    ctx = baseCtx({'nose', 'miniscopeUCLA', 'bodycenter', 'tailbase'}, ...
+        [tx; hx; (hx + tx) / 2; tx], [ty; hy; (hy + ty) / 2; ty], n);
     ctx.zones = cornerZones([10 100; 1200 100; 1200 150; 10 150]);
     acts = sphynx.acts.actsLibraryDefaults();
     a = acts(strcmp({acts.name}, 'turnaround'));

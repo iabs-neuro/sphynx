@@ -120,13 +120,14 @@ There are also **special acts**:
     direction. Backward speed along the body axis at least `speedMin`
     (1 cm/s), within ~45 deg of straight backwards, centre-to-head
     distance at least `thresholdCm` (1 cm).
-  - `turnaround` — on a linear track the tail -> nose direction flips
-    relative to the track axis. The axis comes from the preset's arena
+  - `turnaround` — on a linear track the tail -> head-centre direction
+    flips relative to the track axis. The nose is not used by default: a
+    head-mounted miniscope often hides it. The axis comes from the preset's arena
     corners (`arenacorner*`), else from the trajectory. A turn is the
     stretch between a stable "facing along" and a stable "facing against"
     run (|cos| >= 0.7, at least 0.2 s), at most 10 s long. An instant flip
-    (tracker swapped nose and tail) is not a turn. Missing body parts
-    fall back: head nose -> headcenter -> miniscopeUCLA, tail
+    (tracker swapped head and tail) is not a turn. Missing body parts
+    fall back: head headcenter -> miniscopeUCLA -> nose, tail
     tailbase -> bodycenter. Thresholds of both acts are first guesses, to
     be fitted on hand-scored data through the name-value parameters of
     `sphynx.acts.backing` and `sphynx.acts.turnaround`.
