@@ -323,11 +323,10 @@ function b = applyRears(act, ctx, nFrames)
             sumPx = sphynx.util.smoothDerived(sumPx(:), win)';
         end
         sumCm = sumPx / ctx.pixelsPerCm;
-        % Default auto-threshold ON when the field is missing — this
-        % covers libraries saved before the schema change AND keeps
-        % new defaults consistent with built-in rear in analyzeSession.
-        % Set rearAutoThreshold=false explicitly to opt out per-act.
-        useAuto = true;
+        % A missing field means a fixed threshold, as in the built-in
+        % rear: the per-session threshold depends on the number of rears
+        % and on tracking outliers. Set rearAutoThreshold=true to opt in.
+        useAuto = false;
         if isfield(act, 'rearAutoThreshold')
             useAuto = logical(act.rearAutoThreshold);
         end

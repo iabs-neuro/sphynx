@@ -94,8 +94,8 @@
     "freezingMode":                 "HeadAndCenter", // HeadAndCenter | NoseAndCenter | AllBodyParts
     "rearMode":                     "TailbasePaws",  // TailbasePaws | AllBodyParts
     "rearThresholdAllBodyPartsPxl": 170,
-    "rearThresholdTailbasePawsCm":  2.8,
-    "rearAutoThreshold":            true,
+    "rearThresholdTailbasePawsCm":  3.35,
+    "rearAutoThreshold":            false, // per-session threshold collapses on tracking outliers; keep off
     // UI (simple + complex act builder)
     "simpleZoneOp":         "OR",
     "simpleSpeedMin":       0,

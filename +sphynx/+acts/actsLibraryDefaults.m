@@ -7,7 +7,7 @@ function acts = actsLibraryDefaults()
     cfg = sphynx.pipeline.defaultConfig();
     rest = cfg.acts.restThresholdCmS;       % default 1
     loc  = cfg.acts.locThresholdCmS;        % default 5
-    rearTBC = cfg.acts.rearThresholdTailbasePawsCm;   % 3.6 cm
+    rearTBC = cfg.acts.rearThresholdTailbasePawsCm;   % 3.35 cm
     rearABP = cfg.acts.rearThresholdAllBodyPartsPxl;   % 170 px
 
     acts = sphynx.acts.emptyActsArray();
@@ -43,7 +43,7 @@ function acts = actsLibraryDefaults()
     a.rearMode = 'TailbasePaws';
     a.thresholdCm = rearTBC;
     a.thresholdPxl = rearABP;
-    a.rearAutoThreshold = true;  % adapt per session
+    a.rearAutoThreshold = cfg.acts.rearAutoThreshold;  % fixed threshold by default
     acts(end+1) = a;
 
     % Backing: the body centre moves opposite to where the head points.

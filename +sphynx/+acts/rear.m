@@ -11,7 +11,7 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
 %   Name-value:
 %     'PixelsPerCm'                default required
 %     'AllBodyPartsThresholdPxl'   default 170 (mode 'AllBodyParts')
-%     'TailbasePawsThresholdCm'    default 3.6 (mode 'TailbasePaws')
+%     'TailbasePawsThresholdCm'    default 3.35 (mode 'TailbasePaws')
 %     'SmoothWindowFrames'         default round(FrameRate/2) — caller must supply
 %     'MinRunFrames'               default 5
 %     'FrameRate'                  default 30 (used to default the smoothing window)
@@ -28,7 +28,7 @@ function rearMask = rear(BodyPartsX, BodyPartsY, Point, mode, varargin)
     p = inputParser;
     addParameter(p, 'PixelsPerCm', [], @(v) isempty(v) || (isnumeric(v) && v > 0));
     addParameter(p, 'AllBodyPartsThresholdPxl', 170);
-    addParameter(p, 'TailbasePawsThresholdCm', 2.8);
+    addParameter(p, 'TailbasePawsThresholdCm', 3.35);
     addParameter(p, 'AutoThreshold', false, @islogical);
     addParameter(p, 'SmoothWindowFrames', [], @(v) isempty(v) || (isnumeric(v) && v >= 3 && mod(v,2)==1));
     addParameter(p, 'MinRunFrames', 5);

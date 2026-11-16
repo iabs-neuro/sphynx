@@ -65,16 +65,18 @@ function cfg = defaultConfig()
     cfg.acts.freezingMode      = 'HeadAndCenter';     % | 'NoseAndCenter' | 'AllBodyParts'
     cfg.acts.rearMode          = 'TailbasePaws';      % | 'AllBodyParts'
     cfg.acts.rearThresholdAllBodyPartsPxl = 170;
-    % Default tightened from 3.6 cm to 2.8 cm — the legacy 3.6 cm cut
-    % through the main mode of the (tailbase -> hindlimb) sum
-    % distribution and flagged 11-20% of frames as rear on real
-    % sessions. 2.8 cm sits in the lower tail. Used when the
-    % auto-threshold below is off OR fails.
-    cfg.acts.rearThresholdTailbasePawsCm  = 2.8;
-    % When true, override the cm threshold per-session via
-    % sphynx.acts.autoRearThresholdCm — a robust statistic on the
-    % sumDist distribution that adapts to each animal's posture.
-    cfg.acts.rearAutoThreshold            = true;
+    % 3.35 cm maximises event-level F1 against hand-scored rears
+    % (W:\Projects\Rear_ML, 19 sessions, ~580 rears, DLC MiceUniversal
+    % ResNet-152, open fields). The value depends on where the DLC model
+    % puts the hindlimbs, so a project tracked with another model should
+    % calibrate its own value once and keep it fixed for all sessions.
+    cfg.acts.rearThresholdTailbasePawsCm  = 3.35;
+    % Off by default. The per-session threshold (median - 1.5*SD, 7th
+    % percentile) depends on how many rears the session has and on
+    % tracking outliers: it collapsed to its 1.5 cm floor on LT1
+    % sessions with a few far-off points, and on Rear_ML it scored worse
+    % than the fixed value (event F1 0.43 vs 0.60).
+    cfg.acts.rearAutoThreshold            = false;
 
     cfg.io.saveWorkspace = true;
     cfg.io.sessionName   = '';
