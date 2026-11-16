@@ -82,6 +82,12 @@ Do not touch without explicit user ask.
 - [ ] **P2 / C2** Etogram rows grouped by category headers (built-in / custom / zone) with cluster spacing.
 - [ ] **P3 / C2** Customisable speed-vs-time plot: act-bands as background patches (rest/walk/locomotion).
 - [ ] **P3 / C3** Egocentric trajectory + heading-angle trace for direction-aware acts.
+- [ ] **P2 / C2** **Act `outside` (session edits, `*_SessionEdits.csv`) — разобраться.** Added 2026-11-16 for LT1 escapes; checked only on LT1. Open points:
+  - It is appended as a built-in act only when an edits file is found, so experiments with and without the file get different act lists (and different super-table columns). Decide: always present, or library-defined.
+  - Percent denominator: other acts use time on the arena, `outside` uses the whole recording. Check that this is what every downstream table/plot expects (`actStats` `ValidMask`, Make Output Table, Plot Data).
+  - Auto-discovery walks up 4 levels from the DLC folder and takes the first `*_SessionEdits.csv`; an unrelated file there would silently apply.
+  - No GUI: edits are written by hand in the CSV; nothing in Analyze/Batch shows which rows were applied.
+  - Trims do not cut the session timestamps (`*_VT_TS.csv`); LT1 did this with a separate script. Features (`*_Features.csv`) and plots set kinematics to NaN on `outside`; acts videos (`renderActsVideo`) and bodypart trajectories do not.
 
 ## R28 audit findings (2026-06-28) -- HIGH-RISK items to land first
 
