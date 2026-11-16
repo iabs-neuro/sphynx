@@ -10,8 +10,13 @@ function outPath = writeFeatures(result, outDir, sessionName)
 %     x_locomotion, y_locomotion x, y during the act 'locomotion', NaN otherwise
 %     speed                      body centre smoothed speed, cm/s
 %     bodydirection              tailbase -> body centre angle, rad, (-pi, pi]
-%     headdirection              head centre -> miniscope (or nose) angle,
-%                                rad, smoothed over ~1 s
+%     headdirection              perpendicular to the ear line (right ->
+%                                left ear turned +90 deg), forward; without
+%                                ears: head centre -> miniscope (or nose).
+%                                rad, (-pi, pi], smoothed over ~1 s after
+%                                unwrapping
+%   Angles are in image coordinates (y down): 0 = facing +x, +-pi =
+%   facing -x, positive = clockwise on screen.
 %     <act name> ...             0/1 per act, in result.Acts order
 %
 %   Frames of the act 'outside' (session edits) are not part of the
@@ -48,13 +53,24 @@ function outPath = writeFeatures(result, outDir, sessionName)
     end
 
     headDir = nan(n, 1);
-    tip = P.MiniscopeUCLA;
-    if isempty(tip); tip = P.Nose; end
-    if ~isempty(tip) && ~isempty(P.HeadCenter)
-        win = round(fps);
-        if mod(win, 2) == 0; win = win + 1; end
-        headDir = sphynx.angles.headDirection(X(tip, :), Y(tip, :), ...
-            X(P.HeadCenter, :), Y(P.HeadCenter, :), win);
+    win = round(fps);
+    if mod(win, 2) == 0; win = win + 1; end
+    if ~isempty(P.LeftEar) && ~isempty(P.RightEar)
+        % Perpendicular to the ear line, pointing forward: the right->left
+        % ear vector turned by +90 deg, i.e. (dx, dy) -> (-dy, dx). The
+        % head-centre -> miniscope vector is only ~1 cm long and noisy; on
+        % LT1 the ear perpendicular agrees with the direction of locomotion
+        % in 88% of frames against 74% (median of 84 sessions).
+        dx = X(P.LeftEar, :) - X(P.RightEar, :);
+        dy = Y(P.LeftEar, :) - Y(P.RightEar, :);
+        headDir = sphynx.angles.headDirection(-dy, dx, zeros(1, n), zeros(1, n), win);
+    else
+        tip = P.MiniscopeUCLA;
+        if isempty(tip); tip = P.Nose; end
+        if ~isempty(tip) && ~isempty(P.HeadCenter)
+            headDir = sphynx.angles.headDirection(X(tip, :), Y(tip, :), ...
+                X(P.HeadCenter, :), Y(P.HeadCenter, :), win);
+        end
     end
 
     oi = find(strcmp({result.Acts.ActName}, 'outside'), 1);

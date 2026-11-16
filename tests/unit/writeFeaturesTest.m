@@ -48,6 +48,50 @@ function testColumnsAndValues(testCase)
     verifyEqual(testCase, T.headdirection(1), 0, 'AbsTol', 1e-9);
 end
 
+function r = withEars(r, headAngle)
+    % Ears 1 px either side of the head, perpendicular to headAngle (image coords, y down):
+    % the left ear of a mouse facing angle a sits at a - 90 deg.
+    n = r.n_frames;
+    a = headAngle(:)';
+    r.BodyPartsTraces(end+1).BodyPartName = 'leftear';
+    r.BodyPartsTraces(end).TraceSmoothed.X = 50 + cos(a - pi/2);
+    r.BodyPartsTraces(end).TraceSmoothed.Y = 50 + sin(a - pi/2);
+    r.BodyPartsTraces(end).VelocitySmoothed = zeros(1, n);
+    r.BodyPartsTraces(end+1).BodyPartName = 'rightear';
+    r.BodyPartsTraces(end).TraceSmoothed.X = 50 + cos(a + pi/2);
+    r.BodyPartsTraces(end).TraceSmoothed.Y = 50 + sin(a + pi/2);
+    r.BodyPartsTraces(end).VelocitySmoothed = zeros(1, n);
+    r.Point = sphynx.bodyparts.identifyParts({r.BodyPartsTraces.BodyPartName});
+end
+
+function testHeadDirectionFromEarLine(testCase)
+    r = fakeResult();
+    r.Acts(2).ActArrayRefine(:) = 0;     % no 'outside' frames
+    r = withEars(r, repmat(pi/2, 1, r.n_frames));   % facing +y (down on screen)
+    T = readtable(sphynx.io.writeFeatures(r, testCase.TestData.dir, 'E'));
+    verifyEqual(testCase, T.headdirection, repmat(pi/2, 10, 1), 'AbsTol', 1e-9);
+end
+
+function testHeadDirectionCrossesPiWithoutArtifacts(testCase)
+    % A head turning steadily through +-pi: after smoothing, the angle must
+    % stay on the true trajectory (no excursion towards 0 at the wrap).
+    r = fakeResult();
+    n = 61;
+    for i = 1:numel(r.BodyPartsTraces)
+        r.BodyPartsTraces(i).TraceSmoothed.X = 1:n;
+        r.BodyPartsTraces(i).TraceSmoothed.Y = ones(1, n);
+        r.BodyPartsTraces(i).VelocitySmoothed = ones(1, n);
+    end
+    r.n_frames = n;
+    r.Acts = struct('ActName', {'locomotion'}, 'ActArrayRefine', {zeros(1, n)});
+    truth = linspace(pi - 1, pi + 1, n);
+    r = withEars(r, truth);
+    T = readtable(sphynx.io.writeFeatures(r, testCase.TestData.dir, 'W'));
+    err = angle(exp(1i * (T.headdirection - truth(:))));
+    verifyLessThan(testCase, max(abs(err)), 1e-6);
+    verifyTrue(testCase, all(T.headdirection > -pi & T.headdirection <= pi));
+end
+
 function testOutsideFramesHaveNoKinematics(testCase)
     T = readtable(sphynx.io.writeFeatures(fakeResult(), testCase.TestData.dir, 'S'));
     verifyTrue(testCase, all(isnan(T.x(8:9))) && all(isnan(T.speed(8:9))));
