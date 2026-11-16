@@ -252,12 +252,16 @@ classdef AnalyzeSessionTabController < handle
                 return;
             end
             sessRoot = obj.sessionDir();
+            % Session name in every plot filename, so plots of many
+            % sessions can be pooled into one folder for review.
+            stem = obj.sessionStem();
 
             if saveSession
                 try
                     sphynx.pipeline.saveSessionPlots(obj.State.result, ...
                         sessRoot, ...
-                        'HeatmapBinCm', obj.HeatmapBinField.Value);
+                        'HeatmapBinCm', obj.HeatmapBinField.Value, ...
+                        'Prefix', [stem '_']);
                     obj.applog('info', ...
                         'Session plots: trajectory/heatmap/speed PNG+FIG -> %s', sessRoot);
                 catch ME
@@ -348,7 +352,7 @@ classdef AnalyzeSessionTabController < handle
                 axL.FontSize = 12; box(axL, 'on');
 
                 linkaxes([axX, axY, axL], 'x');
-                base = fullfile(plotsDir, sprintf('trajectory_%s', bp.BodyPartName));
+                base = fullfile(plotsDir, sprintf('%s_trajectory_%s', stem, bp.BodyPartName));
                 try
                     saveas(fig, [base '.png']);
                     saveas(fig, [base '.fig']);

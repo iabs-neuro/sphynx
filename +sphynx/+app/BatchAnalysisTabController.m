@@ -266,15 +266,18 @@ classdef BatchAnalysisTabController < handle
                 end
                 if savePlotsSes
                     try
+                        % Session name in every plot filename, so plots of
+                        % many sessions can be pooled into one folder.
                         sphynx.pipeline.saveSessionPlots(res, sessDir, ...
-                            'HeatmapBinCm', obj.HeatmapBinField.Value);
+                            'HeatmapBinCm', obj.HeatmapBinField.Value, ...
+                            'Prefix', [s.id '_']);
                         obj.applog('info', '  session plots saved');
                     catch ME
                         obj.applog('warn', '  session plots failed: %s', ME.message);
                     end
                 end
                 if savePlotsBP
-                    obj.savePlotsForSession(res, sessDir);
+                    obj.savePlotsForSession(res, s, sessDir);
                 end
             end
             dlg.Value = 1;
@@ -790,7 +793,7 @@ classdef BatchAnalysisTabController < handle
             obj.applog('info', '  acts videos in %s', actsDir);
         end
 
-        function savePlotsForSession(obj, res, sessDir)
+        function savePlotsForSession(obj, res, s, sessDir)
             plotsDir = fullfile(sessDir, 'bodyparts_trajectory');
             if ~isfolder(plotsDir); mkdir(plotsDir); end
             bps = res.BodyPartsTraces;
@@ -844,7 +847,7 @@ classdef BatchAnalysisTabController < handle
                 end
                 ylabel(axL, 'likelihood'); xlabel(axL, 'time, s');
                 linkaxes([axX, axY, axL], 'x');
-                base = fullfile(plotsDir, sprintf('trajectory_%s', bp.BodyPartName));
+                base = fullfile(plotsDir, sprintf('%s_trajectory_%s', s.id, bp.BodyPartName));
                 try
                     saveas(fig, [base '.png']); saveas(fig, [base '.fig']);
                     saved = saved + 1;
