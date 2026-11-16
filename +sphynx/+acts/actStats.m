@@ -12,6 +12,11 @@ function stats = actStats(actMask, frameRate, varargin)
 %                  velocity for every act, so the velocity-derived
 %                  metrics here are always "speed of the body center
 %                  while the act is firing".
+%     'ValidMask' - Nx1 logical, frames that count as session time.
+%                  ActPercent is taken over these frames only; the
+%                  default (empty) keeps the plain frame share.
+%                  analyzeSession passes ~outside so the time the
+%                  animal spent off the arena is not in the denominator.
 %
 %   Output struct fields (numeric scalars):
 %     ActNumber          number of separate episodes
@@ -46,10 +51,14 @@ function stats = actStats(actMask, frameRate, varargin)
     addRequired(p, 'actMask');
     addRequired(p, 'frameRate', @(v) isnumeric(v) && v > 0);
     addParameter(p, 'Velocity', [], @(v) isempty(v) || isnumeric(v));
+    addParameter(p, 'ValidMask', [], @(v) isempty(v) || islogical(v) || isnumeric(v));
     parse(p, actMask, frameRate, varargin{:});
 
     actMask = logical(actMask(:));
     n = numel(actMask);
+    if ~isempty(p.Results.ValidMask)
+        n = sum(logical(p.Results.ValidMask(:)));
+    end
 
     [~, runs] = sphynx.acts.refineAct(actMask, 0, 0);
     durations = arrayfun(@(r) r.duration, runs);

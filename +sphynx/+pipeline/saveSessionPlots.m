@@ -63,6 +63,16 @@ function paths = saveSessionPlots(result, outDir, varargin)
     if isfield(bps(bcIdx), 'VelocitySmoothed')
         v = bps(bcIdx).VelocitySmoothed(:);
     end
+    % Time off the arena (act 'outside', from the session edits) is not
+    % part of the session: drop it from every plot.
+    if isfield(result, 'Acts') && ~isempty(result.Acts)
+        oi = find(strcmp({result.Acts.ActName}, 'outside'), 1);
+        if ~isempty(oi)
+            off = logical(result.Acts(oi).ActArrayRefine(:));
+            if numel(X) == numel(off); X(off) = NaN; Y(off) = NaN; end
+            if numel(v) == numel(off); v(off) = NaN; end
+        end
+    end
     xCm = X / pxlPerCm; yCm = Y / pxlPerCm;
     bpName = bps(bcIdx).BodyPartName;
 

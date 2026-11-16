@@ -46,6 +46,26 @@ function result = analyzeSession(config)
     Zones = presetData.Zones;
     ArenaAndObjects = presetData.ArenaAndObjects;
 
+    % --- 1b. Session edits: trimmed ends, periods off the arena --------------
+    % Corrections the experimenter found by watching the video (wrong
+    % timer, animal escaped) live in <exp>_SessionEdits.csv, see
+    % sphynx.io.readSessionEdits. Trims move the frame range before the
+    % DLC is read; 'outside' periods become an act further down.
+    sessionName = config.io.sessionName;
+    if isempty(sessionName)
+        [~, dlcBase] = fileparts(config.paths.dlc);
+        sessionName = regexprep(dlcBase, 'DLC_.*$', '');
+    end
+    [edits, editsPath] = sphynx.io.readSessionEdits(config, sessionName);
+    trimmed = false;
+    if ~isempty(editsPath)
+        log('info', 'Session edits: %d rows for %s in %s', height(edits), sessionName, editsPath);
+        [config.range, trimmed] = applyTrims(config.range, edits, Options.FrameRate);
+        if trimmed
+            log('info', 'Trimmed to frames %d..%d', config.range.startFrame, config.range.endFrame);
+        end
+    end
+
     log('info', 'Reading DLC: %s', config.paths.dlc);
     % R11 auto-start: if user kept startFrame=1 and autoStart is on,
     % read the full DLC first, detect the session start from the trace,
@@ -113,7 +133,7 @@ function result = analyzeSession(config)
     % renderActStitched will see a sync drift: the DLC frame index N
     % does not necessarily land on video frame N when the export was
     % truncated or offset. Warn so the user can investigate.
-    if ~isempty(config.paths.video) && isfile(config.paths.video)
+    if ~trimmed && ~isempty(config.paths.video) && isfile(config.paths.video)
         try
             vr = VideoReader(config.paths.video);
             if vr.NumFrames > 0 && dlc.nFrames < vr.NumFrames
@@ -140,6 +160,14 @@ function result = analyzeSession(config)
         xKcorr = Options.x_kcorr;
     end
     log('info', 'Loaded %d frames, %d body parts', nFrames, nParts);
+
+    outside = false(1, nFrames);
+    if ~isempty(editsPath)
+        outside = outsideMask(edits, config.range.startFrame, nFrames, frameRate);
+        if any(outside)
+            log('info', 'Outside the arena: %.1f s', sum(outside) / frameRate);
+        end
+    end
 
     % --- 2. Smooth-window sizes from frame rate -------------------------------
     smallWin = makeOdd(round(frameRate * config.preprocess.smoothWindowSmallSec));
@@ -249,11 +277,13 @@ function result = analyzeSession(config)
             'SmoothWindow', win, 'XKcorr', xKcorr);
         BodyPartsTraces(part).Velocity = v;            %#ok<AGROW>
         BodyPartsTraces(part).VelocitySmoothed = v;    % already smoothed in computeVelocity
-        BodyPartsTraces(part).AverageSpeed = round(mean(v, 'omitnan'), 2);
+        % Speed and distance count only time on the arena.
+        vIn = v(~outside(:));
+        BodyPartsTraces(part).AverageSpeed = round(mean(vIn, 'omitnan'), 2);
         % Total distance travelled in cm: sum of per-frame
         % displacements = sum(v) / frameRate.
         BodyPartsTraces(part).AverageDistance = round( ...
-            sum(v, 'omitnan') / frameRate, 2);
+            sum(vIn, 'omitnan') / frameRate, 2);
     end
 
     % Choose the velocity used for speed acts (legacy uses Options.BodyPart.Velocity)
@@ -399,13 +429,34 @@ function result = analyzeSession(config)
     Acts = enforceBucketExclusivity(Acts, ...
         {'corners', 'walls', 'walls_and_corners', 'middle_zone', 'center'});
 
+    % --- 9d. Outside the arena -------------------------------------------------
+    % Off-arena frames carry no other act. Every session of an experiment
+    % with an edits file gets the act (all zeros when nothing was marked),
+    % so the output table has the same columns for all sessions.
+    if ~isempty(editsPath)
+        for k = 1:numel(Acts)
+            Acts(k).ActArrayRefine(outside) = 0;
+        end
+        Acts(end+1).ActName = 'outside';
+        Acts(end).ActArrayRefine = double(outside);
+        Acts(end).Category = 'builtin';
+        Acts(end).Definition = struct('zones', {{}});
+    end
+
     % --- 10. Stats per act ---------------------------------------------------
     centerVelocity = BodyPartsTraces(end).VelocitySmoothed; % synthetic-or-real Center
     if Point.Center <= numel(BodyPartsTraces)
         centerVelocity = BodyPartsTraces(Point.Center).VelocitySmoothed;
     end
     for line = 1:numel(Acts)
-        s = sphynx.acts.actStats(Acts(line).ActArrayRefine, frameRate, 'Velocity', centerVelocity);
+        % Percentages are of the time on the arena; 'outside' itself is a
+        % share of the whole recording.
+        valid = [];
+        if any(outside) && ~strcmp(Acts(line).ActName, 'outside')
+            valid = ~outside;
+        end
+        s = sphynx.acts.actStats(Acts(line).ActArrayRefine, frameRate, ...
+            'Velocity', centerVelocity, 'ValidMask', valid);
         Acts(line).ActNumber = s.ActNumber;
         Acts(line).ActPercent = s.ActPercent;
         Acts(line).ActDuration = s.ActDuration;
@@ -438,6 +489,8 @@ function result = analyzeSession(config)
     result.ArenaAndObjects = ArenaAndObjects;
     result.n_frames = nFrames;
     result.config = config;
+    result.SessionEdits = edits;
+    result.SessionEditsPath = editsPath;
     % Multi-animal trace: which individual the DLC reader actually used
     % and the full list it saw. Both fields stay empty for a single-
     % animal csv. Make-video / renderActStitched can show / log these
@@ -506,6 +559,43 @@ function Acts = enforceBucketExclusivity(Acts, priorityNames)
             Acts(idx).ActArrayRefine = double(a);
             cumMask = cumMask | a;
         end
+    end
+end
+
+function [range, trimmed] = applyTrims(range, edits, fps)
+    % A trim can only drop the head or the tail of the recording: cutting
+    % the middle would make later frames lie about their time, so such a
+    % period has to be marked 'outside' instead. Frame k is at (k-1)/fps.
+    trimmed = false;
+    rows = edits(strcmp(edits.kind, 'trim'), :);
+    for k = 1:height(rows)
+        s = rows.start_s(k);
+        e = rows.end_s(k);
+        if isnan(e)
+            last = ceil(s * fps - 1e-6);          % frames with time < s
+            if range.endFrame == 0 || last < range.endFrame
+                range.endFrame = last;
+            end
+        elseif s == 0
+            first = ceil(e * fps - 1e-6) + 1;     % first frame with time >= e
+            range.startFrame = max(range.startFrame, first);
+        else
+            error('sphynx:sessionEdits', ['trim %g-%g s is in the middle of ' ...
+                'the recording; mark it as outside instead'], s, e);
+        end
+        trimmed = true;
+    end
+end
+
+function mask = outsideMask(edits, startFrame, nFrames, fps)
+    % Frame i of the analysed range is video frame startFrame+i-1.
+    t = (startFrame - 1 + (0:nFrames-1)) / fps;
+    mask = false(1, nFrames);
+    rows = edits(strcmp(edits.kind, 'outside'), :);
+    for k = 1:height(rows)
+        e = rows.end_s(k);
+        if isnan(e); e = inf; end
+        mask = mask | (t >= rows.start_s(k) & t < e);
     end
 end
 
