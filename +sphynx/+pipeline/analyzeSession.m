@@ -537,6 +537,10 @@ function result = analyzeSession(config)
             [~, sessionName, ~] = fileparts(config.paths.dlc);
         end
         sphynx.io.saveSession(result, config.paths.outDir, sessionName);
+        % Features are named by the session (DLC suffix dropped), as the
+        % legacy BehaviorAnalyzer named them by the video.
+        sphynx.io.writeFeatures(result, config.paths.outDir, ...
+            regexprep(sessionName, 'DLC_.*$', ''));
     end
 end
 
